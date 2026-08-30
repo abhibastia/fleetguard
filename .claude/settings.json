@@ -1,0 +1,31 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_response.filePath // .tool_input.file_path' | { read -r f; case \"$f\" in *databricks.yml|*/resources/*.yml|*/resources/*.yaml) (cd \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\" && databricks bundle validate --profile free-edition 2>&1) ;; esac; }",
+            "timeout": 60,
+            "statusMessage": "Validating Databricks bundle config..."
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(git commit *)",
+            "command": "git diff --cached 2>/dev/null | grep -qE 'BEGIN (RSA|OPENSSH|EC) PRIVATE KEY|DATABRICKS_CLIENT_SECRET *=|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{20,}|dapi[0-9a-f]{32}' && echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Secret-shaped content detected in staged diff (private key / AKIA / ghp_ / dapi token pattern). Review before committing.\"}}' || exit 0",
+            "timeout": 15,
+            "statusMessage": "Scanning staged diff for secret-shaped content..."
+          }
+        ]
+      }
+    ]
+  }
+}
