@@ -1,0 +1,40 @@
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.python-version
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node / TypeScript (Databricks App frontend)
+node_modules/
+dist/
+build/
+.env
+.env.local
+*.log
+npm-debug.log*
+
+# Databricks
+.databricks/
+*.dbc
+
+# Secrets / credentials
+*.pem
+*.key
+.databrickscfg
+
+# Local scratch
+/tmp/
+*.tmp
