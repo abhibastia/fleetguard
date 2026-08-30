@@ -323,7 +323,7 @@ Harm weighting sharpens this rather than restating it. The threshold is set lowe
 
 The operator console ships as a Databricks App and carries the core workflow end to end: signal queue, exposure ranking, campaign approval, and work order assignment.
 
-**Packaging.** A FastAPI application with Jinja templates, declared in `app.yaml` with its command, environment, and user authorisation scopes. Source lives in the project repository and deploys through the Databricks Asset Bundle alongside the pipelines, jobs, and serving endpoints, so a single `databricks bundle deploy` produces a consistent environment. No separate build system.
+**Packaging.** A FastAPI backend serving a JSON API, with a React single-page frontend built separately (Vite) and served as static assets from the same FastAPI process — one deployable, one origin, no CORS between frontend and backend. Declared in `app.yaml` with its `uvicorn` command, environment, and user authorisation scopes. Source lives in the project repository and deploys through the Databricks Asset Bundle alongside the pipelines, jobs, and serving endpoints, so a single `databricks bundle deploy` produces a consistent environment.
 
 **Identity.** Workspace SSO with on-behalf-of user authorisation (§5.1). The App receives the user's token by header, and every query to the SQL Warehouse and Lakebase executes as that user. Unity Catalog row filters and column masks continue to apply exactly as specified — enforcement lives at the data layer, so App-hosted and externally hosted surfaces are governed identically.
 
@@ -410,6 +410,22 @@ Databricks Asset Bundles define pipelines, jobs, serving endpoints, dashboards, 
 ### 8.6 Observability
 
 MLflow 3 traces for agent behaviour. Data Quality Monitoring for pipeline health, freshness, and Lakebase CDF lag. System Tables cover platform-wide cost; the agent-specific "cost per defect signal" figure comes from the Unity AI Gateway inference table on the agent's serving endpoint (§4.5), joined against `agent_activity_fact` — a unit economic the business persona understands, backed by a real query rather than a stated aspiration.
+
+### 8.7 Phased rollout — Render first, Databricks Apps second
+
+Databricks Apps access may not be available from day one (workspace-level constraint, not a design choice), so the operator console is built once and deployed in two phases rather than gated on that access from the start.
+
+**Phase 1 — Render.** The same FastAPI + React console (§8.1) runs as a standalone Render service. Path B's existing service-principal M2M flow (§5.2) does not apply here, because it carries no human — the console's core value (depot-scoped rows, VIN masking by role) depends on per-user identity, so this phase needs a real login, not a stand-in. It uses Databricks' user-to-machine (U2M) OAuth authorization-code + PKCE flow, distinct from the M2M `client_credentials` flow already used elsewhere in this proposal:
+
+1. Register a **custom OAuth app integration** in the **account console** ("App connections" → Add connection; equivalently `databricks account custom-app-integration create`) as a **confidential client** — the FastAPI backend holds the resulting client secret server-side. This is independent of the Databricks Apps mechanism and doesn't require it.
+2. Login: redirect the user to `https://<workspace>/oidc/v1/authorize` with `client_id`, `redirect_uri` (must exactly match what's registered), `response_type=code`, `scope=all-apis offline_access`, `code_challenge` / `code_challenge_method=S256` (PKCE is mandatory), and `state`.
+3. Exchange the code at `https://<workspace>/oidc/v1/token` with `grant_type=authorization_code`, `code`, `code_verifier`, and `redirect_uri`.
+4. The access token is valid for **one hour**; the `offline_access` scope returns a `refresh_token` for silent renewal, held server-side per session and never exposed to the browser.
+5. Every SQL Warehouse, Lakebase, and Model Serving call executes with that user's token, so Unity Catalog ABAC evaluates exactly as it will under Databricks Apps — this phase is a genuine test of the row/column visibility logic, not a stand-in for it.
+
+*Confirm before relying on operationally:* whether HTTPS is enforced on non-localhost redirect URIs, and whether scopes narrower than `all-apis` (e.g. scoped only to Postgres or Model Serving) are accepted by this endpoint, are both undocumented as of this check. Treat `all-apis` as the working default and confirm the rest empirically once the app integration is registered against the `free-edition` workspace.
+
+**Phase 2 — migrate to Databricks Apps.** A small `AuthProvider` abstraction sits behind the FastAPI routes from the start; handlers call `get_current_user()` and never see which mechanism produced it. Migration swaps the Render-phase U2M provider for one that reads `X-Forwarded-Access-Token` (§5.1) — no route or business-logic change. At cutover: retire the custom OAuth app integration and its redirect URI, delete the login/callback routes and refresh-token storage, and remove the manual Lakebase `generate_database_credential()` rotation in favour of platform-rotated resource bindings (§8.1). SQL, Pydantic models, and the React build are unchanged by the move.
 
 ## 9. Platform Component Map
 

@@ -56,6 +56,36 @@ live system or current docs — not against training data or a cached skill refe
 - Resource-bound credentials (SQL Warehouse, Model Serving, Lakebase, UC Volume) are
   rotated automatically by the platform — no refresh code needed in the App.
 
+**Databricks U2M OAuth (user login, for the Render-phase console — confirmed 2026-08-31):**
+- This is a *different* flow from Apps OBO above and from the M2M `client_credentials`
+  path (§8.2/§5.2 of the proposal). Needed only because the Render-hosted console
+  (§8.7) sits outside the Databricks Apps ingress and has to obtain a real user token
+  itself.
+- Requires registering a **custom OAuth app integration** first — done in the
+  **account console** ("App connections" → Add connection) or via
+  `databricks account custom-app-integration create`. This is account-level, not
+  workspace-admin-console. Register as a **confidential client** for a server-side
+  backend (gets a client secret, shown once).
+- Authorize: `https://<workspace>/oidc/v1/authorize` — `client_id`, `redirect_uri`
+  (must exactly match registration), `response_type=code`, `scope`,
+  `code_challenge`/`code_challenge_method=S256`, `state`. **PKCE is mandatory**, not
+  optional, per Databricks' own documented example.
+- Token exchange: `https://<workspace>/oidc/v1/token` — `client_id`,
+  `grant_type=authorization_code`, `code`, `code_verifier`, `redirect_uri`.
+- Documented supported `scopes` values for a custom app integration: `all-apis`,
+  `sql`, `offline_access`, `openid`, `profile`, `email`. The Databricks Apps `app.yaml`
+  scope vocabulary (`dashboards.genie`, `files.files`, `iam.access-control:read`,
+  `iam.current-user:read` above) is a **different, more fine-grained set that is NOT
+  confirmed to work on this endpoint** — don't assume it carries over. Use
+  `all-apis offline_access` as the working default for the Render phase.
+- Access token lifetime: **1 hour**. `offline_access` in scope returns a
+  `refresh_token`. The exact refresh-grant request shape is standard OAuth2 but was
+  **not found explicitly documented** for this endpoint — treat as needing empirical
+  confirmation, not as verified.
+- **Unconfirmed, don't assert either way:** whether HTTPS is enforced on
+  non-localhost `redirect_uri`s (localhost plain-HTTP is shown as valid in
+  Databricks' own example); whether narrower scopes than `all-apis` are accepted.
+
 **Lakeflow Jobs `table_update` trigger** (used for the CDF→fact-table pipeline,
 §8.3 of the proposal):
 ```yaml
