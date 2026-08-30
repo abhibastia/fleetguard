@@ -9,6 +9,12 @@
             "command": "jq -r '.tool_response.filePath // .tool_input.file_path' | { read -r f; case \"$f\" in *databricks.yml|*/resources/*.yml|*/resources/*.yaml) (cd \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\" && databricks bundle validate --profile free-edition 2>&1) ;; esac; }",
             "timeout": 60,
             "statusMessage": "Validating Databricks bundle config..."
+          },
+          {
+            "type": "command",
+            "command": "jq -r '.tool_response.filePath // .tool_input.file_path' | { read -r f; case \"$f\" in *.py) cd \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\" && uvx ruff format --config pyproject.toml \"$f\" 2>&1 && uvx ruff check --config pyproject.toml --fix --quiet \"$f\" 2>&1 ;; esac; } || true",
+            "timeout": 30,
+            "statusMessage": "Formatting with ruff..."
           }
         ]
       }
