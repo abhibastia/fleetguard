@@ -19,7 +19,7 @@ FleetGuard operates on NHTSA's complete public defect corpus and delivers two ca
 
 **Proactive — emerging defect detection.** FleetGuard clusters complaint narratives semantically and surfaces defect patterns before NHTSA opens an investigation. No fleet management platform on the market does this.
 
-The proactive capability is measurable rather than asserted. NHTSA publishes investigation open dates and recall issue dates alongside the complaint corpus, so detection lead time is validated against held-out historical recalls. **The lead-time figure is an output of this system, not an input to its business case.** No such number is claimed in this document.
+The proactive capability is measurable rather than asserted. NHTSA publishes investigation open dates and recall issue dates alongside the complaint corpus, so detection lead time is validated against held-out historical recalls. Because each complaint also carries crash, fire, injury, and fatality fields, that lead time is expressed in harm terms: how many injuries and deaths were reported on a defect during the window in which the pattern was already visible and no regulator had yet acted. **Both figures are outputs of this system, not inputs to its business case.** Neither is claimed in this document.
 
 **Platform:** Databricks end to end. The operator console ships as a **Databricks App**; a lightweight external evidence surface on Render exposes public metrics without authentication. OAuth throughout — no long-lived database credentials anywhere in the system.
 
@@ -51,7 +51,7 @@ A recall campaign starts a liability clock. From the moment it posts, the operat
 
 ### Market validation
 
-Last-mile delivery operators, rental fleets, utilities, and municipal fleets already license fleet management platforms — Samsara, Fleetio, Verizon Connect. None performs defect-pattern detection against the NHTSA corpus. The budget line exists; the capability does not.
+US last-mile delivery operators, rental fleets, utilities, and municipal fleets — light vehicles through Class 8 — already license fleet management platforms such as Samsara, Fleetio, and Verizon Connect. None performs defect-pattern detection against the NHTSA corpus. The budget line exists; the capability does not.
 
 ---
 
@@ -72,6 +72,23 @@ Both large flat files parse through `read_files` with zero rescued rows, confirm
 
 **The investigations file is the system's ground truth.** It is what converts "we detect defects early" from a marketing claim into a measured lead-time distribution.
 
+**The complaint file carries harm outcomes per record**, which is what makes that distribution meaningful rather than merely early. Confirmed against NHTSA's published file layout:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `CRASH` | CHAR(1) | Vehicle involved in a crash |
+| `FIRE` | CHAR(1) | Vehicle involved in a fire |
+| `INJURED` | NUMBER(2) | Persons injured |
+| `DEATHS` | NUMBER(2) | Fatalities |
+| `MEDICAL_ATTN` | CHAR(1) | Medical attention required |
+| `POLICE_RPT_YN` | CHAR(1) | Police report filed |
+| `VEHICLES_TOWED_YN` | CHAR(1) | Vehicle towed |
+| `FAILDATE` | CHAR(8) | Date of incident, distinct from date received |
+
+`FAILDATE` matters independently: it dates the incident rather than the paperwork, so lead time can be measured from when harm occurred rather than from when someone filed.
+
+**These are consumer allegations, not adjudicated casualty figures.** §6 sets out how the system treats them accordingly.
+
 ### Ingestion policy
 
 NHTSA's API is explicitly not intended for bulk VIN lookups and applies automated rate control. The architecture therefore reads **flat files for the corpus** and uses **the API only for 60-second campaign polling and single-VIN decode**, with decoded results cached in Lakebase. This is the correct design independent of the rate limit.
@@ -85,6 +102,26 @@ NHTSA's API is explicitly not intended for bulk VIN lookups and applies automate
 | **Simulated** | None |
 
 This table is published on the application's landing page.
+
+### Scope and boundaries
+
+Stated explicitly, because both boundaries are deliberate and one has build consequences.
+
+**Geographic — United States only.** NHTSA regulates the US market, so the complaint, recall, investigation, and bulletin corpus covers US-market vehicles exclusively. A vehicle sold in Europe is absent from the database even where the same nameplate sells in the US, and market-specific build differences mean a US recall frequently does not apply to the equivalent overseas vehicle. FleetGuard therefore serves US fleet operators.
+
+Equivalent regulators publish comparable data — Transport Canada's recall and defect complaint database is the closest analogue, alongside the EU Safety Gate system, the UK DVSA database, and Japan's MLIT registry. The ingestion core is feed-agnostic by design, so international coverage is a roadmap item rather than a structural limitation. It is the same argument the CPSC and USDA FSIS stretch connectors make, applied across jurisdictions instead of product categories.
+
+**Product type — vehicles and tires; child restraints and equipment excluded.** ODI's unit of analysis spans four categories via the `PROD_TYPE` discriminator: `V` (vehicle), `T` (tires), `E` (equipment), `C` (child restraint). The flat file schema is a union across all four.
+
+*This has direct pipeline consequences.* A substantial share of columns are product-type-specific and null for any given row — `TIRE_SIZE`, `DOT`, `LOC_OF_TIRE`, `TIRE_FAIL_TYPE`, and `REPAIRED_YN` apply only to tires; `SEAT_TYPE` and `RESTRAINT_TYPE` only to child restraints. Silver filters on `PROD_TYPE` before column-level expectations are evaluated, keeping only `V` and `T` rows, so that quality rules are applied only to rows that were ever meant to carry those fields. Without this, expectations fire on structurally valid records and the quarantine table fills with false positives.
+
+Tires are retained deliberately. Tire defects on heavy vehicles are a serious safety matter, operators manage tires as a distinct asset class with their own replacement cycles, and the data arrives in the file already ingested at no additional cost. Child restraints are excluded as irrelevant to a commercial fleet. Equipment (`PROD_TYPE = E` — aftermarket and non-vehicle-specific components) is excluded for the same reason: it does not resolve against a VIN/depot roster the way a vehicle or tire complaint does, so it carries no actionable fleet-exposure signal.
+
+**Vehicle class — light through heavy.** NHTSA regulates vehicle defects across medium and heavy trucks and buses as well as light vehicles; FMCSA regulates carrier operations, which is a separate concern. A Class 8 tractor fleet is therefore in scope.
+
+*Build note:* vPIC decode completeness is generally weaker for heavy-truck VINs than for light vehicles. Confirm decode quality across the intended vehicle classes before finalising the fleet roster generator, and treat partial decodes as an enrichment gap rather than a validity failure.
+
+**Temporal — recalls from 2010.** The recall corpus uses `FLAT_RCL_POST_2010`, so recall coverage begins in 2010 while complaints extend back to 1995. This is a designed boundary, not an omission: fleet operators do not run vehicles old enough for pre-2010 campaigns to matter operationally. It does bound the backtest population to post-2010 recalls, which remains ample for a lead-time distribution, and the asymmetry is deliberate — the longer complaint history improves cluster baselines even where no corresponding recall is in scope.
 
 ---
 
@@ -102,11 +139,13 @@ Checkpoint and schema locations are held at separate paths. Colocating them corr
 
 **Silver.** Deduplication on ODI number. Normalisation of manufacturer, make, and model strings — NHTSA's own changelog documents these shifting across the corpus lifetime. `ai_extract` derives structured defect and component fields from narrative prose. PII in narrative text is **detected and tagged, not deleted**, so it can be masked per-role downstream while remaining available to the embedding pipeline.
 
-Expectations route violations to a quarantine table. VIN presence is an enrichment flag, not a validity gate — a large share of complaints carry no VIN, and those records remain valid clustering signal through make, model, year, and component.
+Rows are filtered and branched on `PROD_TYPE` before column-level expectations run, so that tire-only and restraint-only columns are never evaluated against vehicle rows. Expectations route genuine violations to a quarantine table. VIN presence is an enrichment flag, not a validity gate — a large share of complaints carry no VIN, and those records remain valid clustering signal through make, model, year, and component.
 
-**Chunking.** Narratives split into 512-token chunks in `complaint_chunk`, retaining component, make, model, and date metadata for filtered retrieval.
+**Harm typing.** The outcome fields are cast and normalised in silver rather than passed through as raw text: `CRASH`, `FIRE`, `MEDICAL_ATTN`, `POLICE_RPT_YN`, and `VEHICLES_TOWED_YN` to boolean; `INJURED` and `DEATHS` to integer with nulls distinguished from zeros, since an unanswered field and a reported zero are different claims. `FAILDATE` is parsed and reconciled against `LDATE`, with implausible orderings quarantined rather than silently accepted.
 
-**Gold.** `emerging_cluster`, `recall_campaign_scope`, `odi_investigation`, `fleet_exposure`, `tsb_signal`.
+**Chunking.** Narratives split into 512-token chunks in `complaint_chunk`, retaining component, make, model, date, and harm metadata for filtered retrieval — so the agent can restrict a semantic search to complaints that involved a fire or an injury.
+
+**Gold.** `emerging_cluster` (carrying cluster harm totals, corroboration rate, and severity score alongside volume metrics), `recall_campaign_scope`, `odi_investigation`, `fleet_exposure`, `tsb_signal`.
 
 Structured Streaming on a 30-second trigger, watermarked, with idempotent upserts. Photon on serverless compute.
 
@@ -114,9 +153,18 @@ Structured Streaming on a 30-second trigger, watermarked, with idempotent upsert
 
 **AI Search Delta Sync Index** over `complaint_chunk` using `embedding_source_column`, so AI Search computes and maintains embeddings directly from chunk text. Hybrid ANN + BM25 retrieval, which matters here because component codes and part numbers are exact-match tokens that pure semantic search handles poorly. Storage-optimized endpoint given the vector count.
 
-**Feature Store.** Rolling complaint rate per make/model/component, computed offline for training and served online when the agent scores a live match — a genuine online/offline parity requirement.
+**Feature Store.** Rolling complaint rate per make/model/component, plus a rolling harm rate over the same grain — injuries and fatalities per thousand complaints, crash and fire incidence, and corroboration rate (share of harm claims accompanied by a police report or medical attention). Computed offline for training and served online when the agent scores a live match — a genuine online/offline parity requirement.
 
-**Model A — emerging defect detector.** HDBSCAN over chunk embeddings within a rolling window, combined with a volume-anomaly score comparing each cluster against its own history. TSB signals act as a corroborating feature.
+**Model A — emerging defect detector, harm-weighted.** HDBSCAN over chunk embeddings within a rolling window produces candidate clusters. Each cluster is then scored on two axes:
+
+- **Volume anomaly** — complaint arrival rate against the cluster's own history, as before.
+- **Harm severity** — a smoothed weighting over `DEATHS`, `INJURED`, `FIRE`, and `CRASH`, with `MEDICAL_ATTN` and `POLICE_RPT_YN` as corroboration signals.
+
+The two combine into a single ranking score. Volume anomaly is retained rather than replaced: harm is sparse, so a cluster with one catastrophic report and no pattern should not outrank a fast-growing cluster of fire reports.
+
+Smoothing is not optional here. The overwhelming majority of complaints report zero injuries, so an unsmoothed harm weight is dominated by a handful of records and the model degenerates into a fatality lookup. Harm acts as a severity multiplier on a volume-driven cluster score, with shrinkage toward the component-level base rate at low counts.
+
+TSB signals act as a corroborating feature: a manufacturer bulletin on the same component raises confidence that a harm cluster reflects a real defect rather than reporting noise.
 
 **Model B — match confidence.** Calibrated gradient-boosted classifier scoring recall-scope-to-vehicle matches. Threshold tuned for recall rather than F1 (§6).
 
@@ -239,16 +287,19 @@ No principal holds more than one path's privileges. A compromised external insta
 |---|---|
 | Golden set | 150 hand-labelled recall-to-vehicle match pairs, stored as a Unity Catalog-backed `mlflow.genai.datasets` evaluation dataset — versioned and governed, not a flat file — held out from training |
 | Extraction accuracy | `ai_extract` defect/component fields spot-checked against a hand-labelled sample of complaint narratives, the same ground-truth pattern used for Model B — nothing upstream of clustering is trusted un-checked |
-| Model evaluation (Models A and B) | Classical metrics logged to MLflow on every version — precision, recall, and a calibration curve for Model B against the held-out golden set; cluster stability and lead-time distribution for Model A. Precision and recall **published on the application's own page** |
+| Model evaluation (Models A and B) | Classical metrics logged to MLflow on every version — precision, recall, and a calibration curve for Model B against the held-out golden set; cluster stability, lead-time distribution, and harm-window totals for Model A. Precision and recall **published on the application's own page** |
+| Harm data calibration | Outcome fields are consumer allegations, not adjudicated casualty counts. Harm is applied as a smoothed severity multiplier with shrinkage toward the component base rate, never as a raw sum. Corroboration rate against `MEDICAL_ATTN` and `POLICE_RPT_YN` is tracked per cluster and surfaced in the console, so an operator can see how well-supported a severity score is |
 | Agent and retrieval evaluation | `mlflow.genai.evaluate()` against the same UC-backed dataset, scored with named built-in scorers (`Correctness`, `RetrievalGroundedness`, `Safety`) on the retrieval and generation path. Generative scorers are applied only where a generative output exists; the classifier is not evaluated with them |
 | Threshold policy | Tuned for recall, not F1 — see below |
 | Pipeline expectations | DLT expectations with quarantine routing; no silent drops |
 | Data Quality Monitoring | Profiling, freshness, and drift across bronze, silver, gold |
 | Agent output | `Guidelines` scorer grades drafted campaign text against the golden set; human approve/override decisions on `launch_service_campaign()` are logged as MLflow feedback via `create_labeling_session()`, so the override rate that triggers retraining (§4.6) is an auditable Assessment trail, not an implied Lakebase counter |
 | Lineage and audit | Unity Catalog lineage; every agent write recorded with actor and timestamp |
-| Backtest harness | Detection date versus ODI investigation open date on held-out recalls |
+| Backtest harness | Detection date versus ODI investigation open date on held-out recalls, with injuries and fatalities reported during the intervening window totalled from `INJURED`, `DEATHS`, and `FAILDATE` |
 
-**On the threshold.** A false negative leaves a vehicle carrying a documented safety defect in service — a liability event. A false positive sends a technician to inspect a vehicle that proves sound. These errors are not symmetric, and the system does not treat them as though they are.
+**On the threshold.** A false negative leaves a vehicle carrying a documented safety defect in service. A false positive sends a technician to inspect a vehicle that proves sound. These errors are not symmetric, and the system does not treat them as though they are.
+
+Harm weighting sharpens this rather than restating it. The threshold is set lower for clusters carrying fire, injury, or fatality reports than for clusters of comparable volume without them, because the cost of a miss scales with what the defect has already done to people. That asymmetry is a configured policy with a stated rationale, not an artefact of tuning.
 
 ---
 
@@ -260,7 +311,7 @@ No principal holds more than one path's privileges. A compromised external insta
 
 **PII masked, not removed.** Narrative PII is tagged by Data Classification and masked by ABAC per role. It must remain readable to the embedding pipeline while staying opaque to the dashboard — resolved at the data layer rather than in application code.
 
-**Two tiers, one queue.** Proactive signals and reactive recall campaigns surface in a single work queue ranked by fleet exposure. Operators never context-switch between two products.
+**Two tiers, one queue, ranked by harm.** Proactive signals and reactive recall campaigns surface in a single work queue. The default ranking is harm-weighted severity against fleet exposure, so the top of the queue answers "which defect has already hurt people and sits in my fleet" rather than "which defect touches the most vehicles." Ranking by raw vehicle count remains available as a sort, because a high-exposure low-harm campaign is still a scheduling problem worth seeing. Operators never context-switch between two products.
 
 **Presentation-only frontend.** Render holds no data, no model, and no agent logic. Every stateful operation executes on Databricks under a governed principal.
 
@@ -392,7 +443,7 @@ Volume and variety are met on the external corpus. Velocity is met on the operat
 | 6 | OAuth: App resource bindings and OBO scopes; external service principal and pool rotation |
 | 7 | Agent tools, write path, audit log, approval gate |
 | 8 | Databricks App: `app.yaml`, resource bindings, OBO console; external evidence page |
-| 9 | **Model A and the lead-time backtest** |
+| 9 | **Model A (harm-weighted) and the lead-time backtest** |
 | 10 | Governance: Data Classification, ABAC, DQ monitors, System Tables |
 | 11 | Deployment hardening, uptime monitoring, seeded demo state |
 | 12 | *Optional:* CPSC and USDA FSIS connectors on the same ingestion core |
@@ -427,7 +478,7 @@ Phases 1–8 constitute a complete, deployable system. **Phase 9 is the differen
 | Frontend | ABAC-driven operator console carrying the full workflow |
 | Deployed application | **Databricks App**, deployed via Asset Bundle; external evidence page on Render as a secondary read-only surface |
 | Two or more of three Vs | Volume verified, variety met, velocity met on the operational Lakebase CDF path (§8.3) |
-| Business problem | Fleet safety exposure, reactive and proactive |
+| Business problem | Fleet safety exposure, reactive and proactive, ranked by reported harm |
 | Real consumer | Fleet maintenance and safety managers with an existing budget line |
 | Quality control | Golden set, MLflow Evaluate, published metrics, DQ Monitoring, expectations |
 | System design | Three-principal OAuth model, human gate, deterministic severe-recall path, no dual-write |
