@@ -39,7 +39,13 @@ FINDINGS = []
 
 def q(sql, params=None, title=""):
     with conn.cursor() as cur:
-        cur.execute(sql, params or ())
+        # Passing an empty tuple still makes psycopg parse placeholders, so a literal
+        # LIKE 'pg_%' raises "only '%s','%b','%t' are allowed as placeholders".
+        # Omit params entirely when there are none.
+        if params:
+            cur.execute(sql, params)
+        else:
+            cur.execute(sql)
         rows = cur.fetchall()
         cols = [d.name for d in cur.description]
     # persist as text so the result is readable from outside the notebook UI
@@ -132,6 +138,40 @@ WHERE pg_get_userbyid(nspowner) = current_user ORDER BY 1
 """,
     title="schemas I already own",
 )
+
+# Are `users` / `student` LOGIN users or group roles? In Postgres these are the same
+# object; a "user" is simply a role with rolcanlogin=true. This decides whether
+# GRANT "users" TO me is even a coherent request.
+q("""
+SELECT rolname, rolcanlogin, rolinherit, rolsuper, rolcreaterole,
+       (SELECT COUNT(*) FROM pg_auth_members m WHERE m.roleid = r.oid) AS members
+FROM pg_roles r
+WHERE rolname IN ('users','student','databricks_writer_16406') OR rolname = current_user
+ORDER BY rolname
+""", title="ROLE TYPES: are users/student login users or groups")
+
+# Every non-login (group) role, and whether it actually confers CREATE on the schema.
+# These are the memberships worth asking for.
+q("""
+SELECT r.rolname AS group_role,
+       has_schema_privilege(r.rolname, 'bootcamp_students', 'CREATE') AS grants_create,
+       (SELECT COUNT(*) FROM pg_auth_members m WHERE m.roleid = r.oid) AS members
+FROM pg_roles r
+WHERE r.rolcanlogin = false AND r.rolname NOT LIKE 'pg_%'
+ORDER BY grants_create DESC, members DESC
+""", title="GROUP ROLES conferring CREATE on bootcamp_students")
+
+# What already exists under our prefix, and who owns it — so a re-run of the create
+# notebook cannot clobber anything a manual test left behind.
+q("""
+SELECT tablename, tableowner,
+       (SELECT c.relreplident FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = t.schemaname AND c.relname = t.tablename) AS replica_identity
+FROM pg_tables t
+WHERE schemaname = 'bootcamp_students' AND tablename LIKE 'fleetguard%'
+ORDER BY tablename
+""", title="EXISTING fleetguard_* tables in Postgres")
 
 # COMMAND ----------
 

@@ -26,73 +26,51 @@ no error and passed the obvious check.
 
 ## Phase 5 — Lakebase
 
-### I-037 — No CREATE privilege on the Postgres schema — **EXTERNAL BLOCKER**
-*Date:* 2026-08-31 · *Status:* **open — needs a grant from the schema owner**
-
-**Symptom.** `06_create_depot_and_verify` aborted at pre-flight:
-`ABORT: no CREATE privilege on bootcamp_students`. The guard fired before any DDL, so
-nothing was written.
-
-**Diagnosis (read-only, `ops_pg_privilege_diagnostic`):**
-
-| check | result |
-|---|---|
-| `current_user` | `abhisek.bastia17@gmail.com` — identity maps correctly |
-| `USAGE` on schema | **true** — can read |
-| `CREATE` on schema | **false** — cannot create tables |
-| role memberships | **none — belongs to no Postgres role at all** |
-| schema owner | `zach@zachwilson.tech` |
-| can create own schema | **false** |
-
-**Root cause.** Table ownership in the schema shows **85 tables owned by a role named
-`users`** and 11 by `student`, alongside individually-owned tables. Other students
-therefore hold `CREATE` either through role membership or a direct grant. This account
-holds **no role membership whatsoever**, so it inherits nothing.
-
-**No workaround exists.** Creating the tables in a different schema is not an option —
-Lakebase CDF is bound to `databricks_postgres.bootcamp_students`, so tables elsewhere are
-never captured, which is the entire point of Phase 5. Creating a personal schema is also
-blocked (`can_create_schema = false`).
-
-**The ask.** Either of these, run by the schema owner or a Postgres superuser:
-
-```sql
--- preferred: matches how the other students appear to be set up
-GRANT "users" TO "abhisek.bastia17@gmail.com";
-
--- or the narrower, direct equivalent
-GRANT CREATE ON SCHEMA bootcamp_students TO "abhisek.bastia17@gmail.com";
-```
-
-Phase 5 is blocked until one of those lands. Phases 6, 7 and 8 depend on Phase 5.
-
-
-### I-036 — Lakebase table naming, decided deliberately
+### I-037 — No CREATE privilege on the Postgres schema — RESOLVED
 *Date:* 2026-08-31 · *Status:* resolved
 
-Naming mattered more than usual here because **recovery from a mistake is not possible
-without loss**: CDF destination tables auto-suffix on collision (`lb_x_history_1`) silently
-rather than erroring, and renaming a Postgres table orphans its history table. 105 of the
-256 `lb_*` tables already in `bootcamp_cdc` are exactly such orphans.
+`06_create_depot_and_verify` aborted at pre-flight with *no CREATE privilege on
+bootcamp_students*. The guard fired before any DDL, so nothing was written.
 
-Options weighed: `fg_<entity>`, `<entity>_abhibastia` (the cohort's observed convention),
-`fg_<entity>_abhibastia`, and `fleetguard_<entity>`.
+**Resolved by a direct grant to the user.** Confirmed after the fact: `can_create = true`
+while `role memberships` is **still empty** — so `CREATE` was granted straight to
+`abhisek.bastia17@gmail.com`, not inherited through a role.
 
-**Chosen: `fleetguard_<entity>`.** A two-letter prefix is independently guessable by any of
-~296 students sharing the schema; "fleetguard" collides only if someone builds the same
-product. It gets the collision resistance of the double-namespaced option without the
-verbosity, makes `SHOW TABLES LIKE 'lb_fleetguard_%'` return exactly our 11 tables out of
-354+, and reads self-evidently in a demo. Longest identifier is
-`lb_fleetguard_service_campaign_history` at 38 characters, well inside Postgres's 63.
+**Correction to advice given during triage.** The first recommendation was
+`GRANT "users" TO "abhisek.bastia17@gmail.com"`, on the assumption that `users` was a group
+role because it owned 85 tables in the schema. That assumption was never verified and was
+**wrong**: `users` and `student` both have `rolcanlogin = true` — they are login users, not
+group roles. The actual group roles are `databricks_all_writer_perms`,
+`databricks_superuser` (the only one conferring CREATE) and
+`databricks_synced_table_helper`. In Postgres users and roles are the same object, so the
+distinction is `rolcanlogin`, and it should have been checked before recommending a grant.
 
-Tables map 1:1 to proposal §4.4, so the document stays consistent.
+### I-038 — Lakebase CDF round-trip VERIFIED end to end
+*Date:* 2026-08-31 · *Status:* resolved — **Phase 5 done-when met**
 
-**Operational rule adopted:** create **one** table first (`fleetguard_depot`, smallest),
-verify the CDF round-trip produces `lb_fleetguard_depot_history` with correct
-`_pg_change_type`, and only then create the other ten. The failure mode here is not an
-error message — it is a silently suffixed table noticed a week later.
+The project's single riskiest unknown works. `fleetguard_depot` created in
+`databricks_postgres.bootcamp_students` with `REPLICA IDENTITY FULL` (`relreplident = 'f'`),
+60 rows inserted, 1 updated, 1 deleted. The destination appeared as
+**`bootcamp_students.bootcamp_cdc.lb_fleetguard_depot_history`** — exact name, **no `_1`
+suffix**, so no silent collision.
 
----
+| `_pg_change_type` | rows |
+|---|---:|
+| `insert` | 60 |
+| `update_preimage` | 1 |
+| `update_postimage` | 1 |
+| `delete` | 1 |
+
+All five metadata columns present as documented: `_pg_change_type`, `_pg_lsn`, `_pg_xid`,
+`_timestamp`, `_sort_by`. `REPLICA IDENTITY FULL` is doing its job — `update_preimage`
+carries the full prior row rather than just the key.
+
+**Still to measure:** end-to-end latency. All `_timestamp` values land in the same second,
+so the capture side is fast, but a properly timed write is needed before §8.3's ~15s figure
+can be called measured rather than documented. That is a Phase 11 task.
+
+**Naming validated.** `fleetguard_<entity>` (I-036) survives the round-trip intact, so the
+remaining ten tables can be created with confidence.
 
 ## Phase 3 — chunking + AI Search
 

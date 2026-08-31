@@ -82,10 +82,17 @@ does not consume shared-workspace compute before the demo window. Schedule it in
   for the agent/retrieval path, separately from classical precision/recall for Model B.
 - **Done when:** precision/recall numbers exist and are real, not placeholders.
 
-### Phase 5 — Lakebase schema + CDF  ⏸ PARKED (2026-08-31)
-*Naming decided (`fg_<entity>` → `lb_fg_<entity>_history`); destination schema undecided.
-See `docs/ISSUES.md` I-028. Nothing created. Resume by choosing the CDF destination first —
-renaming a Postgres table later orphans its history table.*
+### Phase 5 — Lakebase schema + CDF  🟡 ROUND-TRIP PROVEN (2026-08-31)
+*Naming `fleetguard_<entity>` → `lb_fleetguard_<entity>_history` (I-036). Destination
+`bootcamp_students.bootcamp_cdc`, authorised.*
+
+**Done-when MET on the first table.** `fleetguard_depot` created with `REPLICA IDENTITY
+FULL`; 60 inserts, 1 update, 1 delete appeared in
+`lb_fleetguard_depot_history` as 60 `insert` / 1 `update_preimage` / 1 `update_postimage` /
+1 `delete`, with all five metadata columns and **no collision suffix** (I-038).
+
+*Outstanding:* the remaining 10 tables, and a timed write to measure real capture latency
+rather than citing the documented ~15 s.
 
 - Create the 11-table Postgres schema, `REPLICA IDENTITY FULL` on every table.
 - Enable Lakebase CDF at schema level (UI or API — resolved by the pre-work above).

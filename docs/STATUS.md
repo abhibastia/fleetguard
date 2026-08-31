@@ -15,7 +15,7 @@ One page answering "where are we". Design lives in `FleetGuard_Proposal.md`, seq
 | **2 — Fleet registry** | ✅ **Done** | 20,000 vehicles / 60 depots / ~989k exposure rows. 400 VINs independently vPIC-verified, 400/400 exact. |
 | **3 — Chunking + AI Search** | 🟡 **In progress** | `silver_complaint_chunk` built (2,196,091 chunks, 1.0006/complaint). Endpoint `fleetguard-vs` ONLINE; index `complaint_chunk_idx` syncing over 1,746,601 chunks. Hybrid query test outstanding. |
 | **4 — Model B + golden set** | ⬜ Not started | Scope now measured: variant matches outnumber exact 3:1 (I-030). |
-| **5 — Lakebase + CDF** | 🔴 **Blocked** | Destination authorised, naming decided (I-036), notebook written and safety-guarded. **Blocked on a Postgres grant** — the account holds `USAGE` but not `CREATE` on `bootcamp_students`, and belongs to no Postgres role (I-037). No workaround: CDF is bound to that schema. Gates 6–8. |
+| **5 — Lakebase + CDF** | 🟡 **Round-trip proven** | **CDF verified end to end (I-038)** — `fleetguard_depot` → `lb_fleetguard_depot_history`, 60 insert / 1 update_preimage / 1 update_postimage / 1 delete, exact name, no collision suffix. `CREATE` grant resolved. **Outstanding:** the other 10 tables. Unblocks 6–8. |
 | **6 — OAuth wiring** | ⬜ Not started | Blocked on 5. |
 | **7 — Agent tools + write path** | ⬜ Not started | Blocked on 5. |
 | **8 — App + external surface** | ⬜ Not started | Blocked on 5. |
@@ -110,7 +110,6 @@ index lifecycle — not corpus trimming — is the lever.
 | # | Decision | Blocks |
 |---|---|---|
 | **I-026** | **Chunking scope.** 512-token chunking is ~1.0006 chunks/row on complaint narratives (`CDESCR` is `CHAR(2048)`). It genuinely earns its place on investigation summaries (66% exceed one chunk). Keep the near-1:1 table, or index narratives directly? | Phase 3 |
-| **I-037** | **Postgres `CREATE` grant.** Account has `USAGE` but not `CREATE` on `bootcamp_students` and holds no role membership. Needs `GRANT "users" TO "abhisek.bastia17@gmail.com"` or `GRANT CREATE ON SCHEMA bootcamp_students`. **External — cannot be self-served.** | Phases 5 → 6 → 7 → 8 |
 | **I-018** | **Index lifecycle.** How long to leave the AI Search endpoint up. Suggested: subset while developing, full corpus from ~20 Sept. | Phase 3 cost |
 | **I-015** | **Streaming vs PII guardrail.** AI Gateway output guardrails don't apply to streaming responses — either no streaming, or drop the §4.5 "second layer" claim. | Phases 7–8 |
 
@@ -118,9 +117,9 @@ index lifecycle — not corpus trimming — is the lever.
 
 ## Risks, honestly
 
-1. **Phase 5 is completely untested and gates the entire live-demo path.** Lakebase CDF is
-   Public Preview, not bundle-deployable, UI-only to configure. If it doesn't work here
-   there is no identified fallback for demonstrating sub-minute velocity.
+1. ~~**Phase 5 is completely untested.**~~ **RETIRED 2026-08-31** — the CDF round-trip is
+   verified end to end (I-038). What remains is the other 10 tables plus a timed
+   latency measurement, both routine. This was the project's largest risk and it is gone.
 2. **Scope vs schedule.** Eight phases remain in four weeks. Phase 1 alone produced 8 logged
    issues, 4 of them silent. Cut list already agreed: Phase 12 (done), Feature Store online
    serving, Genie Agent, Unity AI Gateway, governance reduced to a visible slice.
