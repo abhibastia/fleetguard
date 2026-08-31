@@ -1,9 +1,15 @@
 # FleetGuard — project notes for Claude
 
-Vehicle defect early warning & recall response platform on Databricks. Full design
-in `docs/FleetGuard_Proposal.md`; build sequence in `PLAN.md`; **every problem hit during
-development is logged in `docs/ISSUES.md` — add to it whenever something breaks or turns
-out to be wrong, especially anything that failed silently.**
+Vehicle defect early warning & recall response platform on Databricks.
+
+**Starting a new session? Read `docs/STATUS.md` first.** It is the single "where are we"
+page: phase-by-phase state, what is running unattended, what is costing money, and a
+"Picking this up tomorrow" section with the next steps in priority order. Keep it current
+at the end of a working session — it is what a cold session resumes from.
+
+Full design in `docs/FleetGuard_Proposal.md`; build sequence in `PLAN.md`; **every problem
+hit during development is logged in `docs/ISSUES.md` — add to it whenever something breaks
+or turns out to be wrong, especially anything that failed silently.**
 
 ## Verified facts — do not re-derive, do not "correct" without re-checking live
 
