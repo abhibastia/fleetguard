@@ -5,7 +5,7 @@
 **Capstone Project Proposal**
 Prepared as a production architecture specification.
 
-**Diagrams:** `fleetguard_e2e.png` (system architecture) · `fleetguard_identity.png` (identity & authorisation)
+**Diagrams:** `fleetguard_e2e.html` (system architecture) · `fleetguard_identity.html` (identity & authorisation) — self-contained HTML, so they diff in review rather than drifting silently as binaries.
 
 ---
 
@@ -260,7 +260,9 @@ Override rate is the system's trust metric. It measures whether operators actual
 
 ## 5. Identity & Authorisation
 
-The Databricks App is the primary operator surface, and platform-managed identity is a large part of why. Three token paths, four principals, no shared credentials, no long-lived database passwords. See `fleetguard_identity.png`.
+The Databricks App is the primary operator surface, and platform-managed identity is a large part of why. Four token paths, four principals, no shared credentials, no long-lived database passwords. See `fleetguard_identity.html`.
+
+Paths A, B and C below are the steady state. A fourth — **Path D**, the user-to-machine OAuth flow the Render-phase console needs while it sits outside the Databricks Apps ingress — is set out in §8.7, because it exists only until the App takes over. It is drawn alongside the others in the identity diagram.
 
 ### 5.1 Path A — Databricks App, user on-behalf-of
 
