@@ -4,6 +4,10 @@ Turns the delivery plan in `docs/FleetGuard_Proposal.md` (§11) into concrete, s
 verifiable work. Grounded in what was already confirmed live before build start (see
 "Starting point" below) — not re-derived from scratch.
 
+> **For current status, read `docs/STATUS.md`** — one page covering phase progress,
+> what exists in the workspace, measured results, cost, and open decisions. This file is
+> the *plan*; STATUS is the *position*.
+
 ## Starting point — as of 2026-08-31
 
 - **Workspace: `abhi` profile** (`dbc-7b106152-caf3.cloud.databricks.com`), a *shared*
@@ -34,7 +38,15 @@ verifiable work. Grounded in what was already confirmed live before build start 
 
 ## Phases
 
-### Phase 1 — Ingestion + bronze/silver/gold
+### Phase 1 — Ingestion + bronze/silver/gold  🟡 ~85% (2026-08-31)
+*Done:* ingest job (4 files landing, `If-Modified-Since` verified working — `FLAT_CMPL`
+returns 304 and skips 370 MB), bronze (4 tables, 8.44M rows, 0 rescued, cardinality-checked),
+silver (9 tables, `bronze = silver + quarantine` reconciles exactly on every table).
+*Outstanding:* chunking → `complaint_chunk`; 2 of 5 gold tables blocked on Phases 3 and 9
+(`gold_emerging_cluster` needs Model A, and the remaining scope tables follow it).
+*Deliberate deviation from "on a schedule":* the ingest job is **manual by choice** so it
+does not consume shared-workspace compute before the demo window. Schedule it in Phase 11.
+
 - Lakeflow Job: download 4 flat files daily, land in
   `/Volumes/bootcamp_students/fleetguard/nhtsa_flat_files/`, separate
   checkpoint/schema paths. Use `If-Modified-Since` for change detection —
@@ -101,13 +113,26 @@ renaming a Postgres table later orphans its history table.*
 - **Done when:** both surfaces are deployed and the App is the primary demoable
   workflow.
 
-### Phase 9 — Model A + lead-time backtest
+### Phase 9 — Model A + lead-time backtest  🟡 BASELINE DONE (2026-08-31)
 *(The differentiating capability — protect this phase's time budget.)*
-- HDBSCAN over embeddings + volume-anomaly scoring.
-- Backtest: detection date vs. ODI investigation open date on held-out historical
-  recalls.
+
+*Run early, out of sequence, deliberately:* the backtest needs only silver, so measuring it
+in week 1 converted the project's largest risk from a week-4 discovery into week-1
+knowledge. `gold_lead_time_backtest`, `gold_lead_time_control`, `gold_lead_time_summary`.
+
+**Measured (volume-anomaly half only, no embeddings):** 16.0% detection at median 197-day
+lead on 777 post-2010 investigations, against **11.1% on a volume-matched placebo**
+(z ≈ 2.62, p ≈ 0.009). Real but modest — a 1.44× lift. Two earlier versions gave flattering
+artefacts (409 days; 160× separation) and were discarded; see `docs/ISSUES.md` I-027.
+
+**Conclusion that reshapes the plan:** volume anomaly alone does **not** carry the
+differentiator. The semantic half is load-bearing, not an enhancement — which makes Phase 3
+mandatory rather than optional.
+
+- ✅ Volume-anomaly scoring + backtest harness with a control arm.
+- ⬜ HDBSCAN over embeddings (needs Phase 3), then re-run the harness to measure the lift.
 - **Done when:** a real (possibly negative) lead-time number exists and is published
-  as-is.
+  as-is. *A publishable floor already exists* — remaining work is to improve on it.
 
 ### Phase 10 — Governance
 - Data Classification, ABAC row filters/column masks, DQ Monitors (including the
@@ -121,8 +146,11 @@ renaming a Postgres table later orphans its history table.*
 - **Done when:** the full pipeline survives an idle-then-cold-start cycle without
   manual intervention.
 
-### Phase 12 — Optional: second connector (CPSC/FSIS)
-- Only if 1–11 are solid with time to spare.
+### Phase 12 — Optional: second connector (CPSC/FSIS)  ❌ CUT (2026-08-31)
+*Dropped deliberately for schedule, not abandoned by neglect. With a 25–30 Sept demo and
+eight phases remaining, this is the correct first sacrifice — the proposal itself names it
+as such (§11). Also cut: Feature Store online serving, Genie Agent, Unity AI Gateway;
+governance reduced to a visible slice rather than the full matrix.*
 
 ## Sequencing
 
