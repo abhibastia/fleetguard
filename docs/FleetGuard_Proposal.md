@@ -17,7 +17,7 @@ FleetGuard operates on NHTSA's complete public defect corpus and delivers two ca
 
 **Reactive — recall response.** When a campaign posts, FleetGuard resolves its scope against the operator's VIN roster in seconds, ranks exposure by depot and severity, and launches the service campaign under human approval.
 
-**Proactive — emerging defect detection.** FleetGuard clusters complaint narratives semantically and surfaces defect patterns before NHTSA opens an investigation. No fleet management platform on the market does this.
+**Proactive — emerging defect detection.** FleetGuard clusters complaint narratives semantically and surfaces defect patterns before NHTSA opens an investigation. No fleet management platform we surveyed publishes this capability.
 
 The proactive capability is measurable rather than asserted. NHTSA publishes investigation open dates and recall issue dates alongside the complaint corpus, so detection lead time is validated against held-out historical recalls. Because each complaint also carries crash, fire, injury, and fatality fields, that lead time is expressed in harm terms: how many injuries and deaths were reported on a defect during the window in which the pattern was already visible and no regulator had yet acted. **Both figures are outputs of this system, not inputs to its business case.** Neither is claimed in this document.
 
@@ -32,7 +32,7 @@ The proactive capability is measurable rather than asserted. NHTSA publishes inv
 | | Today | With FleetGuard |
 |---|---|---|
 | Recall arrives | Email notice, manual VIN cross-reference in a spreadsheet, an afternoon of work | Scope resolved against roster in seconds, ranked by depot and severity |
-| Park It recall | Same manual process, but the clock is measured in hours | Deterministic VIN-range match, immediate flag, campaign drafted |
+| Park It recall | Same manual process, but the clock is measured in hours | Deterministic scope match on make/model/year and manufacture window, immediate flag, campaign drafted |
 | Emerging defect | Invisible until NHTSA acts | Surfaced from complaint clustering with a measured confidence score |
 | Audit trail | Email threads and spreadsheet versions | Every decision recorded with actor, timestamp, and rationale |
 
@@ -61,16 +61,18 @@ US last-mile delivery operators, rental fleets, utilities, and municipal fleets 
 
 | Source | Artefact | Content | Status |
 |---|---|---|---|
-| ODI Complaints | `FLAT_CMPL.zip` | Owner-written defect narratives, 1995 → present; expected order 1.5–2.5M rows, confirmed at first ingest | **Live, verified** |
-| ODI Recalls | `FLAT_RCL_POST_2010.zip` | Campaign scope, remedy, consequence, Park It flag | **Live, verified** |
-| ODI Investigations | `FLAT_INV.zip` | **154,367 rows** — investigation open dates | **Verified, 0 rescued rows** |
-| Technical Service Bulletins | `TSBS_RECEIVED_2025-2026.zip` + historical chunks | **2.4M rows** — manufacturer bulletins, frequently precede recalls | **Verified, 0 rescued rows** |
-| Recalls API | `api.nhtsa.gov/recallsByVehicle` | Live campaign detection | **Live** |
-| vPIC | `vpic.nhtsa.dot.gov/api` | VIN → make, model, year, plant, body class | **Live** |
+| ODI Complaints | `FLAT_CMPL.zip` | Owner-written defect narratives — **2,240,289 rows**, `LDATE` 1995-01-01 → 2026-08-27 | **Measured 2026-08-31** |
+| ODI Recalls | `FLAT_RCL_POST_2010.zip` | **244,925 rows / 15,211 distinct campaigns** — scope, remedy, consequence, Park It flags | **Measured 2026-08-31** |
+| ODI Investigations | `FLAT_INV.zip` | 154,367 rows, but **5,344 distinct investigations** (rows are make/model/year granular) — open dates | **Measured 2026-08-31** |
+| Technical Service Bulletins | `TSBS_RECEIVED_*.zip`, seven 5-year chunks | **5,801,279 rows** across all chunks — manufacturer bulletins, frequently precede recalls | **Measured 2026-08-31** |
+| Recalls API | `api.nhtsa.gov/recalls/recallsByVehicle` | Live campaign detection; returns `parkIt` / `parkOutSide` booleans | **Live** |
+| vPIC | `vpic.nhtsa.dot.gov/api` | VIN → make, model, year, plant, body class, GVWR class | **Live** |
 
-Both large flat files parse through `read_files` with zero rescued rows, confirming schema stability ahead of the build.
+Row counts are measured from the actual files, not estimated. All three flat files parsed cleanly at their documented field counts (51 / 11 / 29) with zero malformed rows. Schema stability through `read_files` will be confirmed on first ingest into the workspace.
 
 **The investigations file is the system's ground truth.** It is what converts "we detect defects early" from a marketing claim into a measured lead-time distribution.
+
+**The backtest population is the distinct-investigation count, not the row count.** Of 5,344 distinct investigations, **777 opened in 2010 or later**, and **497 of those carry at least 30 complaints in the year preceding their open date** — the working backtest set. Joining recall campaigns to investigations on `CAMPNO` yields 886 linked campaigns, of which 97.2% have the investigation preceding the recall, at a median gap of 118 days (p25 51, p75 216). This is stated here because 154,367 is a row count and would overstate the evidence base by two orders of magnitude if quoted as the backtest population.
 
 **The complaint file carries harm outcomes per record**, which is what makes that distribution meaningful rather than merely early. Confirmed against NHTSA's published file layout:
 
@@ -119,7 +121,7 @@ Tires are retained deliberately. Tire defects on heavy vehicles are a serious sa
 
 **Vehicle class — light through heavy.** NHTSA regulates vehicle defects across medium and heavy trucks and buses as well as light vehicles; FMCSA regulates carrier operations, which is a separate concern. A Class 8 tractor fleet is therefore in scope.
 
-*Build note:* vPIC decode completeness is generally weaker for heavy-truck VINs than for light vehicles. Confirm decode quality across the intended vehicle classes before finalising the fleet roster generator, and treat partial decodes as an enrichment gap rather than a validity failure.
+*Measured:* heavy-truck decode is not a weak point. Class 8 VINs across Freightliner, Peterbilt, Kenworth, Mack, Volvo and International decoded to make, model, year, `Truck-Tractor` body class and `Class 8: 33,001 lb and above` GVWR — coverage at least as complete as light vehicles. One caveat for the roster generator: vPIC returns full attributes even when the check digit fails (`ErrorCode 1`), so decode success must not be gated on `ErrorCode == 0`.
 
 **Temporal — recalls from 2010.** The recall corpus uses `FLAT_RCL_POST_2010`, so recall coverage begins in 2010 while complaints extend back to 1995. This is a designed boundary, not an omission: fleet operators do not run vehicles old enough for pre-2010 campaigns to matter operationally. It does bound the backtest population to post-2010 recalls, which remains ample for a lead-time distribution, and the asymmetry is deliberate — the longer complaint history improves cluster baselines even where no corresponding recall is in scope.
 
@@ -129,7 +131,9 @@ Tires are retained deliberately. Tire defects on heavy vehicles are a serious sa
 
 ### 4.1 Ingestion
 
-A Lakeflow Job downloads the four flat-file artefacts daily and polls the recalls API every 60 seconds, landing raw files in a **Unity Catalog Volume** at `/Volumes/fleetguard/raw/`. The job runs under a dedicated service principal holding `WRITE VOLUME` and pipeline ownership — and no application privileges.
+A Lakeflow Job downloads the four flat-file artefacts daily and polls the recalls API every 60 seconds, landing raw files in a **Unity Catalog Volume** at `/Volumes/bootcamp_students/fleetguard/nhtsa_flat_files/`. The job runs under a dedicated service principal holding `WRITE VOLUME` and pipeline ownership — and no application privileges.
+
+*Namespace note:* the workspace is a shared metastore in which catalog creation is not available to this project, so all FleetGuard objects live in the single schema `bootcamp_students.fleetguard`, which this project owns. Medallion layers are therefore expressed as table-name prefixes (`bronze_`, `silver_`, `gold_`) rather than as sibling schemas. This is a naming convention, not an architectural change — lineage, expectations and grants behave identically.
 
 Checkpoint and schema locations are held at separate paths. Colocating them corrupts schema state.
 
@@ -137,9 +141,13 @@ Checkpoint and schema locations are held at separate paths. Colocating them corr
 
 **Bronze.** Auto Loader with `schemaEvolutionMode = addNewColumns` and `_rescued_data` capturing malformed rows rather than discarding them. Delta Change Data Feed enabled at creation, which is also a prerequisite for AI Search standard endpoints.
 
-**Silver.** Deduplication on ODI number. Normalisation of manufacturer, make, and model strings — NHTSA's own changelog documents these shifting across the corpus lifetime. `ai_extract` derives structured defect and component fields from narrative prose. PII in narrative text is **detected and tagged, not deleted**, so it can be masked per-role downstream while remaining available to the embedding pipeline.
+**Silver.** Deduplication on ODI number. Normalisation of manufacturer, make, and model strings — NHTSA's own changelog documents these shifting across the corpus lifetime. PII in narrative text is **detected and tagged, not deleted**, so it can be masked per-role downstream while remaining available to the embedding pipeline.
 
-Rows are filtered and branched on `PROD_TYPE` before column-level expectations run, so that tire-only and restraint-only columns are never evaluated against vehicle rows. Expectations route genuine violations to a quarantine table. VIN presence is an enrichment flag, not a validity gate — a large share of complaints carry no VIN, and those records remain valid clustering signal through make, model, year, and component.
+**Where `ai_extract` runs, and where it deliberately does not.** Component is *not* extracted from prose: `COMPDESC` already ships as a populated structured field on every complaint, and paying a language model to re-derive it across 2.24M rows would be pure cost for no information gain. `ai_extract` is applied **per surfaced cluster, not per complaint** — deriving failure mode, operating conditions, and severity language for the few hundred clusters the system actually raises. This keeps LLM spend proportional to what an operator sees rather than to corpus size, and moves the cost out of the ingest path where it would gate every downstream phase.
+
+Rows are filtered and branched on `PROD_TYPE` before column-level expectations run, so that tire-only and restraint-only columns are never evaluated against vehicle rows. Measured: `PROD_TYPE` is `V` 96.78% / `T` 1.85% / `C` 0.68% / `E` 0.68%, and the tire-only and restraint-only columns are perfectly scoped — zero population outside their own product type. Keeping `V` and `T` retains 98.63% of rows. Expectations route genuine violations to a quarantine table.
+
+**VIN is an enrichment flag, not a validity gate — and not an identifier.** 85.1% of complaints carry a VIN, but the field is `CHAR(11)`: 1,899,700 of 1,907,037 populated values are exactly 11 characters, a partial VIN. Complaint VINs therefore cannot identify an individual vehicle and are never used for fleet matching; records remain valid clustering signal through make, model, year, and component regardless of VIN presence.
 
 **Harm typing.** The outcome fields are cast and normalised in silver rather than passed through as raw text: `CRASH`, `FIRE`, `MEDICAL_ATTN`, `POLICE_RPT_YN`, and `VEHICLES_TOWED_YN` to boolean; `INJURED` and `DEATHS` to integer with nulls distinguished from zeros, since an unanswered field and a reported zero are different claims. `FAILDATE` is parsed and reconciled against `LDATE`, with implausible orderings quarantined rather than silently accepted.
 
@@ -147,7 +155,7 @@ Rows are filtered and branched on `PROD_TYPE` before column-level expectations r
 
 **Gold.** `emerging_cluster` (carrying cluster harm totals, corroboration rate, and severity score alongside volume metrics), `recall_campaign_scope`, `odi_investigation`, `fleet_exposure`, `tsb_signal`.
 
-Structured Streaming on a 30-second trigger, watermarked, with idempotent upserts. Photon on serverless compute.
+Watermarked Structured Streaming with idempotent upserts, Photon on serverless compute. The corpus pipeline triggers on file arrival rather than on a short timer — the source refreshes daily (§8.3), so a sub-minute micro-batch cadence here would burn serverless compute for no freshness gain. The 30-second cadence belongs to the operational path only.
 
 ### 4.3 Retrieval and models
 
@@ -166,7 +174,7 @@ Smoothing is not optional here. The overwhelming majority of complaints report z
 
 TSB signals act as a corroborating feature: a manufacturer bulletin on the same component raises confidence that a harm cluster reflects a real defect rather than reporting noise.
 
-**Model B — match confidence.** Calibrated gradient-boosted classifier scoring recall-scope-to-vehicle matches. Threshold tuned for recall rather than F1 (§6).
+**Model B — residual match confidence.** The deterministic pass (§7) resolves campaign scope against the roster on make, model, model-year and manufacture window. Model B exists for what that pass cannot settle: manufacturer and model-string variants (`F-150` / `F150` / `F 150`, plus NHTSA's documented make-name drift), vehicles with an unknown manufacture date, and campaigns whose scope text narrows beyond make/model/year. A calibrated gradient-boosted classifier scores those residual cases, with the threshold tuned for recall rather than F1 (§6). It ranks ambiguity; it does not perform the match.
 
 Both registered in Unity Catalog, served via Model Serving.
 
@@ -207,13 +215,13 @@ Mosaic AI Agent Framework, with all tools exposed as Unity Catalog Functions and
 
 The agent executes on Databricks compute, never on Render. MLflow 3 traces every tool call, token cost, and latency.
 
-**Unity AI Gateway** sits in front of the agent's serving endpoint (`put_ai_gateway`): a PII-block guardrail as a second layer alongside the Data-Classification tagging already applied to narrative text (§4.2), a per-user rate limit, and an inference table that is the actual mechanism behind the "cost per defect signal" unit economic in §8.6 — that number does not come from a separate cost-tracking system, it comes from joining this inference table's token usage against `agent_activity_fact`.
+**Unity AI Gateway** sits in front of the agent's serving endpoint (`PUT /api/2.0/serving-endpoints/{name}/ai-gateway`): a PII guardrail set to `Block` as a second layer alongside the Data-Classification tagging already applied to narrative text (§4.2), a per-user rate limit, and an inference table that is the actual mechanism behind the "cost per defect signal" unit economic in §8.6 — that number does not come from a separate cost-tracking system, it comes from joining this inference table's token usage against `agent_activity_fact`.
 
 ### 4.6 Analytics
 
-**Lakebase Change Data Feed** (Lakebase CDF, Public Preview) streams row-level operational changes into Unity Catalog as `lb_<table>_history` tables, with `_pg_change_type`, `_pg_lsn`, `_pg_xid`, and `_timestamp` preserved per change. There is no dual-write path, so the analytics layer cannot diverge from application state.
+**Lakebase Change Data Feed** (Lakebase CDF, Public Preview) captures every insert, update and delete from the Postgres write-ahead log and lands it in Unity Catalog as `lb_<table>_history` managed Delta tables, batched and flushed roughly every 15 seconds. Each row carries `_pg_change_type` (`insert` / `delete` / `update_preimage` / `update_postimage`), `_pg_lsn`, `_pg_xid`, `_timestamp`, and `_sort_by`. There is no dual-write path, so the analytics layer cannot diverge from application state.
 
-*Build note:* Lakebase CDF is configured at the schema level — start it from the Lakebase UI or via the Postgres REST API / Databricks SDKs (`CAN MANAGE` on the project, plus `USE CATALOG`/`USE SCHEMA`/`CREATE TABLE` on the destination). Every source table needs `REPLICA IDENTITY FULL` and Postgres 16/17/18. We have not confirmed a dedicated Asset Bundle resource type for it, so §8.5's `bundle deploy` may not cover this step end to end — worth checking during the build rather than assuming either way.
+*Build note — confirmed, and it has a consequence.* Lakebase CDF is configured at the schema level from the Lakebase UI or via the Postgres REST API / Databricks SDKs (`CAN MANAGE` on the project, plus `USE CATALOG`/`USE SCHEMA`/`CREATE TABLE` on the destination). Every source table needs `REPLICA IDENTITY FULL` and Postgres 16, 17 or 18. Bundle support for Lakebase is in Beta and covers `postgres_projects`, `postgres_branches`, `postgres_endpoints`, `postgres_roles`, `postgres_databases`, `postgres_synced_tables` and `postgres_catalogs` — **CDF is not among them.** Enabling it is therefore a documented manual step in the runbook, and §8.5's "a single `bundle deploy` produces a consistent environment" carries this one explicit exception. Destination tables auto-suffix on name collision (`lb_users_history_1`), which matters if a table is ever re-synced.
 
 A DLT pipeline builds `agent_activity_fact` and `signal_lifecycle_fact`, driving: signals opened per period, median time-to-decision, **human approve versus override rate**, match precision drift, and campaign completion by depot.
 
@@ -295,7 +303,7 @@ No principal holds more than one path's privileges. A compromised external insta
 | Data Quality Monitoring | Profiling, freshness, and drift across bronze, silver, gold |
 | Agent output | `Guidelines` scorer grades drafted campaign text against the golden set; human approve/override decisions on `launch_service_campaign()` are logged as MLflow feedback via `create_labeling_session()`, so the override rate that triggers retraining (§4.6) is an auditable Assessment trail, not an implied Lakebase counter |
 | Lineage and audit | Unity Catalog lineage; every agent write recorded with actor and timestamp |
-| Backtest harness | Detection date versus ODI investigation open date on held-out recalls, with injuries and fatalities reported during the intervening window totalled from `INJURED`, `DEATHS`, and `FAILDATE` |
+| Backtest harness | Detection date versus ODI investigation open date, over the **497 post-2010 investigations carrying ≥30 prior-year complaints** (§3), with injuries and fatalities in the intervening window totalled from `INJURED`, `DEATHS`, and `FAILDATE`. Held-out split within that set; population size stated so the evidence base is not overread |
 
 **On the threshold.** A false negative leaves a vehicle carrying a documented safety defect in service. A false positive sends a technician to inspect a vehicle that proves sound. These errors are not symmetric, and the system does not treat them as though they are.
 
@@ -305,7 +313,9 @@ Harm weighting sharpens this rather than restating it. The threshold is set lowe
 
 ## 7. Design Decisions
 
-**Deterministic path for severe recalls.** Park It campaigns bypass the model entirely. Scope matching is a deterministic VIN-range check; no language model participates in the highest-severity decision path. The model is reserved for ranking and drafting.
+**Deterministic path for severe recalls.** Park It campaigns bypass the model entirely. No language model participates in the highest-severity decision path; the model is reserved for ranking and drafting.
+
+*What the deterministic match actually is.* The recall corpus scopes campaigns by make, model, model-year and manufacture-date window (`BGMAN`/`ENDMAN`) — it publishes no VIN ranges, and NHTSA exposes no VIN-to-recall lookup. Complaint VINs are `CHAR(11)` partials and identify nothing. The roster, by contrast, carries full 17-character VINs decoded through vPIC, so scope resolution is exact set membership on `(make, model, model_year)` intersected with the manufacture window — deterministic, sub-second, and free of any model. Residual ambiguity from string variants and missing manufacture dates falls to Model B (§4.3), which ranks it rather than deciding it. Naming this precisely matters: a "VIN-range check" would be a claim the data cannot support, and the deterministic guarantee does not depend on it.
 
 **Approval gate placement.** `open_defect_signal()` and `assign_work_order()` execute autonomously — both are reversible and low-cost. `launch_service_campaign()` always requires human approval, because removing vehicles from service carries real cost, and the resulting override rate is itself a measurement worth having.
 
@@ -323,7 +333,7 @@ Harm weighting sharpens this rather than restating it. The threshold is set lowe
 
 The operator console ships as a Databricks App and carries the core workflow end to end: signal queue, exposure ranking, campaign approval, and work order assignment.
 
-**Packaging.** A FastAPI backend serving a JSON API, with a React single-page frontend built separately (Vite) and served as static assets from the same FastAPI process — one deployable, one origin, no CORS between frontend and backend. Declared in `app.yaml` with its `uvicorn` command, environment, and user authorisation scopes. Source lives in the project repository and deploys through the Databricks Asset Bundle alongside the pipelines, jobs, and serving endpoints, so a single `databricks bundle deploy` produces a consistent environment.
+**Packaging.** A FastAPI backend serving a JSON API, with a React single-page frontend built separately (Vite) and served as static assets from the same FastAPI process — one deployable, one origin, no CORS between frontend and backend. Declared in `app.yaml` with its `uvicorn` command, environment, and user authorisation scopes. Source lives in the project repository and deploys through the Declarative Automation Bundle alongside the pipelines, jobs, and serving endpoints, so a single `databricks bundle deploy` produces a consistent environment.
 
 **Identity.** Workspace SSO with on-behalf-of user authorisation (§5.1). The App receives the user's token by header, and every query to the SQL Warehouse and Lakebase executes as that user. Unity Catalog row filters and column masks continue to apply exactly as specified — enforcement lives at the data layer, so App-hosted and externally hosted surfaces are governed identically.
 
@@ -355,7 +365,7 @@ NHTSA refreshes the ODI flat files once per day. The `recallsByVehicle` API retu
 
 Polling therefore runs at **60-second intervals**, which is already generous against a source that changes daily, with exponential backoff on `429`. Worst-case publication-to-visible on this path is roughly 85 seconds, and the proposal does not claim otherwise.
 
-*Build note:* whether `static.nhtsa.gov` returns `Last-Modified` on a `HEAD` request against the flat files is worth verifying empirically before relying on it for cheap change detection. It is a plain file server, so it likely does, but that assumption should be tested rather than assumed.
+**The flat-file host does support conditional requests — but only one of the two mechanisms it advertises.** Measured against `static.nhtsa.gov` on 2026-08-31: `HEAD` returns both `Last-Modified` and `ETag`. A `GET` carrying `If-Modified-Since` at the advertised timestamp returns **`304`, zero bytes**. A `GET` carrying `If-None-Match` with the exact advertised ETag returns **`200` and the full 370 MB body** — the ETag is published and then ignored. Daily change detection therefore uses `If-Modified-Since` only. Building it on `ETag` would look correct, pass review, and silently re-download the entire corpus on every poll.
 
 **Path 2 — operational event stream. Sub-minute, end to end.**
 
@@ -370,7 +380,7 @@ The system's high-velocity data is the operational stream it generates: agent to
 | Dashboard and console read | 2 s | 5 s |
 | **Write → visible in analytics** | **~30 s** | **~54 s** |
 
-These figures are derived from the trigger configuration below rather than assumed independently of it — the capture row reflects Lakebase CDF's documented sync interval, and the settle row reflects `wait_after_last_change_seconds`. Databricks does not publish a latency SLA, but does characterise Lakebase CDF as landing application writes in Unity Catalog within a minute, which is consistent with the worst case above. They remain engineering estimates to be measured against the live pipeline during the build, the same way the lead-time backtest is.
+These figures are derived from the trigger configuration below rather than assumed independently of it — the capture row reflects Lakebase CDF's documented ~15-second batch-and-flush interval, and the settle row reflects `wait_after_last_change_seconds`. Databricks publishes no latency SLA for this path, so every row above is an engineering estimate to be measured against the live pipeline during the build, the same way the lead-time backtest is. The sub-minute claim rests on that measurement, not on a vendor guarantee.
 
 **What actually fires the DLT run.** The `agent_activity_fact`/`signal_lifecycle_fact` pipeline is not driven by a fixed timer — it is a Lakeflow Job with a native **`table_update` trigger** pointed directly at the `lb_<table>_history` mirror tables, so a run starts only when Lakebase CDF actually writes a change:
 
@@ -379,8 +389,8 @@ trigger:
   table_update:
     condition: ALL_UPDATED
     table_names:
-      - "fleetguard.raw.lb_agent_action_history"
-      - "fleetguard.raw.lb_defect_signal_history"
+      - "bootcamp_students.fleetguard.lb_agent_action_history"
+      - "bootcamp_students.fleetguard.lb_defect_signal_history"
     min_time_between_triggers_seconds: 15
     wait_after_last_change_seconds: 5
 ```
@@ -405,7 +415,7 @@ This is the path the course's own analytics requirement describes — change dat
 
 ### 8.5 Environments and CI/CD
 
-Databricks Asset Bundles define pipelines, jobs, serving endpoints, dashboards, and the App itself as code, with dev and prod targets. GitHub Actions runs `databricks bundle deploy` on merge to main. Databricks Repos for notebook versioning.
+Declarative Automation Bundles (DABs, formerly Databricks Asset Bundles) define pipelines, jobs, serving endpoints, dashboards, and the App itself as code, with dev and prod targets. GitHub Actions runs `databricks bundle deploy` on merge to main. Databricks Repos for notebook versioning. One documented exception: Lakebase CDF enablement is not a bundle resource and is a manual runbook step (§4.6).
 
 ### 8.6 Observability
 
@@ -425,13 +435,24 @@ Databricks Apps access may not be available from day one (workspace-level constr
 
 *Confirm before relying on operationally:* whether HTTPS is enforced on non-localhost redirect URIs, and whether scopes narrower than `all-apis` (e.g. scoped only to Postgres or Model Serving) are accepted by this endpoint, are both undocumented as of this check. Treat `all-apis` as the working default and confirm the rest empirically once the app integration is registered against the `free-edition` workspace.
 
-**Phase 2 — migrate to Databricks Apps.** A small `AuthProvider` abstraction sits behind the FastAPI routes from the start; handlers call `get_current_user()` and never see which mechanism produced it. Migration swaps the Render-phase U2M provider for one that reads `X-Forwarded-Access-Token` (§5.1) — no route or business-logic change. At cutover: retire the custom OAuth app integration and its redirect URI, delete the login/callback routes and refresh-token storage, and remove the manual Lakebase `generate_database_credential()` rotation in favour of platform-rotated resource bindings (§8.1). SQL, Pydantic models, and the React build are unchanged by the move.
+**Phase 2 — migrate to Databricks Apps.** One environment variable (`DEPLOY_TARGET`) selects between the two modes. A single `AuthProvider` is *not* sufficient on its own — the auth mechanism leaks into three further places, and all three are abstracted from the start:
+
+| Seam | Render phase | Databricks Apps phase |
+|---|---|---|
+| `AuthProvider.get_current_user()` | Validates session, refreshes the U2M token when it nears its hour | Reads `X-Forwarded-Access-Token` |
+| `CredentialFactory` for Lakebase / SQL Warehouse | `generate_database_credential()` per connection; warehouse constructed from env | Platform-rotated resource bindings |
+| Route registration | `/login` and `/callback` registered; session middleware active | Neither registered; no session layer |
+| Frontend auth state | SPA handles a login redirect and an expiry path | SPA assumes an authenticated session always exists |
+
+Handlers only ever call `get_current_user()` and the credential factory, so no route or business-logic change is needed at cutover. Retire the custom OAuth app integration and its redirect URI, drop the login/callback routes and refresh-token storage, and switch the factory to bindings. SQL, Pydantic models, and the React components are untouched by the move.
+
+*Scope asymmetry to plan for:* the Render phase must request `all-apis` (the documented option for a custom OAuth app integration), whereas the Apps phase can request only what it needs — `sql`, `postgres`, `model-serving`, `vector-search` are all first-class `app.yaml` scopes. The Apps deployment is therefore strictly less privileged than the Render one, which is the right direction of travel and worth stating rather than glossing.
 
 ## 9. Platform Component Map
 
-**In scope, each load-bearing:** Unity Catalog · UC Volumes · Delta Lake · Delta Change Data Feed · Lakebase Change Data Feed · Auto Loader · Structured Streaming · Lakeflow Jobs (including `table_update` triggers) · Lakeflow Declarative Pipelines · Photon · Serverless compute · AI Search · Feature Store · MLflow 3 (tracking, registry, tracing, evaluation) · Models in Unity Catalog · Model Serving · Unity AI Gateway · Mosaic AI Agent Framework · UC Functions as governed tools · Lakebase · Databricks SQL · AI/BI Dashboards · Genie Agents · Data Quality Monitoring · ABAC row filters and column masks · Data Classification · System Tables · Delta Sharing · Databricks Asset Bundles · Databricks Repos · **Databricks Apps** · OAuth M2M and on-behalf-of.
+**In scope, each load-bearing:** Unity Catalog · UC Volumes · Delta Lake · Delta Change Data Feed · Lakebase Change Data Feed · Auto Loader · Structured Streaming · Lakeflow Jobs (including `table_update` triggers) · Lakeflow Declarative Pipelines · Photon · Serverless compute · AI Search · Feature Store · MLflow 3 (tracking, registry, tracing, evaluation) · Models in Unity Catalog · Model Serving · Unity AI Gateway · Mosaic AI Agent Framework · UC Functions as governed tools · Lakebase · Databricks SQL · AI/BI Dashboards · Genie Agents · Data Quality Monitoring · ABAC row filters and column masks · Data Classification · System Tables · Declarative Automation Bundles · Databricks Repos · **Databricks Apps** · OAuth M2M, U2M, and on-behalf-of.
 
-**Deliberately out of scope:** Clean Rooms (no second party), Lakebridge (legacy migration, not applicable), Lakeflow Designer (visual authoring is inconsistent with a code-first delivery model), Lakeflow Connect (no managed connector exists for NHTSA artefacts; Auto Loader is the correct primitive), Iceberg managed tables (no interoperability requirement).
+**Deliberately out of scope:** Clean Rooms (no second party), Lakebridge (legacy migration, not applicable), Lakeflow Designer (visual authoring is inconsistent with a code-first delivery model), Lakeflow Connect (no managed connector exists for NHTSA artefacts; Auto Loader is the correct primitive), Iceberg managed tables (no interoperability requirement), Delta Sharing (no external consumer — the public surface reads a pre-aggregated Lakebase table, not a share).
 
 ---
 
@@ -439,7 +460,7 @@ Databricks Apps access may not be available from day one (workspace-level constr
 
 | Dimension | Status | Evidence |
 |---|---|---|
-| **Volume** | **Met — verified** | 2.4M service bulletin rows and 154,367 investigation rows confirmed on ingest with zero rescued rows, plus the complaint corpus and 20,000 vehicles |
+| **Volume** | **Met — measured** | 5,801,279 service bulletin rows, 2,240,289 complaints, 244,925 recall rows, 154,367 investigation rows — all counted from the live files (§3) — plus 20,000 fleet vehicles |
 | **Variety** | **Met** | Owner-written free text with no schema, plus recall, bulletin, and investigation prose |
 | **Velocity** | **Met — operational path** | Agent write → Lakebase CDF → Delta fact tables in ~30 s average, ~54 s worst case (§8.3). Demonstrable live. |
 
@@ -474,9 +495,11 @@ Phases 1–8 constitute a complete, deployable system. **Phase 9 is the differen
 |---|---|---|
 | Lakebase credential expiry on the external surface | Medium | Per-connection OAuth rotation, load-tested before launch. The App uses platform-managed rotation. |
 | External surface cold start | Medium | Always-on instance, pinger, Lakebase-backed reads. The App is unaffected — core workflow does not depend on it. |
-| NHTSA API rate limiting | Low | 60 s polling against a daily-refreshed source; backoff on `429`; flat files carry the corpus. The endpoint supports no conditional-request mechanism, so polling stays conservative. |
+| NHTSA API rate limiting | Low | 60 s polling against a daily-refreshed source; backoff on `429`; flat files carry the corpus. The API supports no conditional-request mechanism, so polling stays conservative. The flat-file host does support `If-Modified-Since` (§8.3), so the daily corpus pull costs nothing when unchanged. |
 | Fleet roster read as unrepresentative | Medium | Provenance table published; every VIN decoded against live vPIC |
 | Demo dependent on a live recall occurring | Medium | Seeded replay scenario; live pipeline runs on schedule with visible timestamp |
+| Park It demo returns nothing | Medium | `DO_NOT_DRIVE` covers 211 of 15,211 campaigns (1.39%) and is empty for 2010–2011 — the field was added May 2025 and backfilled unevenly. Seed the demo from a 2015-or-later campaign, where coverage is stable. |
+| LLM spend exceeds budget on a shared workspace | Medium | `ai_extract` runs per surfaced cluster, not per complaint (§4.2); component comes from `COMPDESC` rather than from prose. Embedding cost is bounded by chunk count and is the one large fixed cost, incurred once. |
 | Backtest yields no useful lead time | Medium | Publish the measured result. A negative finding with sound methodology is a legitimate outcome; a tuned figure is not. |
 | Service principal secret exposure | Low | Least-privilege grants; public principal reaches only masked summary views |
 
@@ -492,7 +515,7 @@ Phases 1–8 constitute a complete, deployable system. **Phase 9 is the differen
 | Action-taking AI agent | Four read tools, four write tools as UC Functions, audited, human-gated |
 | Analytics pipeline | Lakebase Change Data Feed → Delta → DLT fact tables → AI/BI and Genie |
 | Frontend | ABAC-driven operator console carrying the full workflow |
-| Deployed application | **Databricks App**, deployed via Asset Bundle; external evidence page on Render as a secondary read-only surface |
+| Deployed application | **Databricks App**, deployed via Declarative Automation Bundle; Render-hosted console as the Phase 1 surface (§8.7) and thereafter a read-only evidence page |
 | Two or more of three Vs | Volume verified, variety met, velocity met on the operational Lakebase CDF path (§8.3) |
 | Business problem | Fleet safety exposure, reactive and proactive, ranked by reported harm |
 | Real consumer | Fleet maintenance and safety managers with an existing budget line |
@@ -500,7 +523,7 @@ Phases 1–8 constitute a complete, deployable system. **Phase 9 is the differen
 | System design | Three-principal OAuth model, human gate, deterministic severe-recall path, no dual-write |
 | MLflow | Two registered models, agent tracing, LLM-as-judge, drift-triggered retraining |
 | Embeddings, chunking, vector search | 512-token chunks, AI Search Delta Sync Index, hybrid retrieval |
-| Unstructured data | Complaint narratives, recall text, 2.4M service bulletins |
+| Unstructured data | 2.24M complaint narratives, recall text, 5.8M service bulletins |
 
 ---
 

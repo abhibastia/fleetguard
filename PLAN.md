@@ -25,11 +25,16 @@ verifiable work. Grounded in what was already confirmed live before build start 
 ## Phases
 
 ### Phase 1 — Ingestion + bronze/silver/gold
-- Lakeflow Job: download 4 flat files daily, land in `/Volumes/fleetguard/raw/`,
-  separate checkpoint/schema paths.
-- Auto Loader → bronze (schema evolution, `_rescued_data`, Delta CDF on).
-- Silver: dedup on ODI number, `ai_extract` for defect/component fields, PII
-  tag-not-delete, `expect_or_drop` → quarantine.
+- Lakeflow Job: download 4 flat files daily, land in
+  `/Volumes/bootcamp_students/fleetguard/nhtsa_flat_files/`, separate
+  checkpoint/schema paths. Use `If-Modified-Since` for change detection —
+  **not** `ETag`, which the host advertises and ignores.
+- Auto Loader → `bronze_*` (schema evolution, `_rescued_data`, Delta CDF on).
+  All objects live in `bootcamp_students.fleetguard`; medallion layers are
+  table-name prefixes, not schemas.
+- Silver: dedup on ODI number, `PROD_TYPE` branch keeping `V`+`T` only, harm-field
+  typing, PII tag-not-delete, `expect_or_drop` → quarantine. Component comes from
+  `COMPDESC` — **no `ai_extract` in silver** (it runs per surfaced cluster in Phase 9).
 - Chunking → `complaint_chunk` (512-token).
 - **Done when:** all 4 files flow bronze→silver→gold on a schedule with 0 unexplained
   quarantine rows on a full run.
