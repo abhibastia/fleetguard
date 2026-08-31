@@ -42,11 +42,27 @@ BASE = "https://static.nhtsa.gov/odi/ffdd"
 # file — `STREAM read_files('<dir>/FILE.txt')` fails with "Input path ... is not a
 # directory" (docs/ISSUES.md I-020). Separate subdirectories also stop four different
 # schemas sharing one listing.
+# TSBs ship as seven 5-year chunks totalling 5,801,279 rows. All seven are a consistent
+# 14-field layout (verified across first/last/modal rows of every chunk), so they share one
+# bronze table and one subdirectory. Historical chunks are immutable and will 304 forever
+# after the first fetch; only the current chunk actually changes.
+TSB_RANGES = [
+    "1995-1999",
+    "2000-2004",
+    "2005-2009",
+    "2010-2014",
+    "2015-2019",
+    "2020-2024",
+    "2025-2026",
+]
+
 SOURCES = {
     "FLAT_CMPL": (f"{BASE}/cmpl/FLAT_CMPL.zip", "cmpl", 51),
     "FLAT_RCL_POST_2010": (f"{BASE}/rcl/FLAT_RCL_POST_2010.zip", "rcl", 29),
     "FLAT_INV": (f"{BASE}/inv/FLAT_INV.zip", "inv", 11),
-    "TSBS_RECEIVED_2025-2026": (f"{BASE}/tsbs/TSBS_RECEIVED_2025-2026.zip", "tsbs", 14),
+    **{
+        f"TSBS_RECEIVED_{r}": (f"{BASE}/tsbs/TSBS_RECEIVED_{r}.zip", "tsbs", 14) for r in TSB_RANGES
+    },
 }
 
 UA = {"User-Agent": "FleetGuard/1.0 (capstone; contact abhisek.bastia17@gmail.com)"}

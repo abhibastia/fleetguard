@@ -70,7 +70,13 @@ Auto Loader monitors directories, not files. Every `read_files` call needs
 `partitionColumns => ''`. Cluster key must be in the **first 32 columns** (Delta stats
 window), so metadata columns come first in the SELECT. Loaded row counts:
 `bronze_complaints` 2,240,289 · `bronze_recalls` 244,925 · `bronze_investigations` 154,367 ·
-`bronze_tsbs` 734,229 (one chunk). See `docs/ISSUES.md` I-019…I-022.
+`bronze_tsbs` 5,801,279 (all seven chunks, 7 distinct `_source_file`). All with 0 rescued
+rows. See `docs/ISSUES.md` I-019…I-022.
+
+Adding files to a monitored directory is **incremental** — verified: loading the six
+historical TSB chunks processed only those files and left the other three bronze tables
+untouched. A *full refresh*, by contrast, reprocesses everything, which is the real reason
+to load a complete corpus early rather than late.
 
 **`read_files` MUST disable quote handling on these files (measured in-workspace 2026-08-31):**
 - The ODI flat files are tab-delimited with **no quoting convention**, but narratives are
