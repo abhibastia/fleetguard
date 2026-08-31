@@ -1,7 +1,9 @@
 # FleetGuard — project notes for Claude
 
 Vehicle defect early warning & recall response platform on Databricks. Full design
-in `docs/FleetGuard_Proposal.md`; build sequence in `PLAN.md`.
+in `docs/FleetGuard_Proposal.md`; build sequence in `PLAN.md`; **every problem hit during
+development is logged in `docs/ISSUES.md` — add to it whenever something breaks or turns
+out to be wrong, especially anything that failed silently.**
 
 ## Verified facts — do not re-derive, do not "correct" without re-checking live
 
@@ -54,10 +56,21 @@ live system or current docs — not against training data or a cached skill refe
 - **Complaint `VIN` is `CHAR(11)`** — a partial. 85.1% populated, but it identifies no
   individual vehicle. `FLAT_RCL` has **no VIN-range columns at all**; campaigns scope by
   make/model/year + `BGMAN`/`ENDMAN`. Never design a "VIN-range match" on this data.
-- `DO_NOT_DRIVE` (the Park It flag, field 28) = YES on 211 of 15,211 campaigns (1.39%),
+- `DO_NOT_DRIVE` (the Park It flag, field 28) is stored as title-case **`Yes`/`No`**, not
+  `YES`/`NO` — always compare with `UPPER(...)` or a case-sensitive predicate silently
+  returns zero rows. `Yes` on 2,128 rows / **211 of 15,211 campaigns** (1.39%),
   **zero for 2010–2011** (field added May 2025, backfilled unevenly). Demo from 2015+.
 - `COMPDESC` (field 12) is an already-structured component field — do not spend
   `ai_extract` re-deriving it.
+
+**Bronze pipeline (`fleetguard-bronze`, id `937b9ce4-4fbe-4493-96ad-b76317bf58db`) — built and passing 2026-08-31.**
+Volume layout is **per-source subdirectories** (`cmpl/`, `rcl/`, `inv/`, `tsbs/`) because
+Auto Loader monitors directories, not files. Every `read_files` call needs
+`sep => '\t'`, `header => false`, `quote => '\0'`, `encoding => 'ISO-8859-1'`,
+`partitionColumns => ''`. Cluster key must be in the **first 32 columns** (Delta stats
+window), so metadata columns come first in the SELECT. Loaded row counts:
+`bronze_complaints` 2,240,289 · `bronze_recalls` 244,925 · `bronze_investigations` 154,367 ·
+`bronze_tsbs` 734,229 (one chunk). See `docs/ISSUES.md` I-019…I-022.
 
 **`read_files` MUST disable quote handling on these files (measured in-workspace 2026-08-31):**
 - The ODI flat files are tab-delimited with **no quoting convention**, but narratives are

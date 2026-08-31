@@ -36,12 +36,17 @@ WATERMARK = f"{CATALOG}.{SCHEMA}.ops_ingest_watermark"
 
 BASE = "https://static.nhtsa.gov/odi/ffdd"
 
-# name -> (url, expected tab-delimited field count)
+# name -> (url, subdirectory, expected tab-delimited field count)
+#
+# Each source lands in its OWN subdirectory. Auto Loader monitors a directory, not a
+# file — `STREAM read_files('<dir>/FILE.txt')` fails with "Input path ... is not a
+# directory" (docs/ISSUES.md I-020). Separate subdirectories also stop four different
+# schemas sharing one listing.
 SOURCES = {
-    "FLAT_CMPL": (f"{BASE}/cmpl/FLAT_CMPL.zip", 51),
-    "FLAT_RCL_POST_2010": (f"{BASE}/rcl/FLAT_RCL_POST_2010.zip", 29),
-    "FLAT_INV": (f"{BASE}/inv/FLAT_INV.zip", 11),
-    "TSBS_RECEIVED_2025-2026": (f"{BASE}/tsbs/TSBS_RECEIVED_2025-2026.zip", None),
+    "FLAT_CMPL": (f"{BASE}/cmpl/FLAT_CMPL.zip", "cmpl", 51),
+    "FLAT_RCL_POST_2010": (f"{BASE}/rcl/FLAT_RCL_POST_2010.zip", "rcl", 29),
+    "FLAT_INV": (f"{BASE}/inv/FLAT_INV.zip", "inv", 11),
+    "TSBS_RECEIVED_2025-2026": (f"{BASE}/tsbs/TSBS_RECEIVED_2025-2026.zip", "tsbs", 14),
 }
 
 UA = {"User-Agent": "FleetGuard/1.0 (capstone; contact abhisek.bastia17@gmail.com)"}
@@ -110,7 +115,32 @@ def record(source, url, last_modified, etag, bytes_written, landed_file, outcome
 # COMMAND ----------
 
 
-def fetch(source: str, url: str, expected_fields):
+def migrate_legacy_layout():
+    """Move any root-level .txt into its per-source subdirectory.
+
+    Idempotent and server-side, so switching layouts costs a rename rather than a
+    2.6 GB re-download (the watermark would otherwise 304 and never re-place the file).
+    """
+    for src, (_, subdir, _f) in SOURCES.items():
+        os.makedirs(f"{VOL}/{subdir}", exist_ok=True)
+    for entry in os.listdir(VOL):
+        if not entry.endswith(".txt"):
+            continue
+        for src, (_, subdir, _f) in SOURCES.items():
+            stem = src if not src.startswith("TSBS") else "TSBS_RECEIVED"
+            if entry.startswith(stem):
+                dest = f"{VOL}/{subdir}/{entry}"
+                print(f"  migrating {entry} → {subdir}/")
+                shutil.move(f"{VOL}/{entry}", dest)
+                break
+
+
+migrate_legacy_layout()
+
+# COMMAND ----------
+
+
+def fetch(source: str, url: str, subdir: str, expected_fields):
     """Download `url` into the volume unless the host says it hasn't changed."""
     prior = current_watermark(source)
 
@@ -157,7 +187,7 @@ def fetch(source: str, url: str, expected_fields):
             if not member.lower().endswith(".txt"):
                 continue
             name = os.path.basename(member)
-            dest = f"{VOL}/{name}"
+            dest = f"{VOL}/{subdir}/{name}"
             with zf.open(member) as src, open(dest, "wb") as dst:
                 shutil.copyfileobj(src, dst, length=8 * 1024 * 1024)
             written = os.path.getsize(dest)
@@ -181,9 +211,9 @@ def fetch(source: str, url: str, expected_fields):
     )
 
 
-for src, (u, fields) in SOURCES.items():
+for src, (u, sub, fields) in SOURCES.items():
     print(f"{src}:")
-    fetch(src, u, fields)
+    fetch(src, u, sub, fields)
 
 # COMMAND ----------
 
@@ -192,7 +222,9 @@ for src, (u, fields) in SOURCES.items():
 
 # COMMAND ----------
 
-display(spark.sql(f"LIST '{VOL}'"))
+for _s, (_u, _sub, _f) in SOURCES.items():
+    print(f"--- {_sub}/ ---")
+    display(spark.sql(f"LIST '{VOL}/{_sub}'"))
 
 # COMMAND ----------
 
