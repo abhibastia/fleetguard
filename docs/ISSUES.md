@@ -24,6 +24,51 @@ no error and passed the obvious check.
 
 ---
 
+## Phase 3 — chunking + AI Search
+
+### I-034 — Chunk-count formula used the stride, not the window — **SILENT**
+*Date:* 2026-08-31 · *Status:* resolved
+
+**Symptom.** The first `silver_complaint_chunk` build produced **1.0269** chunks per
+complaint — 59,485 complaints split — against a predicted 1.0006 (~1,390 splits).
+`MIN(LENGTH(chunk_text))` was **1**.
+
+**Root cause.** Chunk count was computed as `ceil(len / stride)` with stride 1792, rather
+than accounting for the 2048-character window. A 1,793-character narrative therefore
+produced a second chunk starting at offset 1792 — containing a *single character*.
+
+**Why it mattered.** It ran clean and produced a plausible table. The cost is real:
+~58,000 spurious chunks that would each have been embedded and stored as a vector, and
+one-character entries polluting retrieval results.
+
+**Resolution.** `chunks = max(1, ceil((len - window) / stride) + 1)`. Rebuilt: **1.0006**
+chunks per complaint, 2,780 split chunks — exactly the 1,390 long narratives × 2 measured
+independently in I-026. Also added a `LENGTH(TRIM(narrative)) >= 20` floor, which drops
+14,383 narratives too short to carry retrievable signal but long enough to bill for.
+
+### I-035 — Index scope: under 2M vectors, subset size is cost-free
+*Date:* 2026-08-31 · *Status:* resolved (decision recorded)
+
+A standard AI Search unit holds 2M vectors at $0.28/hour, so **every scope below 2M costs
+the same $6.72/day** — a 57k-row toy subset saves nothing over a 1.7M-row one. Measured
+options:
+
+| scope | chunks | units | $/day |
+|---|---:|---:|---:|
+| fleet make/model + 2018 | 56,941 | 1 | 6.72 |
+| fleet make/model | 115,499 | 1 | 6.72 |
+| any_harm only | 212,207 | 1 | 6.72 |
+| received 2020+ | 601,422 | 1 | 6.72 |
+| **post-2010 investigation series** | **1,746,601** | **1** | **6.72** |
+| all chunks | 2,196,091 | **2** | 13.44 |
+
+Chosen: the post-2010 investigation series. It is exactly the population the Phase 9
+backtest evaluates, covers 80% of the corpus, and stays under the threshold — the full
+corpus would double the cost for coverage the backtest does not use. Source table
+`silver_complaint_chunk_indexed`.
+
+---
+
 ## Recalls API integration
 
 ### I-032 — "New campaign" alerts were false positives from model-string mismatch — **SILENT**

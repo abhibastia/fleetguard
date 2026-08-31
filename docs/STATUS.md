@@ -13,7 +13,7 @@ One page answering "where are we". Design lives in `FleetGuard_Proposal.md`, seq
 |---|---|---|
 | **1 — Ingestion + bronze/silver/gold** | 🟡 **~90%** | Ingest job, bronze (4), silver (9) all built and validated. **Outstanding:** chunking → `complaint_chunk`, and 2 of 5 gold tables that are blocked on Phases 3/9. Ingest is **deliberately manual** — no schedule, to avoid consuming shared-workspace compute before it's needed. |
 | **2 — Fleet registry** | ✅ **Done** | 20,000 vehicles / 60 depots / ~989k exposure rows. 400 VINs independently vPIC-verified, 400/400 exact. |
-| **3 — Chunking + AI Search** | ⬜ Not started | **Next up.** Confirmed load-bearing by the Phase 9 baseline. First step that costs money. |
+| **3 — Chunking + AI Search** | 🟡 **In progress** | `silver_complaint_chunk` built (2,196,091 chunks, 1.0006/complaint). Endpoint `fleetguard-vs` ONLINE; index `complaint_chunk_idx` syncing over 1,746,601 chunks. Hybrid query test outstanding. |
 | **4 — Model B + golden set** | ⬜ Not started | Scope now measured: variant matches outnumber exact 3:1 (I-030). |
 | **5 — Lakebase + CDF** | ⏸ **Parked** | Naming decided; **CDF destination schema undecided** (I-028). Gates 6–8. |
 | **6 — OAuth wiring** | ⬜ Not started | Blocked on 5. |
@@ -47,7 +47,11 @@ One page answering "where are we". Design lives in `FleetGuard_Proposal.md`, seq
 recalls (`recallsByVehicle`, 200/200 combos, 100 s sweep) · `static.nhtsa.gov` flat files
 (`If-Modified-Since`, verified 304).
 
-**Nothing is billing continuously.** No AI Search endpoint, no Lakebase tables, no schedules.
+⚠️ **Now billing:** AI Search endpoint `fleetguard-vs` (STANDARD, 1 unit) — **~$6.72/day**,
+started 2026-08-31. Nothing else recurs: no Lakebase tables, no schedules.
+Stop it with `databricks vector-search-indexes delete-index bootcamp_students.fleetguard.complaint_chunk_idx`
+then `databricks vector-search-endpoints delete-endpoint fleetguard-vs` — billing ends 24h
+after the last index is deleted.
 
 ---
 
