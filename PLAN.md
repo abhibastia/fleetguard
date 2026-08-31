@@ -4,23 +4,33 @@ Turns the delivery plan in `docs/FleetGuard_Proposal.md` (§11) into concrete, s
 verifiable work. Grounded in what was already confirmed live before build start (see
 "Starting point" below) — not re-derived from scratch.
 
-## Starting point — already done
+## Starting point — as of 2026-08-31
 
-- `free-edition` workspace: `fleetguard` catalog → `raw` schema → `nhtsa_flat_files`
-  volume exists, with two real NHTSA files already landed and parsed clean through
-  `read_files` (0 rescued rows).
-- All 6 data sources confirmed live: 4 flat files (correct URLs), Recalls API, vPIC API.
-- Architecture, identity model, and quality-control design are finalized and graded
-  (100/100, see `docs/feedback-final-proposal-fleetguard.pdf`).
+- **Workspace: `abhi` profile** (`dbc-7b106152-caf3.cloud.databricks.com`), a *shared*
+  bootcamp metastore. Project schema is **`bootcamp_students.fleetguard`**, owned by
+  `abhisek.bastia17@gmail.com`. Catalog creation is unavailable, so medallion layers are
+  table-name prefixes (`bronze_`/`silver_`/`gold_`) in that one schema.
+  **Never write outside it.**
+- The `free-edition` volume and its test files do **not** carry over. Nothing is
+  provisioned in `abhi` beyond the schema.
+- Compute: one serverless SQL warehouse, `Serverless Starter Warehouse`
+  (`b15d3d6f837ba428`, 2X-Small).
+- All 6 data sources confirmed live; full corpus downloaded and measured locally
+  (counts in `CLAUDE.md` — use those, don't re-estimate).
+- Architecture, identity model, and quality-control design finalized and graded
+  (100/100, see `docs/feedback-final-proposal-fleetguard.pdf`), then corrected against
+  measured data on 2026-08-31.
 
-## Two things to resolve before committing to automation choices
+## Pre-work — both resolved
 
-1. **Does Lakebase CDF have Asset Bundle support yet?** If not, Phase 5's setup is a
-   manual/scripted step outside `bundle deploy`, and CI/CD (Phase 6) needs to account
-   for that gap explicitly rather than assume it away.
-2. **Does `static.nhtsa.gov` return `Last-Modified` on a `HEAD` request?** One `curl -I`
-   settles whether cheap daily change-detection on the flat files is viable before
-   Phase 1's ingestion job is built around an assumption.
+1. **Lakebase CDF bundle support: NO.** Bundle support for Lakebase is Beta and covers
+   projects/branches/endpoints/roles/databases/synced_tables/catalogs — CDF is not a
+   bundle resource. Phase 5 enablement is a manual runbook step, and Phase 6 CI/CD must
+   say so rather than assume `bundle deploy` covers it.
+2. **`static.nhtsa.gov` conditional requests: YES, with a trap.** `HEAD` returns both
+   `Last-Modified` and `ETag`. `If-Modified-Since` works (`304`, 0 bytes).
+   `If-None-Match` with the exact advertised ETag returns `200` and the full body —
+   the ETag is published and ignored. Build change detection on `If-Modified-Since` only.
 
 ## Phases
 

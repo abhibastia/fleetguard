@@ -59,6 +59,21 @@ live system or current docs — not against training data or a cached skill refe
 - `COMPDESC` (field 12) is an already-structured component field — do not spend
   `ai_extract` re-deriving it.
 
+**`read_files` MUST disable quote handling on these files (measured in-workspace 2026-08-31):**
+- The ODI flat files are tab-delimited with **no quoting convention**, but narratives are
+  free text containing `"`. Spark's CSV reader treats `"` as a quote char by default, which
+  swallows tabs and shifts fields.
+- Required option: `quote => '\0'` (any char that cannot occur). Also
+  `sep => '\t'`, `header => false`, `encoding => 'ISO-8859-1'`.
+- Measured on `FLAT_CMPL.txt` (2,240,289 rows): **with** default quoting →
+  `PROD_TYPE='V'` = 2,168,077 and 162 NULLs. **With** `quote => '\0'` →
+  2,168,220 and 19 NULLs, matching the ground-truth local parse exactly. 143 rows
+  silently corrupted by the default.
+- **`_rescued_data` was 0 in BOTH cases.** Zero rescued rows does *not* prove a clean
+  parse here — it is necessary, not sufficient. Validate against known column
+  cardinalities (e.g. `PROD_TYPE` counts, distinct `NHTSA ACTION NUMBER` = 5,344)
+  rather than trusting the rescue column alone.
+
 **Lakebase Change Data Feed (the Postgres→UC mechanism):**
 - Official product name is **"Lakebase Change Data Feed"** (Lakebase CDF), Public
   Preview. It is *not* called "Lakehouse Sync" — that name doesn't match the current

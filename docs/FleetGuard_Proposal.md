@@ -68,7 +68,9 @@ US last-mile delivery operators, rental fleets, utilities, and municipal fleets 
 | Recalls API | `api.nhtsa.gov/recalls/recallsByVehicle` | Live campaign detection; returns `parkIt` / `parkOutSide` booleans | **Live** |
 | vPIC | `vpic.nhtsa.dot.gov/api` | VIN → make, model, year, plant, body class, GVWR class | **Live** |
 
-Row counts are measured from the actual files, not estimated. All three flat files parsed cleanly at their documented field counts (51 / 11 / 29) with zero malformed rows. Schema stability through `read_files` will be confirmed on first ingest into the workspace.
+Row counts are measured from the actual files, not estimated, and independently re-confirmed through `read_files` in the workspace on first ingest: 2,240,289 complaint rows and 5,344 distinct investigation action numbers, both matching the offline parse exactly.
+
+**A parsing trap worth stating, because it defeats the obvious quality check.** These files are tab-delimited with no quoting convention, yet the narratives are free text containing double quotes. Spark's CSV reader treats `"` as a quote character by default, which swallows delimiters and shifts fields — silently corrupting 143 complaint rows. `read_files` therefore runs with quote handling disabled (`quote => '\0'`, `sep => '\t'`, `header => false`, `encoding => 'ISO-8859-1'`). Critically, **`_rescued_data` was zero both with and without the fix**: a zero rescued-row count is necessary but not sufficient evidence of a clean parse on this corpus. Ingest validation therefore asserts against known column cardinalities — `PROD_TYPE` distribution and distinct investigation count — rather than trusting the rescue column alone.
 
 **The investigations file is the system's ground truth.** It is what converts "we detect defects early" from a marketing claim into a measured lead-time distribution.
 
