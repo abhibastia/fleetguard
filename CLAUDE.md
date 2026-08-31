@@ -216,6 +216,25 @@ trigger:
 project by design — a longer settle window would push worst-case latency past the
 sub-minute velocity claim.
 
+**Lakebase / Phase 5 — PARKED 2026-08-31, naming decided, destination not:**
+- Lakebase project: `projects/summer-bootcamp-2026-v2`, branch `production`, endpoint
+  `primary`, host `ep-patient-sun-d1ycq936.database.us-west-2.cloud.databricks.com`,
+  database `databricks_postgres`.
+- **Table naming DECIDED:** Postgres tables are `fg_<entity>` (e.g. `fg_vehicle`,
+  `fg_agent_action`); CDF output is `lb_fg_<entity>_history`. No owner suffix.
+- **Destination NOT decided.** The workspace CDF maps
+  `databricks_postgres.bootcamp_students` → `bootcamp_students.bootcamp_cdc`, which is
+  owned by `zach@zachwilson.tech` and holds 354 cohort tables. CDF is **schema-level**, so
+  every table created in that Postgres schema replicates there — all 11, not just the two
+  §8.3's trigger needs. Alternative is mapping into `bootcamp_students.fleetguard`
+  (owned), but **Lakebase CDF is UI-only** — no CLI or API. See `docs/ISSUES.md` I-028.
+- **Verified live:** the destination pattern really is `lb_<pg_table>_history` (256 such
+  tables exist). The documented collision auto-suffix is not theoretical — only 151 of
+  those 256 end in a clean `_history`; the rest are `_1`/`_2` orphans from re-syncs.
+  **Get the Postgres table name right the first time**; renaming orphans its history table.
+- §8.3's trigger config in the proposal still assumes `bootcamp_students.fleetguard.
+  lb_agent_action_history`. Update it once the destination is chosen.
+
 **Lakebase credential API (external/service-principal path only — the App doesn't
 need this, platform handles it):**
 - `POST /api/2.0/postgres/credentials` — current, correct.

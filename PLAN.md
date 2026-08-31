@@ -67,7 +67,11 @@ verifiable work. Grounded in what was already confirmed live before build start 
   for the agent/retrieval path, separately from classical precision/recall for Model B.
 - **Done when:** precision/recall numbers exist and are real, not placeholders.
 
-### Phase 5 — Lakebase schema + CDF
+### Phase 5 — Lakebase schema + CDF  ⏸ PARKED (2026-08-31)
+*Naming decided (`fg_<entity>` → `lb_fg_<entity>_history`); destination schema undecided.
+See `docs/ISSUES.md` I-028. Nothing created. Resume by choosing the CDF destination first —
+renaming a Postgres table later orphans its history table.*
+
 - Create the 11-table Postgres schema, `REPLICA IDENTITY FULL` on every table.
 - Enable Lakebase CDF at schema level (UI or API — resolved by the pre-work above).
 - **Done when:** a test row written to Lakebase appears in `lb_<table>_history` with
