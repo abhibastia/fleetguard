@@ -15,7 +15,7 @@ One page answering "where are we". Design lives in `FleetGuard_Proposal.md`, seq
 | **2 — Fleet registry** | ✅ **Done** | 20,000 vehicles / 60 depots / ~989k exposure rows. 400 VINs independently vPIC-verified, 400/400 exact. |
 | **3 — Chunking + AI Search** | 🟡 **In progress** | `silver_complaint_chunk` built (2,196,091 chunks, 1.0006/complaint). Endpoint `fleetguard-vs` ONLINE; index `complaint_chunk_idx` syncing over 1,746,601 chunks. Hybrid query test outstanding. |
 | **4 — Model B + golden set** | ⬜ Not started | Scope now measured: variant matches outnumber exact 3:1 (I-030). |
-| **5 — Lakebase + CDF** | ⏸ **Parked** | Naming decided; **CDF destination schema undecided** (I-028). Gates 6–8. |
+| **5 — Lakebase + CDF** | 🟡 **Unparked** | Destination authorised (`bootcamp_cdc`); naming decided `fleetguard_<entity>` (I-036). Postgres inspection next, then one table to verify the CDF round-trip before the other ten. |
 | **6 — OAuth wiring** | ⬜ Not started | Blocked on 5. |
 | **7 — Agent tools + write path** | ⬜ Not started | Blocked on 5. |
 | **8 — App + external surface** | ⬜ Not started | Blocked on 5. |
@@ -109,7 +109,6 @@ index lifecycle — not corpus trimming — is the lever.
 
 | # | Decision | Blocks |
 |---|---|---|
-| **I-028** | **Lakebase CDF destination.** Existing workspace CDF writes to `bootcamp_students.bootcamp_cdc`, owned by someone else (354 cohort tables); alternative is a UI-only mapping into our own schema. CDF is schema-level — all 11 tables go wherever it points. | Phases 5 → 6 → 7 → 8 |
 | **I-026** | **Chunking scope.** 512-token chunking is ~1.0006 chunks/row on complaint narratives (`CDESCR` is `CHAR(2048)`). It genuinely earns its place on investigation summaries (66% exceed one chunk). Keep the near-1:1 table, or index narratives directly? | Phase 3 |
 | **I-018** | **Index lifecycle.** How long to leave the AI Search endpoint up. Suggested: subset while developing, full corpus from ~20 Sept. | Phase 3 cost |
 | **I-015** | **Streaming vs PII guardrail.** AI Gateway output guardrails don't apply to streaming responses — either no streaming, or drop the §4.5 "second layer" claim. | Phases 7–8 |

@@ -14,13 +14,42 @@ no error and passed the obvious check.
 
 | ID | Area | Issue | Status |
 |---|---|---|---|
-| I-028 | Phase 5 | **Lakebase CDF destination undecided — Phase 5 parked 2026-08-31.** Naming is settled: Postgres `fg_<entity>`, CDF output `lb_fg_<entity>_history`. What is *not* settled is where they live. The existing workspace CDF maps `databricks_postgres.bootcamp_students` → `bootcamp_students.bootcamp_cdc`, a schema owned by `zach@zachwilson.tech` holding 354 cohort tables — using it breaks the "own schemas only" rule and CDF is schema-level so all 11 tables would land there. The alternative is a mapping into `bootcamp_students.fleetguard` (owned), but **Lakebase CDF is UI-only** — not configurable via CLI or API — so it needs manual setup. Decide before creating any Postgres table: renaming later orphans the history table (see collision note below). | **open** |
+| I-028 | Phase 5 | **RESOLVED 2026-08-31.** User confirmed authorisation to use the existing CDF mapping `databricks_postgres.bootcamp_students` → `bootcamp_students.bootcamp_cdc`. Naming decided as `fleetguard_<entity>` → `lb_fleetguard_<entity>_history` (see I-036). Phase 5 unparked. | ✅ resolved |
 | I-018 | Cost | **Sized (see I-025).** Embedding is ~275M tokens ≈ **$28–36 one-off** — not the problem. The AI Search *endpoint* is **~$403/month recurring** and is the real exposure. Mitigation is index lifecycle (billing stops 24h after the last index is deleted), not corpus trimming. Still open only as a decision on how long to leave the index up. | **open** |
 | I-017 | Platform | Lakebase CDF is **not** a Declarative Automation Bundle resource, so Phase 5 enablement can't be captured in `bundle deploy`. Manual runbook step; CI/CD must not assume otherwise. | **watch** |
 | I-016 | Platform | Table properties (retention, `VACUUM`) on Lakebase CDF sync-managed destination tables are undocumented — may not be settable. Fallback is a downstream Delta copy under our own retention. Confirm during Phase 5. | **open** |
 | I-015 | Platform | Unity AI Gateway **output** guardrails (incl. PII detection on responses) do not apply to streaming responses. If the console streams agent output, the §4.5 PII second layer silently does not exist. Decide: no streaming, or drop the claim. | **open** |
 | I-014 | Demo | `DO_NOT_DRIVE` (Park It) covers only 211 of 15,211 campaigns and is **zero for 2010–2011** — field added May 2025, backfilled unevenly. Seed demo data from 2015+ or the Park It path demos empty. | **watch** |
 | I-013 | Docs | Diagrams drift from prose. Happened twice. Diagrams are now HTML (`docs/fleetguard_*.html`) specifically so they diff in review rather than being opaque binaries. | **watch** |
+
+---
+
+## Phase 5 — Lakebase
+
+### I-036 — Lakebase table naming, decided deliberately
+*Date:* 2026-08-31 · *Status:* resolved
+
+Naming mattered more than usual here because **recovery from a mistake is not possible
+without loss**: CDF destination tables auto-suffix on collision (`lb_x_history_1`) silently
+rather than erroring, and renaming a Postgres table orphans its history table. 105 of the
+256 `lb_*` tables already in `bootcamp_cdc` are exactly such orphans.
+
+Options weighed: `fg_<entity>`, `<entity>_abhibastia` (the cohort's observed convention),
+`fg_<entity>_abhibastia`, and `fleetguard_<entity>`.
+
+**Chosen: `fleetguard_<entity>`.** A two-letter prefix is independently guessable by any of
+~296 students sharing the schema; "fleetguard" collides only if someone builds the same
+product. It gets the collision resistance of the double-namespaced option without the
+verbosity, makes `SHOW TABLES LIKE 'lb_fleetguard_%'` return exactly our 11 tables out of
+354+, and reads self-evidently in a demo. Longest identifier is
+`lb_fleetguard_service_campaign_history` at 38 characters, well inside Postgres's 63.
+
+Tables map 1:1 to proposal §4.4, so the document stays consistent.
+
+**Operational rule adopted:** create **one** table first (`fleetguard_depot`, smallest),
+verify the CDF round-trip produces `lb_fleetguard_depot_history` with correct
+`_pg_change_type`, and only then create the other ten. The failure mode here is not an
+error message — it is a silently suffixed table noticed a week later.
 
 ---
 
