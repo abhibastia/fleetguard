@@ -81,7 +81,7 @@ _WEIGHTS = [8, 7, 6, 5, 4, 3, 2, 10, 0, 9, 8, 7, 6, 5, 4, 3, 2]
 
 def with_check_digit(vin17: str) -> str:
     """Return vin17 with position 9 replaced by the correct check digit."""
-    total = sum(_TRANS[c] * w for c, w in zip(vin17, _WEIGHTS))
+    total = sum(_TRANS[c] * w for c, w in zip(vin17, _WEIGHTS, strict=True))
     rem = total % 11
     return vin17[:8] + ("X" if rem == 10 else str(rem)) + vin17[9:]
 

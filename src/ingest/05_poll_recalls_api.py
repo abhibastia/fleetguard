@@ -175,7 +175,7 @@ records, state_rows = [], []
 t0 = time.time()
 interval = 1.0 / REQ_PER_SEC
 
-for i, c in enumerate(combos):
+for c in combos:
     tick = time.time()
     recs, status = poll(c["make"], c["model"], c["model_year"])
     records.extend(recs)

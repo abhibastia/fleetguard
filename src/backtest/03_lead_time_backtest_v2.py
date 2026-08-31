@@ -144,7 +144,7 @@ GROUP BY make, model, comp_top
 # fills with series too small to ever trip MIN_COUNT. That inflated the first result to an
 # apparent 160x separation. Each investigated series is paired with a never-investigated
 # series in the SAME half-decade volume bucket, carrying the same open date.
-spark.sql(f"""
+spark.sql("""
 CREATE OR REPLACE TEMP VIEW placebo_target AS
 WITH investigated AS (
   SELECT DISTINCT make, model, SPLIT(component, ':')[0] AS comp_top FROM silver_investigation

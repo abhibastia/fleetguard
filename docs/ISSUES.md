@@ -24,6 +24,28 @@ no error and passed the obvious check.
 
 ---
 
+## Tooling / process
+
+### I-042 — Blind `sed`/`str.replace` edits caused three silent no-ops and one real bug
+*Date:* 2026-08-31 · *Status:* resolved (practice changed)
+
+Four incidents in one session, all from editing code by blind string substitution:
+
+1. Three `str.replace()` calls silently matched nothing — the formatter had reflowed the
+   target — while the script still printed "updated". The change appeared applied, the
+   notebook re-ran unchanged, and the missing result looked like a platform problem.
+2. A `sed` renaming an unused loop variable `src` → `_src` matched **both** loops in
+   `migrate_legacy_layout()`. The second loop's body uses `src`, so the ingest job would
+   have raised `NameError` at runtime. Lint was happy; only reading the diff caught it.
+
+**Practice adopted:** use the `Edit` tool, which fails loudly when the target is absent,
+rather than `str.replace`/`sed` which return silently on no match. When a shell edit is
+genuinely necessary, verify the result (`grep -c` the marker) before acting on it.
+
+Ruff config also corrected: notebook directories now exempt `F821`/`E402` (Databricks
+injects `spark`, `dbutils`, `display` at runtime), while `src/fleetguard/` stays strict
+because it is plain importable Python.
+
 ## Phase 5 — Lakebase
 
 ### I-037 — No CREATE privilege on the Postgres schema — RESOLVED

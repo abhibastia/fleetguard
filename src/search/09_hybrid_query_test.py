@@ -40,7 +40,7 @@ def search(text, query_type, k=5, filters=None):
     )
     rows = (r.result.data_array or []) if r.result else []
     cols = [c.name for c in r.manifest.columns] if r.manifest else COLS
-    return [dict(zip(cols, row)) for row in rows]
+    return [dict(zip(cols, row, strict=False)) for row in rows]
 
 
 # COMMAND ----------

@@ -19,8 +19,15 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-# Databricks notebooks use magic comment cells and top-level display() calls
-"**/notebooks/**" = ["F401", "F841"]
+# Databricks notebooks: `spark`, `dbutils` and `display` are injected by the runtime and
+# are undefined at lint time (F821); cells run top-to-bottom so imports are not always at
+# module top (E402). These directories hold notebooks, not importable modules.
+# src/fleetguard/ is deliberately NOT exempted — it is plain Python and stays strict.
+"src/ingest/*.py"   = ["F821", "E402", "F401", "F841"]
+"src/fleet/*.py"    = ["F821", "E402", "F401", "F841"]
+"src/backtest/*.py" = ["F821", "E402", "F401", "F841"]
+"src/lakebase/*.py" = ["F821", "E402", "F401", "F841"]
+"src/search/*.py"   = ["F821", "E402", "F401", "F841"]
 
 [tool.ruff.format]
 quote-style = "double"

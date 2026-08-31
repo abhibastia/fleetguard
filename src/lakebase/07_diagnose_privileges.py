@@ -51,7 +51,7 @@ def q(sql, params=None, title=""):
     # persist as text so the result is readable from outside the notebook UI
     for r in rows[:40]:
         FINDINGS.append((title, " | ".join(f"{c}={'' if v is None else str(v)[:60]}"
-                                           for c, v in zip(cols, r))))
+                                           for c, v in zip(cols, r, strict=False))))
     if not rows:
         FINDINGS.append((title, "(no rows)"))
     if title:

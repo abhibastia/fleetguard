@@ -137,7 +137,7 @@ def migrate_legacy_layout():
     Idempotent and server-side, so switching layouts costs a rename rather than a
     2.6 GB re-download (the watermark would otherwise 304 and never re-place the file).
     """
-    for src, (_, subdir, _f) in SOURCES.items():
+    for _src, (_, subdir, _f) in SOURCES.items():
         os.makedirs(f"{VOL}/{subdir}", exist_ok=True)
     for entry in os.listdir(VOL):
         if not entry.endswith(".txt"):
