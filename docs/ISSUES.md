@@ -23,6 +23,38 @@ no error and passed the obvious check.
 
 ---
 
+## Pipeline (Phase 1 — silver)
+
+### I-024 — TSB rows are not TSB bulletins (same shape as I-010)
+*Date:* 2026-08-31 · *Status:* resolved
+
+`bronze_tsbs` holds 5,801,279 rows but only **258,438 distinct `NHTSA_ID`** values — each
+bulletin repeats per make/model/year, ~22× on average. The 5.8M figure is legitimate as a
+row count and as Volume evidence, but "5.8M service bulletins" would be wrong. Silver
+exposes both grains so the distinction can't be lost downstream.
+
+### I-023 — "Dedup on ODI number" would delete 27.9% of the complaint corpus — **SILENT**
+*Date:* 2026-08-31 · *Status:* resolved
+
+**Symptom.** Proposal §4.2 specified silver "deduplication on ODI number".
+
+**Root cause.** `ODINO` is not a row key. `CMPL.txt` states plainly: *"THIS NUMBER MAY BE
+REPEATED FOR MULTIPLE COMPONENTS."* Measured: 2,240,289 rows, **1,615,482 distinct
+`ODINO`** — deduplicating on it would discard **624,807 rows (27.9%)**, each a legitimate
+distinct component report on a real complaint. Even `(ODINO, COMPDESC)` is not unique
+(2,186,858 distinct), so 53,431 rows share both.
+
+**Why it was dangerous.** The pipeline would have run clean, produced a plausible row
+count, and quietly thrown away more than a quarter of the defect signal that Model A
+clusters on — biased specifically against multi-component defects, which are the severe ones.
+
+**Resolution.** `CMPLID` is the true row key (2,240,289 distinct = row count). Silver
+deduplicates on `CMPLID` as a defensive guard against re-ingest, never on `ODINO`. `ODINO`
+is retained as a complaint-group key for joining components of the same report. Proposal
+§4.2 corrected.
+
+---
+
 ## Pipeline (Phase 1 — bronze)
 
 ### I-022 — `DO_NOT_DRIVE` is `Yes`/`No`, not `YES`/`NO` — **SILENT**

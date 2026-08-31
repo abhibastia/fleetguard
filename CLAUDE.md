@@ -78,6 +78,28 @@ historical TSB chunks processed only those files and left the other three bronze
 untouched. A *full refresh*, by contrast, reprocesses everything, which is the real reason
 to load a complete corpus early rather than late.
 
+**Silver (built 2026-08-31).** Every layer reconciles exactly — `bronze = silver + quarantine`,
+no silent drops:
+
+| grain | bronze | silver | quarantine |
+|---|---|---|---|
+| complaints (V+T scope) | 2,209,695 | 2,209,123 | 572 |
+| recalls | 244,925 | 244,701 | 224 |
+| investigations | 154,367 | 154,191 | 176 |
+
+Quarantine reasons: complaints 569 `incident_after_received` + 3 `missing_make`; recalls 224
+`inverted_manufacture_window`; investigations 157 `unparseable_odate` + 19 `closed_before_opened`.
+
+Entity-grain tables (never quote the row count when you mean entities):
+`silver_investigation_case` **5,233** distinct investigations, of which **777 opened 2010+**
+(the backtest population, preserved exactly); `silver_tsb_bulletin` **258,438** bulletins.
+111 investigations are absent from the case table because *all* their rows lacked a parseable
+`ODATE` — they could not participate in a lead-time backtest regardless.
+
+Failure reasons are computed **once** in a staging temp view and drive both the silver and
+quarantine predicates, so the two cannot drift apart. Constraints on the silver tables are
+post-routing invariants — if one fires, the split logic is broken, not the source data.
+
 **`read_files` MUST disable quote handling on these files (measured in-workspace 2026-08-31):**
 - The ODI flat files are tab-delimited with **no quoting convention**, but narratives are
   free text containing `"`. Spark's CSV reader treats `"` as a quote char by default, which
