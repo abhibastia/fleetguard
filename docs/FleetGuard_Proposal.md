@@ -80,11 +80,20 @@ Row counts are measured from the actual files, not estimated, and independently 
 
 | Interval | Status | Measured |
 |---|---|---|
-| Complaint accumulation → ODI investigation opens | **This is the claim.** The window in which the pattern is visible and no regulator has acted | **Not yet measured.** The signal exists — 674 of 777 post-2010 investigations (86.7%) have prior complaints, median **341 in the 365 days before the open date**. What FleetGuard converts of that into detection lead time is a Phase 9 output |
+| Complaint accumulation → ODI investigation opens | **This is the claim.** The window in which the pattern is visible and no regulator has acted | **Baseline measured 2026-08-31.** Volume-anomaly detection alone fires on **16.0%** of the 777 post-2010 investigations at a median lead of **197 days**, against **11.1%** on a volume-matched placebo (z ≈ 2.62, p ≈ 0.009). A real but modest 1.44× lift — see below |
 | ODI investigation opens → recall issued | Regulatory latency. Context, not a FleetGuard result | 886 campaigns join on `CAMPNO`; 97.2% investigation-first, median **118 days** (p25 51, p75 216) |
 | Recall issued → operator response | The reactive half of the product | Seconds, by construction (§7) |
 
-The middle figure is measured and stable, and it is useful — it shows the regulatory pipeline is slow enough that early detection has somewhere to go. But it is **not** evidence that FleetGuard detects anything early. Only the first row is that, and it is deliberately reported as an unmeasured target rather than a result.
+The middle figure is measured and stable, and it is useful — it shows the regulatory pipeline is slow enough that early detection has somewhere to go. But it is **not** evidence that FleetGuard detects anything early. Only the first row is that.
+
+**The baseline, and what it costs to state honestly.** The first interval now has a measured floor, produced by the volume-anomaly half of Model A alone — no embeddings, no clustering. Every intermediate version of this measurement was wrong in a flattering direction, and each was caught only by the next check:
+
+- Taking the *earliest* anomaly in a 24-month window gave a 409-day median. That was an artifact: the lead-time distribution was nearly flat out to the window edge, and earliest-versus-latest medians differed 4.6×. Requiring a *sustained run* anchored near the open date cut it to 197 days.
+- A naive placebo — the same detector on series that never drew an investigation — showed 160× separation. That was also an artifact: investigated series carry a median of 32 complaints against 2 for never-investigated ones, so the control arm was full of series too small to fire at all.
+
+Against a **volume-matched** control, the honest figure is **16.0% detection at a median 197-day lead, versus 11.1% on matched control series** (z ≈ 2.62, p ≈ 0.009). Statistically real, practically modest: a 1.44× lift. One secondary signal is stronger than the headline — real detections cluster near the open date (197 days) while control detections scatter toward the window midpoint (343 days), which is the shape a detector tracking a genuine defect ramp produces.
+
+**This is why §4.3 pairs volume anomaly with semantic clustering.** The volume half alone does not carry the claim. The semantic half is load-bearing rather than an enhancement, and the backtest harness — with its control arm — is now the instrument that will show whether it earns its place.
 
 **The complaint file carries harm outcomes per record**, which is what makes that distribution meaningful rather than merely early. Confirmed against NHTSA's published file layout:
 

@@ -23,6 +23,50 @@ no error and passed the obvious check.
 
 ---
 
+## Backtest
+
+### I-027 — Volume anomaly alone is a weak discriminator (1.44× over placebo) — **SILENT**
+*Date:* 2026-08-31 · *Status:* open — informs Phase 9
+
+Ran the lead-time backtest early, since it needs only silver. Three successive results,
+each of which would have been reported as a success if the next check hadn't been run:
+
+| version | method | detection rate | median lead |
+|---|---|---:|---:|
+| v1 | earliest anomaly in 24-month window | 40.4% | **409 d** |
+| v2 | sustained runs, run nearest open date | 16.0% | **197 d** |
+| v2 + naive placebo | control = any never-investigated series | — | 160× separation |
+| **v2 + volume-matched placebo** | **control matched on complaint volume** | **16.0% vs 11.1%** | **197 d vs 343 d** |
+
+**What went wrong at each step.**
+1. *v1's 409 days was an artifact.* Taking the earliest anomaly in a wide window produced a
+   near-flat lead-time distribution — as many detections at the 630–719 day window edge as
+   at 0–89 days — and earliest-vs-latest medians differed 4.6× (409 vs 89). A detector
+   tracking a real ramp does not do that.
+2. *The naive placebo's 160× separation was also an artifact.* Investigated series carry a
+   median of 32 complaints; never-investigated series, 2. The control arm filled with
+   series too small to ever trip `MIN_COUNT = 5`, so it could not fire by construction.
+
+**The defensible result.** Against a volume-matched control, the detector fires on
+investigated series **16.0%** of the time versus **11.1%** on matched never-investigated
+series (two-proportion z ≈ 2.62, p ≈ 0.009). Real but modest — a **1.44× lift**, not the
+160× the broken control implied.
+
+**One genuinely positive signal.** Real detections cluster nearer the open date (median 197
+days) while placebo detections scatter toward the window midpoint (343 days, ~half of the
+24-month window). That is what a detector tracking a real ramp looks like, and it is not an
+artifact of the detection-rate comparison.
+
+**What this means for Phase 9.** §4.3 defines Model A as volume anomaly *combined with*
+HDBSCAN over embeddings. This measures the volume half alone and shows it is **not
+sufficient on its own** — the semantic half is load-bearing, not an enhancement. Knowing
+this in week 1 rather than week 4 is the entire reason for running the backtest early.
+
+The harness (`gold_lead_time_backtest`, `gold_lead_time_control`, `gold_lead_time_summary`)
+is now the measurement instrument for that improvement, with a control arm built in.
+
+---
+
 ## Pipeline (Phase 1 — chunking / AI Search sizing)
 
 ### I-026 — 512-token chunking is a near no-op on complaint narratives
