@@ -24,6 +24,43 @@ no error and passed the obvious check.
 
 ---
 
+## Phase 2 — fleet registry
+
+### I-030 — Model-string variance makes exact recall matching insufficient — **measured**
+*Date:* 2026-08-31 · *Status:* resolved (design validated)
+
+§4.3 asserts Model B exists to score "manufacturer and model-string variants". That is now
+measured rather than assumed, and the effect is larger than expected.
+
+Only **91 of 163** fleet make/model/year combinations match a recall exactly. NHTSA's
+dominant spelling frequently differs from vPIC's: the fleet holds `F-250`, while the recall
+corpus carries `F-250 SD` (612 rows) against only 17 rows of plain `F-250` — plus
+`REDUNDANT F-250` and `REDUNDANT  F-250` (double space).
+
+**Concrete consequence:** all **2,116** F-250s in the roster match across **22 campaigns**
+purely as `MODEL_VARIANT`. Exact matching returns **zero** of them. Across the whole fleet,
+`MODEL_VARIANT` rows (725,356) outnumber `EXACT` rows (263,686) nearly 3:1.
+
+`gold_fleet_exposure` therefore records `match_basis` per row: `EXACT` needs no model,
+`MODEL_VARIANT` is the residual tier Model B scores in Phase 4. The deterministic guarantee
+in §7 applies to the `EXACT` tier only, which is the honest framing.
+
+### I-029 — Complaint-frequency weighting produced a delivery fleet with no vans
+*Date:* 2026-08-31 · *Status:* resolved
+
+First roster build sampled VIN prefixes by global complaint frequency and produced 20,000
+vehicles that were **100% pickups and SUVs** — no Transit, no Sprinter, no ProMaster, and
+no Class 8 at all, despite §3 claiming light-through-Class-8 scope for a last-mile delivery
+and utility fleet. Pickups dominate complaint volume and crowded everything else out.
+
+Fixed by stratifying candidate selection per segment (VAN / PICKUP / HEAVY) with separate
+quotas, then sampling to a target mix of 40/45/15. Segment is assigned from **vPIC's
+`BodyClass` and `GVWR`**, not the complaint's make string — necessary because `VOLVO`
+covers both Class 8 tractors and passenger cars. Roster now spans Class 1D through Class 8
+across 47 models.
+
+---
+
 ## Backtest
 
 ### I-027 — Volume anomaly alone is a weak discriminator (1.44× over placebo) — **SILENT**

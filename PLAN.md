@@ -49,10 +49,13 @@ verifiable work. Grounded in what was already confirmed live before build start 
 - **Done when:** all 4 files flow bronze→silver→gold on a schedule with 0 unexplained
   quarantine rows on a full run.
 
-### Phase 2 — Fleet registry
-- Generate synthetic 20,000-vehicle/60-depot roster; decode every VIN against live vPIC.
-- **Done when:** roster table populated, 100% of VINs resolve against vPIC with no
-  fabricated make/model/year.
+### Phase 2 — Fleet registry  ✅ DONE (2026-08-31)
+- `gold_fleet_vehicle` (20,000) + `gold_fleet_depot` (60) + `gold_fleet_exposure`.
+- VIN prefixes sampled from real complaint VINs, check digit recomputed, make/model/year
+  taken from live vPIC — never asserted locally.
+- **Done-when met:** 400 randomly sampled generated VINs verified independently against
+  live vPIC — 400/400 exact match on make, model and year, 0 failures.
+- Segment mix 45% pickup / 40% van / 15% Class 7-8, spanning GVWR Class 1D→8, 47 models.
 
 ### Phase 3 — Chunking + AI Search
 - Build the Delta Sync Index over `complaint_chunk` (`embedding_source_column`,

@@ -216,6 +216,19 @@ trigger:
 project by design — a longer settle window would push worst-case latency past the
 sub-minute velocity claim.
 
+**Phase 2 fleet registry — DONE 2026-08-31.** `gold_fleet_vehicle` (20,000),
+`gold_fleet_depot` (60), `gold_fleet_exposure` (~989k rows). VIN prefixes come from real
+complaint VINs with the check digit recomputed; **make/model/year always come from vPIC**,
+never from the complaint record (complaint VINs are dirty — `!FTEW1EG2GK`, `11C6-RR6FG2`,
+GMC WMIs labelled RAM). 400 generated VINs verified independently: 400/400 exact.
+- Segment is assigned from vPIC `BodyClass`/`GVWR`, not the make string — `VOLVO` covers
+  both Class 8 tractors and passenger cars.
+- **Exact recall matching is insufficient:** only 91/163 fleet combos match exactly;
+  `MODEL_VARIANT` rows (725,356) outnumber `EXACT` (263,686) ~3:1. All 2,116 F-250s match
+  only as variants (`F-250 SD` is NHTSA's dominant spelling). `gold_fleet_exposure.match_basis`
+  carries the tier; §7's deterministic guarantee applies to `EXACT` only.
+- Delta **cluster keys cannot be BOOLEAN** (`DELTA_CLUSTERING_COLUMNS_DATATYPE_NOT_SUPPORTED`).
+
 **Lakebase / Phase 5 — PARKED 2026-08-31, naming decided, destination not:**
 - Lakebase project: `projects/summer-bootcamp-2026-v2`, branch `production`, endpoint
   `primary`, host `ep-patient-sun-d1ycq936.database.us-west-2.cloud.databricks.com`,
