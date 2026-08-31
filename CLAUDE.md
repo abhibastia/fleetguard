@@ -37,8 +37,13 @@ live system or current docs — not against training data or a cached skill refe
 - TSBs: **5,801,279** rows across all seven chunks. The oft-quoted "2.4M" is only the
   `2020-2024` chunk (2,406,749) — not the corpus.
 - Backtest: **497** post-2010 investigations have ≥30 complaints in the prior year (the
-  working set). Recall↔investigation join on `CAMPNO` yields 886 campaigns, 97.2% with the
-  investigation first, median gap **118 days** (p25 51, p75 216).
+  working set). **Keep three intervals distinct — do not conflate them:**
+  (1) *complaints → investigation opens* = FleetGuard's actual claim, **not yet measured**;
+  signal exists (674/777 investigations have prior complaints, median **341 in the prior
+  365 days**). (2) *investigation → recall issued* = regulatory latency, median **118 days**
+  (886 campaigns joined on `CAMPNO`, 97.2% investigation-first) — context only, **never
+  report this as a system result**. (3) *recall → operator response* = seconds by design.
+  The 118-day figure was briefly written into §3 as if it were the lead time; it is not.
 - `PROD_TYPE`: V 96.78% / T 1.85% / C 0.68% / E 0.68%. Tire-only and restraint-only columns
   are perfectly scoped (zero population outside their type). V+T keeps 98.63%.
 - Harm fields are **never null** (always `Y`/`N`): CRASH 6.25% Y, FIRE 2.53% Y,

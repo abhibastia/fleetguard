@@ -72,7 +72,17 @@ Row counts are measured from the actual files, not estimated. All three flat fil
 
 **The investigations file is the system's ground truth.** It is what converts "we detect defects early" from a marketing claim into a measured lead-time distribution.
 
-**The backtest population is the distinct-investigation count, not the row count.** Of 5,344 distinct investigations, **777 opened in 2010 or later**, and **497 of those carry at least 30 complaints in the year preceding their open date** — the working backtest set. Joining recall campaigns to investigations on `CAMPNO` yields 886 linked campaigns, of which 97.2% have the investigation preceding the recall, at a median gap of 118 days (p25 51, p75 216). This is stated here because 154,367 is a row count and would overstate the evidence base by two orders of magnitude if quoted as the backtest population.
+**The backtest population is the distinct-investigation count, not the row count.** Of 5,344 distinct investigations, **777 opened in 2010 or later**, and **497 of those carry at least 30 complaints in the year preceding their open date** — the working backtest set. 154,367 is a row count and would overstate the evidence base by two orders of magnitude if quoted as the population.
+
+**Three intervals are involved here, and only one of them is FleetGuard's claim.** They are kept separate deliberately, because conflating them would be an easy and flattering mistake.
+
+| Interval | Status | Measured |
+|---|---|---|
+| Complaint accumulation → ODI investigation opens | **This is the claim.** The window in which the pattern is visible and no regulator has acted | **Not yet measured.** The signal exists — 674 of 777 post-2010 investigations (86.7%) have prior complaints, median **341 in the 365 days before the open date**. What FleetGuard converts of that into detection lead time is a Phase 9 output |
+| ODI investigation opens → recall issued | Regulatory latency. Context, not a FleetGuard result | 886 campaigns join on `CAMPNO`; 97.2% investigation-first, median **118 days** (p25 51, p75 216) |
+| Recall issued → operator response | The reactive half of the product | Seconds, by construction (§7) |
+
+The middle figure is measured and stable, and it is useful — it shows the regulatory pipeline is slow enough that early detection has somewhere to go. But it is **not** evidence that FleetGuard detects anything early. Only the first row is that, and it is deliberately reported as an unmeasured target rather than a result.
 
 **The complaint file carries harm outcomes per record**, which is what makes that distribution meaningful rather than merely early. Confirmed against NHTSA's published file layout:
 
@@ -303,7 +313,7 @@ No principal holds more than one path's privileges. A compromised external insta
 | Data Quality Monitoring | Profiling, freshness, and drift across bronze, silver, gold |
 | Agent output | `Guidelines` scorer grades drafted campaign text against the golden set; human approve/override decisions on `launch_service_campaign()` are logged as MLflow feedback via `create_labeling_session()`, so the override rate that triggers retraining (§4.6) is an auditable Assessment trail, not an implied Lakebase counter |
 | Lineage and audit | Unity Catalog lineage; every agent write recorded with actor and timestamp |
-| Backtest harness | Detection date versus ODI investigation open date, over the **497 post-2010 investigations carrying ≥30 prior-year complaints** (§3), with injuries and fatalities in the intervening window totalled from `INJURED`, `DEATHS`, and `FAILDATE`. Held-out split within that set; population size stated so the evidence base is not overread |
+| Backtest harness | **Detection date versus ODI investigation open date** — the first interval in §3, and the only one that is a FleetGuard result. Run over the 497 post-2010 investigations carrying ≥30 prior-year complaints, held-out split within that set, with injuries and fatalities in the intervening window totalled from `INJURED`, `DEATHS`, and `FAILDATE`. Reported with the population size attached. The investigation→recall interval (median 118 days) is regulatory latency and is never reported as a system result |
 
 **On the threshold.** A false negative leaves a vehicle carrying a documented safety defect in service. A false positive sends a technician to inspect a vehicle that proves sound. These errors are not symmetric, and the system does not treat them as though they are.
 
