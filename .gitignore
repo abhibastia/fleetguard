@@ -38,3 +38,4 @@ npm-debug.log*
 # Local scratch
 /tmp/
 *.tmp
+.venv/

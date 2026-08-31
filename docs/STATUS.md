@@ -1,6 +1,6 @@
 # FleetGuard — project status
 
-**Last updated:** 2026-08-31 · **Demo window:** 25–30 September 2026
+**Last updated:** 2026-08-31 (end of session) · **Demo window:** 25–30 September 2026
 
 One page answering "where are we". Design lives in `FleetGuard_Proposal.md`, sequencing in
 `../PLAN.md`, and every problem hit during the build in `ISSUES.md`.
@@ -105,6 +105,34 @@ index lifecycle — not corpus trimming — is the lever.
 
 ---
 
+## Testing
+
+Three layers, doing different jobs. Full rationale in `src/pipelines/expectations/README.md`.
+
+| Layer | What | Run |
+|---|---|---|
+| **Unit** (`tests/test_vin.py`, `test_chunking.py`, `test_naming.py`) | Pure logic, no Databricks. **91 tests.** | `pytest` |
+| **LDP expectations** (`src/pipelines/**/*.sql`) | Row-level, in-pipeline. Post-routing invariants + explicit `_dq_failures` quarantine split. | runs with the pipeline |
+| **Data quality** (`tests/test_data_quality.py`) | Cross-table invariants against live tables. **21 tests, 73 s.** | `pytest -m integration --run-integration` |
+
+Logic that has already been wrong once is extracted into `src/fleetguard/` so it is
+testable off platform, and the bugs are encoded as **regressions**:
+
+- `TestRegressionI034` — the single-character-chunk bug (stride vs window)
+- `test_transliteration_is_many_to_one` — a VIN checksum property the suite *discovered*:
+  `A`/`J`/`1` share a transliterated value, so some substitutions are invisible to the
+  check digit. My original test asserted the opposite and failed.
+- `test_complaint_parse_is_correct_by_cardinality_not_by_rescued_data` — the check that
+  would have caught I-012, where `_rescued_data` read 0 while 143 rows were mis-parsed.
+- `test_nothing_is_dropped_silently` — asserts `bronze = silver + quarantine` exactly.
+- `test_no_detection_leaks_past_the_open_date` — a detection dated on or after the
+  investigation opened is leakage, not lead time.
+
+**The rule:** a check that cannot fail is not a check. Every assertion here has either
+failed during the build or exists because something adjacent to it failed silently.
+
+---
+
 ## Open decisions blocking progress
 
 | # | Decision | Blocks |
@@ -139,3 +167,34 @@ index lifecycle — not corpus trimming — is the lever.
 | `ISSUES.md` | Every problem hit, root cause, resolution. **Silent failures flagged.** |
 | `fleetguard_e2e.html` / `fleetguard_identity.html` | Current diagrams (editable, diffable) |
 | `../CLAUDE.md` | Verified facts — measured numbers that must not be re-derived |
+
+---
+
+## Picking this up tomorrow
+
+**Running unattended right now:** the AI Search index sync. It was ~42% at 22:11 and moves
+at 4,336 rows/min, so it should be complete overnight (~6.7 h total, I-041). First thing:
+
+```bash
+databricks vector-search-indexes get-index \
+  bootcamp_students.fleetguard.complaint_chunk_idx --profile abhi
+```
+
+Then re-run the hybrid test to confirm nothing changed qualitatively at full corpus:
+`fleetguard-hybrid-query-test`.
+
+**Billing:** `fleetguard-vs` is the only recurring cost, ~$6.72/day. Everything else is
+manual-trigger. Stop it by deleting the index then the endpoint.
+
+**Highest-value next steps, in order:**
+
+1. **Populate the Lakebase tables from gold** — `gold_fleet_vehicle` → `fleetguard_vehicle`,
+   `gold_fleet_exposure` → `fleetguard_vehicle_exposure`, etc. This also makes the other ten
+   CDF history tables materialise, since CDF creates a destination on first *write*, not on
+   `CREATE TABLE`. Unblocks the §8.3 velocity demo.
+2. **Time a write end to end** — §8.3's ~15 s capture figure is still *documented*, not
+   *measured*. One timed insert closes that.
+3. **Phase 9 semantic upgrade** — HDBSCAN over the now-populated index, re-run the backtest
+   harness, and see whether the 16.0% / 11.1% gap widens. This is the differentiator.
+
+**Do not** attempt an index rebuild inside the demo window — it is most of a working day.
