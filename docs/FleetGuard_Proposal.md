@@ -152,7 +152,7 @@ Tires are retained deliberately. Tire defects on heavy vehicles are a serious sa
 
 ### 4.1 Ingestion
 
-A Lakeflow Job downloads the four flat-file artefacts daily and polls the recalls API every 60 seconds, landing raw files in a **Unity Catalog Volume** at `/Volumes/bootcamp_students/fleetguard/nhtsa_flat_files/`. The job runs under a dedicated service principal holding `WRITE VOLUME` and pipeline ownership — and no application privileges.
+A Lakeflow Job downloads the four flat-file artefacts daily; a second job sweeps the recalls API for live campaign detection (cadence measured in §8.3, not 60 seconds — the endpoint's shape does not permit it), landing raw files in a **Unity Catalog Volume** at `/Volumes/bootcamp_students/fleetguard/nhtsa_flat_files/`. The job runs under a dedicated service principal holding `WRITE VOLUME` and pipeline ownership — and no application privileges.
 
 *Namespace note:* the workspace is a shared metastore in which catalog creation is not available to this project, so all FleetGuard objects live in the single schema `bootcamp_students.fleetguard`, which this project owns. Medallion layers are therefore expressed as table-name prefixes (`bronze_`, `silver_`, `gold_`) rather than as sibling schemas. This is a naming convention, not an architectural change — lineage, expectations and grants behave identically.
 
@@ -392,7 +392,11 @@ FleetGuard has two data paths with materially different latency characteristics,
 
 NHTSA refreshes the ODI flat files once per day. The `recallsByVehicle` API returns neither `ETag` nor `Last-Modified` and ignores `If-Modified-Since` and `If-None-Match`; every request returns a full `200` with the complete body. There is no conditional-request mechanism on this endpoint, so aggressive polling means repeatedly pulling a full payload from a public government API — the same bulk-access pattern §3 commits to avoiding.
 
-Polling therefore runs at **60-second intervals**, which is already generous against a source that changes daily, with exponential backoff on `429`. Worst-case publication-to-visible on this path is roughly 85 seconds, and the proposal does not claim otherwise.
+**Polling cadence, measured rather than assumed.** `recallsByVehicle` requires make *and* model *and* modelYear — there is no "recent recalls" call, and omitting a parameter returns `Count: 0` with a success message rather than an error. Polling therefore means sweeping the fleet's distinct combinations, and a literal 60-second cadence would mean roughly 288,000 requests per day against a public API this document commits to not using in bulk.
+
+The built implementation sweeps **200 combinations in 100 seconds** at a deliberate 2 requests/second. Worst-case publication-to-visible is therefore *sweep duration plus the gap between runs* — about **6.7 minutes on a 5-minute schedule**, or 11.7 on a 15-minute one. That is the honest figure; the earlier "roughly 85 seconds" assumed a cadence the endpoint's shape does not permit.
+
+*Measured trap worth recording:* the API returns **HTTP 400 with a body reading `"Results returned successfully"`** for combinations it does not recognise — status and body disagree. Combined with the fact that it does not share vPIC's model vocabulary (`SILVERADO` is rejected, `SILVERADO 1500` succeeds), a naive client silently loses 40% of the fleet. Polling uses the recall-vocabulary model name resolved in `gold_fleet_exposure`, which takes coverage to 200/200.
 
 **The flat-file host does support conditional requests — but only one of the two mechanisms it advertises.** Measured against `static.nhtsa.gov` on 2026-08-31: `HEAD` returns both `Last-Modified` and `ETag`. A `GET` carrying `If-Modified-Since` at the advertised timestamp returns **`304`, zero bytes**. A `GET` carrying `If-None-Match` with the exact advertised ETag returns **`200` and the full 370 MB body** — the ETag is published and then ignored. Daily change detection therefore uses `If-Modified-Since` only. Building it on `ETag` would look correct, pass review, and silently re-download the entire corpus on every poll.
 

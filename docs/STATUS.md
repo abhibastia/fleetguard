@@ -11,7 +11,7 @@ One page answering "where are we". Design lives in `FleetGuard_Proposal.md`, seq
 
 | Phase | Status | Detail |
 |---|---|---|
-| **1 — Ingestion + bronze/silver/gold** | 🟡 **~85%** | Ingest job, bronze (4), silver (9) all built and validated. **Outstanding:** chunking → `complaint_chunk`, and 2 of 5 gold tables that are blocked on Phases 3/9. Ingest is **deliberately manual** — no schedule, to avoid consuming shared-workspace compute before it's needed. |
+| **1 — Ingestion + bronze/silver/gold** | 🟡 **~90%** | Ingest job, bronze (4), silver (9) all built and validated. **Outstanding:** chunking → `complaint_chunk`, and 2 of 5 gold tables that are blocked on Phases 3/9. Ingest is **deliberately manual** — no schedule, to avoid consuming shared-workspace compute before it's needed. |
 | **2 — Fleet registry** | ✅ **Done** | 20,000 vehicles / 60 depots / ~989k exposure rows. 400 VINs independently vPIC-verified, 400/400 exact. |
 | **3 — Chunking + AI Search** | ⬜ Not started | **Next up.** Confirmed load-bearing by the Phase 9 baseline. First step that costs money. |
 | **4 — Model B + golden set** | ⬜ Not started | Scope now measured: variant matches outnumber exact 3:1 (I-030). |
@@ -37,10 +37,15 @@ One page answering "where are we". Design lives in `FleetGuard_Proposal.md`, seq
 | bronze (4) | `bronze_complaints` · `bronze_recalls` · `bronze_investigations` · `bronze_tsbs` | 2,240,289 · 244,925 · 154,367 · 5,801,279 |
 | silver (9) | `silver_complaint` (+quarantine) · `silver_recall` (+q) · `silver_investigation` (+q, +`_case`) · `silver_tsb` (+`_bulletin`) | 2,209,123 · 244,701 · 154,191 · 5,801,279 |
 | gold (6) | `gold_fleet_vehicle` · `gold_fleet_depot` · `gold_fleet_exposure` · `gold_lead_time_backtest` · `gold_lead_time_control` · `gold_lead_time_summary` | 20,000 · 60 · ~989k · 777 · 67 · 2 |
-| ops (1) | `ops_ingest_watermark` | drives `If-Modified-Since` |
+| ops (2) | `ops_ingest_watermark` · `ops_recall_poll_state` | `If-Modified-Since` cursor · recall poll cursor |
+| api (2) | `bronze_recall_api` · `gold_recall_alert` | 2,117 rows / 653 campaigns · 0 alerts (correct — nothing novel) |
 
-**Compute:** 1 pipeline (`fleetguard-bronze-silver`, IDLE) · 4 jobs, **all manual** ·
+**Compute:** 1 pipeline (`fleetguard-bronze-silver`, IDLE) · 5 jobs, **all manual** ·
 1 serverless SQL warehouse.
+
+**APIs integrated:** vPIC (`DecodeVINValuesBatch`, authoritative for make/model/year) ·
+recalls (`recallsByVehicle`, 200/200 combos, 100 s sweep) · `static.nhtsa.gov` flat files
+(`If-Modified-Since`, verified 304).
 
 **Nothing is billing continuously.** No AI Search endpoint, no Lakebase tables, no schedules.
 

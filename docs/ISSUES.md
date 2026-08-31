@@ -24,6 +24,64 @@ no error and passed the obvious check.
 
 ---
 
+## Recalls API integration
+
+### I-032 — "New campaign" alerts were false positives from model-string mismatch — **SILENT**
+*Date:* 2026-08-31 · *Status:* resolved
+
+**Symptom.** The first `gold_recall_alert` build reported **9 campaigns the flat file did
+not have**, covering 7,584 vehicles. A compelling demo result.
+
+**Root cause.** All 9 were already in `silver_recall`, some with 30+ rows. The anti-join
+matched on `campaign_number` **plus** make/model/model_year, and the model strings differ
+between API and flat file (API `F-250` vs flat file `F-250 SD`) — the I-030 mismatch again.
+Every campaign therefore looked novel.
+
+**Why it was dangerous.** It fails in the flattering direction and would have been *shown to
+judges*: "nine new campaigns the daily file hasn't caught yet," all of them already known.
+
+**Resolution.** `NHTSACampaignNumber` is a globally unique NHTSA identifier, so novelty is
+determined by campaign number **alone**. Alerts dropped 9 → 0, which is the correct answer:
+all 653 campaigns returned by the API are present in the flat file. Mechanism verified by
+negative control — holding 3 campaigns out of the flat file makes exactly 3 alerts fire.
+
+### I-031 — Recalls API rejects vPIC model names with a misleading 400
+*Date:* 2026-08-31 · *Status:* resolved
+
+**Symptom.** 65 of 163 fleet combos (40%) returned HTTP 400 on the first sweep.
+
+**Root cause.** Two compounding problems.
+1. The API returns **HTTP 400 with a body reading `"Results returned successfully"`** when
+   it does not recognise a make/model/year combination. Status and body disagree, so a
+   client that trusts either one alone draws the wrong conclusion. Confirmed *not*
+   throttling: `ford/f-150/2020` returns 200 repeatedly while `CHEVROLET/SILVERADO/2019`
+   reliably 400s.
+2. The rejected combos used **vPIC's model vocabulary**, which the recalls API does not
+   share. Measured: `SILVERADO` → 400 but `SILVERADO 1500` → 200 (10 campaigns);
+   `F-250` → 400 but `F-250 SD` → 200; `SIERRA` → 400 but `SIERRA 1500` → 200.
+
+**Resolution.** Poll using `gold_fleet_exposure.recall_model` — the NHTSA-vocabulary name
+already proven to join against the flat file — instead of the vPIC name. Success rate went
+**60% → 100% (200/200)**, campaign rows 1,017 → 2,117, distinct campaigns 449 → 653.
+
+**Note this is the same root cause a third time** (I-030 exposure matching, I-032 false
+alerts, I-031 API rejection). vPIC and NHTSA recall data do not share a model vocabulary,
+and every component that joins them has to bridge it explicitly.
+
+### I-033 — "60-second polling" is not achievable as specified
+*Date:* 2026-08-31 · *Status:* resolved (claim corrected)
+
+`recallsByVehicle` requires make **and** model **and** modelYear; omitting any returns
+`Count: 0` with a success message rather than an error. There is no "recent recalls" call,
+so polling means sweeping the fleet's combos.
+
+Measured: **200 combos, 100 seconds, at a polite 2 req/s.** §4.1's literal "every 60
+seconds" would mean ~288k requests/day against a public API that §3 explicitly commits to
+not using in bulk. §8.3's "~85 seconds worst case" followed from that and was equally
+unfounded. Corrected to a measured sweep-plus-interval figure.
+
+---
+
 ## Phase 2 — fleet registry
 
 ### I-030 — Model-string variance makes exact recall matching insufficient — **measured**
