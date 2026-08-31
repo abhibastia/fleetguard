@@ -26,6 +26,47 @@ no error and passed the obvious check.
 
 ## Phase 5 — Lakebase
 
+### I-037 — No CREATE privilege on the Postgres schema — **EXTERNAL BLOCKER**
+*Date:* 2026-08-31 · *Status:* **open — needs a grant from the schema owner**
+
+**Symptom.** `06_create_depot_and_verify` aborted at pre-flight:
+`ABORT: no CREATE privilege on bootcamp_students`. The guard fired before any DDL, so
+nothing was written.
+
+**Diagnosis (read-only, `ops_pg_privilege_diagnostic`):**
+
+| check | result |
+|---|---|
+| `current_user` | `abhisek.bastia17@gmail.com` — identity maps correctly |
+| `USAGE` on schema | **true** — can read |
+| `CREATE` on schema | **false** — cannot create tables |
+| role memberships | **none — belongs to no Postgres role at all** |
+| schema owner | `zach@zachwilson.tech` |
+| can create own schema | **false** |
+
+**Root cause.** Table ownership in the schema shows **85 tables owned by a role named
+`users`** and 11 by `student`, alongside individually-owned tables. Other students
+therefore hold `CREATE` either through role membership or a direct grant. This account
+holds **no role membership whatsoever**, so it inherits nothing.
+
+**No workaround exists.** Creating the tables in a different schema is not an option —
+Lakebase CDF is bound to `databricks_postgres.bootcamp_students`, so tables elsewhere are
+never captured, which is the entire point of Phase 5. Creating a personal schema is also
+blocked (`can_create_schema = false`).
+
+**The ask.** Either of these, run by the schema owner or a Postgres superuser:
+
+```sql
+-- preferred: matches how the other students appear to be set up
+GRANT "users" TO "abhisek.bastia17@gmail.com";
+
+-- or the narrower, direct equivalent
+GRANT CREATE ON SCHEMA bootcamp_students TO "abhisek.bastia17@gmail.com";
+```
+
+Phase 5 is blocked until one of those lands. Phases 6, 7 and 8 depend on Phase 5.
+
+
 ### I-036 — Lakebase table naming, decided deliberately
 *Date:* 2026-08-31 · *Status:* resolved
 

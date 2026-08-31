@@ -15,7 +15,7 @@ One page answering "where are we". Design lives in `FleetGuard_Proposal.md`, seq
 | **2 — Fleet registry** | ✅ **Done** | 20,000 vehicles / 60 depots / ~989k exposure rows. 400 VINs independently vPIC-verified, 400/400 exact. |
 | **3 — Chunking + AI Search** | 🟡 **In progress** | `silver_complaint_chunk` built (2,196,091 chunks, 1.0006/complaint). Endpoint `fleetguard-vs` ONLINE; index `complaint_chunk_idx` syncing over 1,746,601 chunks. Hybrid query test outstanding. |
 | **4 — Model B + golden set** | ⬜ Not started | Scope now measured: variant matches outnumber exact 3:1 (I-030). |
-| **5 — Lakebase + CDF** | 🟡 **Unparked** | Destination authorised (`bootcamp_cdc`); naming decided `fleetguard_<entity>` (I-036). Postgres inspection next, then one table to verify the CDF round-trip before the other ten. |
+| **5 — Lakebase + CDF** | 🔴 **Blocked** | Destination authorised, naming decided (I-036), notebook written and safety-guarded. **Blocked on a Postgres grant** — the account holds `USAGE` but not `CREATE` on `bootcamp_students`, and belongs to no Postgres role (I-037). No workaround: CDF is bound to that schema. Gates 6–8. |
 | **6 — OAuth wiring** | ⬜ Not started | Blocked on 5. |
 | **7 — Agent tools + write path** | ⬜ Not started | Blocked on 5. |
 | **8 — App + external surface** | ⬜ Not started | Blocked on 5. |
@@ -110,6 +110,7 @@ index lifecycle — not corpus trimming — is the lever.
 | # | Decision | Blocks |
 |---|---|---|
 | **I-026** | **Chunking scope.** 512-token chunking is ~1.0006 chunks/row on complaint narratives (`CDESCR` is `CHAR(2048)`). It genuinely earns its place on investigation summaries (66% exceed one chunk). Keep the near-1:1 table, or index narratives directly? | Phase 3 |
+| **I-037** | **Postgres `CREATE` grant.** Account has `USAGE` but not `CREATE` on `bootcamp_students` and holds no role membership. Needs `GRANT "users" TO "abhisek.bastia17@gmail.com"` or `GRANT CREATE ON SCHEMA bootcamp_students`. **External — cannot be self-served.** | Phases 5 → 6 → 7 → 8 |
 | **I-018** | **Index lifecycle.** How long to leave the AI Search endpoint up. Suggested: subset while developing, full corpus from ~20 Sept. | Phase 3 cost |
 | **I-015** | **Streaming vs PII guardrail.** AI Gateway output guardrails don't apply to streaming responses — either no streaming, or drop the §4.5 "second layer" claim. | Phases 7–8 |
 
