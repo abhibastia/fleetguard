@@ -15,7 +15,7 @@ One page answering "where are we". Design lives in `FleetGuard_Proposal.md`, seq
 | **2 — Fleet registry** | ✅ **Done** | 20,000 vehicles / 60 depots / ~989k exposure rows. 400 VINs independently vPIC-verified, 400/400 exact. |
 | **3 — Chunking + AI Search** | 🟡 **In progress** | `silver_complaint_chunk` built (2,196,091 chunks, 1.0006/complaint). Endpoint `fleetguard-vs` ONLINE; index `complaint_chunk_idx` syncing over 1,746,601 chunks. Hybrid query test outstanding. |
 | **4 — Model B + golden set** | ⬜ Not started | Scope now measured: variant matches outnumber exact 3:1 (I-030). |
-| **5 — Lakebase + CDF** | 🟡 **Round-trip proven** | **CDF verified end to end (I-038)** — `fleetguard_depot` → `lb_fleetguard_depot_history`, 60 insert / 1 update_preimage / 1 update_postimage / 1 delete, exact name, no collision suffix. `CREATE` grant resolved. **Outstanding:** the other 10 tables. Unblocks 6–8. |
+| **5 — Lakebase + CDF** | ✅ **Schema done** | All **11 tables** created, every one `REPLICA IDENTITY FULL`. CDF round-trip verified end to end on `fleetguard_depot` (I-038). **Outstanding:** populate the tables, and a timed write to measure real capture latency. Unblocks 6–8. |
 | **6 — OAuth wiring** | ⬜ Not started | Blocked on 5. |
 | **7 — Agent tools + write path** | ⬜ Not started | Blocked on 5. |
 | **8 — App + external surface** | ⬜ Not started | Blocked on 5. |

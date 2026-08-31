@@ -91,8 +91,12 @@ FULL`; 60 inserts, 1 update, 1 delete appeared in
 `lb_fleetguard_depot_history` as 60 `insert` / 1 `update_preimage` / 1 `update_postimage` /
 1 `delete`, with all five metadata columns and **no collision suffix** (I-038).
 
-*Outstanding:* the remaining 10 tables, and a timed write to measure real capture latency
-rather than citing the documented ~15 s.
+**All 11 tables created** (2026-08-31), each verified `relreplident = 'f'`, owned by
+`abhisek.bastia17@gmail.com`. Script is idempotent and transactional
+(`src/lakebase/08_create_remaining_tables.py`).
+
+*Outstanding:* populate the tables from gold, and a timed write to measure real capture
+latency rather than citing the documented ~15 s.
 
 - Create the 11-table Postgres schema, `REPLICA IDENTITY FULL` on every table.
 - Enable Lakebase CDF at schema level (UI or API — resolved by the pre-work above).
