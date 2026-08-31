@@ -13,7 +13,7 @@ One page answering "where are we". Design lives in `FleetGuard_Proposal.md`, seq
 |---|---|---|
 | **1 — Ingestion + bronze/silver/gold** | 🟡 **~90%** | Ingest job, bronze (4), silver (9) all built and validated. **Outstanding:** chunking → `complaint_chunk`, and 2 of 5 gold tables that are blocked on Phases 3/9. Ingest is **deliberately manual** — no schedule, to avoid consuming shared-workspace compute before it's needed. |
 | **2 — Fleet registry** | ✅ **Done** | 20,000 vehicles / 60 depots / ~989k exposure rows. 400 VINs independently vPIC-verified, 400/400 exact. |
-| **3 — Chunking + AI Search** | 🟡 **In progress** | `silver_complaint_chunk` built (2,196,091 chunks, 1.0006/complaint). Endpoint `fleetguard-vs` ONLINE; index `complaint_chunk_idx` syncing over 1,746,601 chunks. Hybrid query test outstanding. |
+| **3 — Chunking + AI Search** | ✅ **Done-when met** | Hybrid retrieval verified (I-040): exact-token + semantic in one result set, `columns_to_sync` works, harm filter PASSES 10/10. Index still syncing (~42%, ~6.7h total — I-041); re-run the test after completion to confirm nothing changes. |
 | **4 — Model B + golden set** | ⬜ Not started | Scope now measured: variant matches outnumber exact 3:1 (I-030). |
 | **5 — Lakebase + CDF** | ✅ **Schema done** | All **11 tables** created, every one `REPLICA IDENTITY FULL`. CDF round-trip verified end to end on `fleetguard_depot` (I-038). **Outstanding:** populate the tables, and a timed write to measure real capture latency. Unblocks 6–8. |
 | **6 — OAuth wiring** | ⬜ Not started | Blocked on 5. |

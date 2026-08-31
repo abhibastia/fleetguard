@@ -74,6 +74,52 @@ remaining ten tables can be created with confidence.
 
 ## Phase 3 — chunking + AI Search
 
+### I-039 — Retrieval returns text-identical siblings; dedupe key is `odi_number`
+*Date:* 2026-08-31 · *Status:* open — Phase 7 search tool must handle it
+
+An ANN query for *"car suddenly sped up on its own"* returned what looked like the same
+Nissan narrative three times. It is **not** the same complaint: `complaint_id` is distinct
+on all 10 top results. It is the `ODINO` structure from I-023 — one complaint filed against
+several components becomes several `CMPLID` rows carrying **identical narrative text**, so
+each embeds to a near-identical vector.
+
+Keeping those rows is still correct (deduping on `ODINO` would have discarded 27.9% of the
+corpus), but retrieval has to compensate. **`search_similar_complaints()` must dedupe by
+`odi_number`, not `complaint_id`** — `complaint_id` looks unique and will not collapse them.
+
+### I-040 — Phase 3 done-when MET on a partially-synced index
+*Date:* 2026-08-31 · *Status:* resolved
+
+Phase 3 required *"a hybrid query returns component-code exact matches AND semantically
+related narratives in the same result set."* Verified at ~42% sync — behavioural retrieval
+quality is per-query, so it does not need the full corpus.
+
+- **`columns_to_sync` works.** It did not appear in the returned index spec, which was an
+  open worry; `make`, `model`, `component`, `any_harm` all come back. Harm-filtered
+  retrieval was therefore possible.
+- **Hybrid genuinely differs from ANN.** On *"SERVICE BRAKES, HYDRAULIC pedal went to
+  floor"*, HYBRID surfaced narratives containing the literal token `HYDRAULIC BRAKES`
+  that ANN ranked lower — BM25 doing the job §4.3 says it exists for.
+- **Semantic half works on pure paraphrase.** *"car suddenly sped up on its own"* uses none
+  of the corpus vocabulary (no "unintended acceleration", no `VEHICLE SPEED CONTROL`) and
+  retrieved exactly those complaints.
+- **Harm filter PASSES.** `filters_json={"any_harm": true}` returned 10/10 harm-bearing
+  results — §4.3's *"restrict a semantic search to complaints that involved a fire or an
+  injury"* is real, not aspirational.
+
+**Tooling note:** the CLI cannot read this endpoint. `databricks vector-search-indexes
+query-index` receives **HTTP 200** and then fails with `invalid character 'r' after
+top-level value` — a Go SDK unmarshalling bug, not an index fault. Use the Python SDK.
+
+### I-041 — Index sync is ~5x slower than estimated
+*Date:* 2026-08-31 · *Status:* watch
+
+Measured 4,336 rows/min on a STANDARD endpoint, so 1,746,601 chunks take **~6.7 hours**,
+not the 30–90 minutes estimated when the index was created. Cost impact is negligible
+(~$1.88 of endpoint time) but the schedule impact is real: an index rebuild is most of a
+working day. **Do not plan a re-index inside the demo window.** If the index has to be
+rebuilt with different columns or a different source, start it the night before.
+
 ### I-034 — Chunk-count formula used the stride, not the window — **SILENT**
 *Date:* 2026-08-31 · *Status:* resolved
 
