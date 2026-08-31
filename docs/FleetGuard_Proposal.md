@@ -171,7 +171,11 @@ Watermarked Structured Streaming with idempotent upserts, Photon on serverless c
 
 ### 4.3 Retrieval and models
 
-**AI Search Delta Sync Index** over `complaint_chunk` using `embedding_source_column`, so AI Search computes and maintains embeddings directly from chunk text. Hybrid ANN + BM25 retrieval, which matters here because component codes and part numbers are exact-match tokens that pure semantic search handles poorly. Storage-optimized endpoint given the vector count.
+**AI Search Delta Sync Index** over `complaint_chunk` using `embedding_source_column`, so AI Search computes and maintains embeddings directly from chunk text. Hybrid ANN + BM25 retrieval, which matters here because component codes and part numbers are exact-match tokens that pure semantic search handles poorly.
+
+**Endpoint type: standard, not storage-optimized — measured.** The corpus produces ~2.21M vectors. A standard endpoint holds 2M vectors per unit at $0.28/unit/hour, so two units cost $0.56/hour. A storage-optimized unit holds 64M vectors but costs $1.28/hour, and one unit is the minimum. At this scale storage-optimized is **2.3× more expensive for the same result**; it only wins beyond roughly 8M vectors, where a standard configuration would need five or more units. An earlier draft specified storage-optimized "given the vector count", which had the trade backwards.
+
+**Cost shape.** Embedding the corpus is a one-off of roughly 275M tokens — about **$28** on BGE Large (1.429 DBU/M) or **$36** on GTE Large (1.857 DBU/M) at $0.07/DBU. The endpoint, by contrast, bills hourly and continuously for as long as an index exists: **~$403/month**. The recurring cost therefore dominates the one-off by more than 10×, which inverts the intuition that embedding is the expensive step. Billing stops 24 hours after the last index is deleted, so the index is created for build and demo windows rather than left running.
 
 **Feature Store.** Rolling complaint rate per make/model/component, plus a rolling harm rate over the same grain — injuries and fatalities per thousand complaints, crash and fire incidence, and corroboration rate (share of harm claims accompanied by a police report or medical attention). Computed offline for training and served online when the agent scores a live match — a genuine online/offline parity requirement.
 

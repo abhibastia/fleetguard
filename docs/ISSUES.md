@@ -14,12 +14,55 @@ no error and passed the obvious check.
 
 | ID | Area | Issue | Status |
 |---|---|---|---|
-| I-018 | Cost | LLM spend on a shared bootcamp workspace is unmeasured. `ai_extract` was moved off the ingest path (I-009), but embedding ~2.24M narratives for AI Search is still a large one-off cost that has not been estimated against available quota. | **open** |
+| I-018 | Cost | **Sized (see I-025).** Embedding is ~275M tokens ≈ **$28–36 one-off** — not the problem. The AI Search *endpoint* is **~$403/month recurring** and is the real exposure. Mitigation is index lifecycle (billing stops 24h after the last index is deleted), not corpus trimming. Still open only as a decision on how long to leave the index up. | **open** |
 | I-017 | Platform | Lakebase CDF is **not** a Declarative Automation Bundle resource, so Phase 5 enablement can't be captured in `bundle deploy`. Manual runbook step; CI/CD must not assume otherwise. | **watch** |
 | I-016 | Platform | Table properties (retention, `VACUUM`) on Lakebase CDF sync-managed destination tables are undocumented — may not be settable. Fallback is a downstream Delta copy under our own retention. Confirm during Phase 5. | **open** |
 | I-015 | Platform | Unity AI Gateway **output** guardrails (incl. PII detection on responses) do not apply to streaming responses. If the console streams agent output, the §4.5 PII second layer silently does not exist. Decide: no streaming, or drop the claim. | **open** |
 | I-014 | Demo | `DO_NOT_DRIVE` (Park It) covers only 211 of 15,211 campaigns and is **zero for 2010–2011** — field added May 2025, backfilled unevenly. Seed demo data from 2015+ or the Park It path demos empty. | **watch** |
 | I-013 | Docs | Diagrams drift from prose. Happened twice. Diagrams are now HTML (`docs/fleetguard_*.html`) specifically so they diff in review rather than being opaque binaries. | **watch** |
+
+---
+
+## Pipeline (Phase 1 — chunking / AI Search sizing)
+
+### I-026 — 512-token chunking is a near no-op on complaint narratives
+*Date:* 2026-08-31 · *Status:* open (design decision)
+
+Measured on `silver_complaint`: mean narrative 517 chars (~130 tokens), p95 1,477, max
+**2,132** — `CDESCR` is `CHAR(2048)`, so a narrative physically cannot exceed ~530 tokens.
+Only **1,390 of 2,209,123** rows (0.06%) could ever split at 512 tokens. Chunking complaint
+narratives yields 1.0006 chunks per row.
+
+Chunking is *not* pointless project-wide — it is genuinely needed elsewhere:
+
+| source | mean chars | max | rows > 2,048 chars |
+|---|---:|---:|---:|
+| complaint narrative | 517 | 2,132 | 1,390 (0.06%) |
+| recall defect description | 424 | 1,982 | 0 |
+| TSB summary | 220 | 4,155 | 305 |
+| **investigation summary** | **2,417** | **5,940** | **102,256 (66%)** |
+
+So the chunker earns its place on investigation summaries, where two-thirds of rows exceed
+a single chunk. Decision needed: keep `complaint_chunk` as a near-1:1 table (satisfies the
+stated chunking requirement, keeps one uniform retrieval path, future-proofs for longer
+sources), or index `silver_complaint.narrative` directly and chunk only the long sources.
+
+### I-025 — Storage-optimized AI Search endpoint is the wrong choice at this scale
+*Date:* 2026-08-31 · *Status:* resolved
+
+**Symptom.** §4.3 specified a "storage-optimized endpoint given the vector count".
+
+**Root cause.** The trade was backwards. Measured pricing: standard = 2M vectors/unit at
+**$0.28/unit/hour**; storage-optimized = 64M vectors/unit at **$1.28/unit/hour**, minimum
+one unit. At ~2.21M vectors, standard needs two units ($0.56/hr) versus storage-optimized's
+one ($1.28/hr) — **2.3× more expensive for identical capability**. Storage-optimized only
+wins past ~8M vectors, where standard would need five units.
+
+**Second finding, more important.** The **recurring endpoint cost dominates the one-off
+embedding cost by more than 10×**: ~$403/month for the endpoint versus ~$28–36 once for
+embedding 275M tokens. The intuition that embedding is the expensive step is wrong here.
+Endpoint billing stops 24 hours after the last index is deleted, so index lifecycle
+management — not corpus trimming — is the lever that matters.
 
 ---
 
