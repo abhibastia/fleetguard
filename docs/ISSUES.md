@@ -26,6 +26,36 @@ no error and passed the obvious check.
 
 ## Tooling / process
 
+### I-043 — **SILENT** Index watcher exited `0` with `ready=False`; "completed" ≠ "ready"
+*Date:* 2026-08-31 · *Status:* resolved (practice changed)
+
+The background watcher polling the AI Search index sync finished and reported
+`completed (exit code 0)`. It had **not** observed the index becoming ready — it ran a
+fixed 200 iterations at ~60 s and exited on the *iteration cap*. The final logged line was
+`22:49:46 ready=False indexed=899650`.
+
+Exit `0` here means "the loop finished counting", not "the sync finished". Read as the
+latter — which is the natural reading of a green completion notice — it would have put
+"index ready" into `STATUS.md` while the index was at 51% of its corpus, and the next
+session would have run the full-corpus hybrid test against a partial index and drawn
+conclusions from it.
+
+Measured at 23:47 the same evening: **1,130,850 of 1,746,601 chunks (64.7%), `ready:
+false`**, sustaining ~4,000 rows/min. Roughly 2.5 h still to run.
+
+**Root cause:** a bounded `for` loop with the ready-check as a `break`, and no distinct
+exit status for "cap reached" versus "condition met".
+
+**Practice adopted:** a watcher must encode its own verdict in its exit status — non-zero
+(or a loud final line) when it times out without the condition being met. Never infer
+success from a background task's exit code alone; re-check the live resource. Same family
+as I-012 (`_rescued_data` = 0 not proving a clean parse): the green signal was necessary,
+not sufficient.
+
+Also noted: `databricks vector-search-indexes get-index` returns JSON by default, but
+adding `-o json` produced unparseable output. Drop the flag. (Distinct from the
+`query-index` Go SDK unmarshal bug noted in `src/search/09_hybrid_query_test.py`.)
+
 ### I-042 — Blind `sed`/`str.replace` edits caused three silent no-ops and one real bug
 *Date:* 2026-08-31 · *Status:* resolved (practice changed)
 

@@ -172,16 +172,24 @@ failed during the build or exists because something adjacent to it failed silent
 
 ## Picking this up tomorrow
 
-**Running unattended right now:** the AI Search index sync. It was ~42% at 22:11 and moves
-at 4,336 rows/min, so it should be complete overnight (~6.7 h total, I-041). First thing:
+**Running unattended:** the AI Search index sync. Last measured **23:47 — 1,130,850 of
+1,746,601 chunks (64.7%), `ready: false`**, sustaining ~4,000 rows/min. Projected complete
+around **02:20**, ~7 h end to end. First thing in the morning, confirm it against the live
+resource rather than trusting any recorded number:
 
 ```bash
 databricks vector-search-indexes get-index \
   bootcamp_students.fleetguard.complaint_chunk_idx --profile abhi
 ```
 
+Read `status.ready` — it must be `true`, and `indexed_row_count` must reach 1,746,601.
+**Do not infer readiness from a watcher's exit code**: the overnight watcher exited `0`
+having timed out at 51%, still reporting `ready=False` (I-043). Nor add `-o json` to that
+command — it breaks the output; the default is already JSON.
+
 Then re-run the hybrid test to confirm nothing changed qualitatively at full corpus:
-`fleetguard-hybrid-query-test`.
+`fleetguard-hybrid-query-test`. Until `ready: true`, any hybrid result is measured against
+a partial corpus and cannot be compared with the earlier partial-index run.
 
 **Billing:** `fleetguard-vs` is the only recurring cost, ~$6.72/day. Everything else is
 manual-trigger. Stop it by deleting the index then the endpoint.
