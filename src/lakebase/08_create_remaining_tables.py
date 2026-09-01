@@ -24,8 +24,15 @@
 
 # COMMAND ----------
 
-import psycopg
-from databricks.sdk import WorkspaceClient
+import os
+
+# See I-045. `psycopg[binary]` 3.3.5 aborts the kernel with a FIPS self-test failure on
+# serverless. This job's environment is still cached from before that release, so it works
+# today — but a rebuild would break it silently. Set the guard now, not after it fails.
+os.environ.setdefault("PSYCOPG_IMPL", "python")
+
+import psycopg  # noqa: E402 - must follow the PSYCOPG_IMPL assignment above
+from databricks.sdk import WorkspaceClient  # noqa: E402
 
 PROJECT = "projects/summer-bootcamp-2026-v2"
 ENDPOINT = f"{PROJECT}/branches/production/endpoints/primary"
@@ -294,8 +301,9 @@ finally:
 # MAGIC %md
 # MAGIC ## Next
 # MAGIC
-# MAGIC CDF creates a destination table on the first *write*, not on `CREATE TABLE`, so the
-# MAGIC ten new history tables appear once rows are inserted. Verify with:
+# MAGIC CDF replicates the DDL, so all ten destination tables appear as soon as the
+# MAGIC `CREATE TABLE`s commit — no row has to be written first. (An earlier note here
+# MAGIC claimed the opposite; measured 2026-09-01, see I-044.) Verify with:
 # MAGIC
 # MAGIC ```sql
 # MAGIC SHOW TABLES IN bootcamp_students.bootcamp_cdc LIKE 'lb_fleetguard*';

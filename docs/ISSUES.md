@@ -26,6 +26,76 @@ no error and passed the obvious check.
 
 ## Tooling / process
 
+### I-045 — `psycopg[binary]` 3.3.5 aborts the serverless kernel: FIPS self-test failure
+*Date:* 2026-09-01 · *Status:* resolved
+
+`fleetguard-load-reference-from-gold` died with `SIGABRT` (exit 134) inside
+`psycopg.pq.import_from_libpq` — at `import psycopg`, before any project code ran.
+Deterministic across two runs.
+
+**The misleading part:** `fleetguard-create-remaining-tables` uses the *identical*
+environment spec (`psycopg[binary]`, `databricks-sdk>=0.89.0`, client 3) and was re-run
+**the same day as a control — it passed.** That looks like it exonerates the spec. It does
+not. A serverless environment is resolved and **cached per job**: job 08's was built before
+psycopg 3.3.5 shipped, the new job's was built after. Identical spec text, two different
+resolved builds. Nothing in the repo changed; the dependency moved underneath it.
+
+**Root cause** (from `ops_psycopg_probe`): psycopg-binary 3.3.5 bundles its own OpenSSL,
+which aborts on load in this environment with
+
+```
+crypto/fips/fips.c:154: OpenSSL internal error: FATAL FIPS SELFTEST FAILURE
+```
+
+**Fix:** select the pure-Python implementation, which uses the *system* libpq (16.0.15)
+and loads cleanly — verified `IMPORT OK 3.3.5 libpq 160015`, returncode 0:
+
+```python
+import os
+os.environ.setdefault("PSYCOPG_IMPL", "python")
+import psycopg   # must come after
+```
+
+Chosen over pinning a version because a pin only holds until someone rebuilds, and because
+picking a "known-good" version would have meant guessing at one. Applied to notebooks 08
+and 10. **Caveat:** the pure implementation is slower than the C one, which matters for the
+989k-row exposure `COPY` — measure before assuming the reference-load rate carries over.
+
+**Technique worth reusing:** an abort in the notebook kernel destroys the output that would
+explain it. `11_probe_psycopg_env.py` imports in a **subprocess**, so the crash is
+contained and its stderr survives — that is the only reason the FIPS line was recoverable.
+And a probe must **persist** its findings: `get-run-output` returns an empty
+`notebook_output` unless the notebook calls `dbutils.notebook.exit()`, so the first probe
+run succeeded with its diagnosis stranded in the run page.
+
+### I-044 — Wrong claim: CDF materialises history tables on DDL, not on first write
+*Date:* 2026-09-01 · *Status:* resolved (claim corrected)
+
+Notebook 08 asserted, and `STATUS.md` repeated, that *"CDF creates a destination table on
+the first write, not on `CREATE TABLE`, so the ten new history tables appear once rows are
+inserted."* **This is false.** Measured 2026-09-01, before any row was written to ten of
+the eleven tables:
+
+```
+SHOW TABLES IN bootcamp_students.bootcamp_cdc LIKE 'lb_fleetguard*'   -> 11 tables
+lb_fleetguard_depot_history      63 rows   (60 insert + update pre/post + delete, = I-038)
+lb_fleetguard_vehicle_history     0 rows   <- exists, empty
+lb_fleetguard_recall_campaign…    0 rows   <- exists, empty
+```
+
+CDF replicates the **DDL**. All eleven destinations existed the moment the `CREATE TABLE`s
+committed, with exact names and **no `_1` collision suffixes**.
+
+**Consequences.** The naming decision (I-036) is proven for all eleven tables, not just the
+one round-tripped in I-038 — the largest naming risk is fully retired. And the stated
+first rationale for the reference load ("writing rows materialises them") was void; the
+load is still needed, but for **data**, which is a different justification and was corrected
+rather than quietly kept.
+
+This is the class of error the project conventions exist for: a plausible,
+confidently-stated platform behaviour that nobody checked because nothing depended on it
+being true — until it did.
+
 ### I-043 — **SILENT** Index watcher exited `0` with `ready=False`; "completed" ≠ "ready"
 *Date:* 2026-08-31 · *Status:* resolved (practice changed)
 
@@ -33,6 +103,11 @@ The background watcher polling the AI Search index sync finished and reported
 `completed (exit code 0)`. It had **not** observed the index becoming ready — it ran a
 fixed 200 iterations at ~60 s and exited on the *iteration cap*. The final logged line was
 `22:49:46 ready=False indexed=899650`.
+
+**Confirmed general on 2026-09-01:** this is not specific to the watcher. `databricks jobs
+run-now` also returns **exit 0 for a run whose `result_state` is `FAILED`** — seen twice
+with `fleetguard-load-reference-from-gold` (`INTERNAL_ERROR / FAILED`, exit 0). Always read
+`state.result_state` from `jobs list-runs`; never trust the CLI's exit status.
 
 Exit `0` here means "the loop finished counting", not "the sync finished". Read as the
 latter — which is the natural reading of a green completion notice — it would have put

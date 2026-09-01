@@ -5,10 +5,11 @@
 # MAGIC Populates `fleetguard_depot`, `fleetguard_vehicle` and `fleetguard_recall_campaign`
 # MAGIC from the gold layer. Three reasons this comes before the big exposure load:
 # MAGIC
-# MAGIC 1. **CDF creates a destination on the first _write_, not on `CREATE TABLE`.** The ten
-# MAGIC    tables built in step 2 are still invisible in `bootcamp_cdc`. Writing rows
-# MAGIC    materialises them, which is what proves the naming decision (I-036) held for all
-# MAGIC    eleven and not just the one table tested in I-038.
+# MAGIC 1. ~~CDF creates a destination on the first write~~ — **wrong, and already settled.**
+# MAGIC    CDF replicates the DDL, so all eleven history tables existed the moment step 2
+# MAGIC    committed, with exact names and no `_1` collision suffixes (I-044). The naming
+# MAGIC    decision (I-036) is therefore already proven for all eleven, not just the one
+# MAGIC    tested in I-038. This load is about **data**, not about materialising tables.
 # MAGIC 2. **It yields a measured CDF throughput figure** on ~20k rows, which is what the
 # MAGIC    exposure decision needs — `gold_fleet_exposure` is **989,042 rows**, and pushing
 # MAGIC    that through a *shared* Public-Preview CDF pipeline unmeasured would violate the
@@ -29,10 +30,17 @@
 
 import datetime
 import io
+import os
 import time
 
-import psycopg
-from databricks.sdk import WorkspaceClient
+# `psycopg[binary]` 3.3.5 bundles an OpenSSL that fails a FIPS self-test on Databricks
+# serverless and aborts the whole kernel with SIGABRT — before any project code runs
+# (I-045). The pure-Python implementation talks to the system libpq (16.0.15) instead and
+# loads cleanly. This MUST be set before `import psycopg`; psycopg reads it at import.
+os.environ.setdefault("PSYCOPG_IMPL", "python")
+
+import psycopg  # noqa: E402 - must follow the PSYCOPG_IMPL assignment above
+from databricks.sdk import WorkspaceClient  # noqa: E402
 
 PROJECT = "projects/summer-bootcamp-2026-v2"
 ENDPOINT = f"{PROJECT}/branches/production/endpoints/primary"
@@ -286,9 +294,7 @@ rows = [
         "upserted": v["upserted"],
         "load_seconds": float(v["seconds"]),
         "committed_at_epoch": float(commit_wall_clock),
-        "committed_at": datetime.datetime.fromtimestamp(
-            commit_wall_clock, tz=datetime.UTC
-        ),
+        "committed_at": datetime.datetime.fromtimestamp(commit_wall_clock, tz=datetime.UTC),
     }
     for t, v in timings.items()
 ]
@@ -309,9 +315,9 @@ display(spark.table(f"{UC}.ops_lakebase_load"))
 # MAGIC SHOW TABLES IN bootcamp_students.bootcamp_cdc LIKE 'lb_fleetguard*';
 # MAGIC ```
 # MAGIC
-# MAGIC Expect `depot`, `vehicle` and `recall_campaign` history tables to now exist, none
-# MAGIC carrying a `_1` suffix. The remaining seven stay invisible until their first write —
-# MAGIC that is CDF behaviour, not a failure.
+# MAGIC All eleven already exist (I-044). What changes here is their **contents**: check
+# MAGIC that `lb_fleetguard_vehicle_history` and `lb_fleetguard_recall_campaign_history` go
+# MAGIC from 0 rows to the loaded counts, all with `_pg_change_type = 'insert'`.
 # MAGIC
 # MAGIC Then use the measured rows/s here to size the `gold_fleet_exposure` load (989,042
 # MAGIC rows) before running it.
