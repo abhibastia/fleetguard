@@ -198,6 +198,24 @@ with conn.cursor() as cur:
         pdf = spark.sql(spec["sql"]).toPandas()
         print(f"\n{table}: {len(pdf):,} source rows")
 
+        # pandas has no nullable int in its default dtypes, so a Spark INT column that
+        # contains a NULL comes back as float64 and serialises as "2020.0", which Postgres
+        # rejects for an INT column. Ask Postgres what the integer columns actually are
+        # rather than hardcoding a list — a column added later would otherwise reintroduce
+        # this silently. `Int64` (capital I) is pandas' nullable integer.
+        cur.execute(
+            "SELECT column_name, data_type FROM information_schema.columns "
+            "WHERE table_schema = %s AND table_name = %s",
+            (PG_SCHEMA, table),
+        )
+        pg_types = dict(cur.fetchall())
+        for c in cols:
+            if pg_types.get(c) in ("smallint", "integer", "bigint") and str(
+                pdf[c].dtype
+            ).startswith("float"):
+                pdf[c] = pdf[c].round().astype("Int64")
+                print(f"  cast {c}: float -> Int64 ({pg_types[c]})")
+
         cur.execute(f"SELECT COUNT(*) FROM {PG_SCHEMA}.{table}")
         before = cur.fetchone()[0]
 
