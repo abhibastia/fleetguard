@@ -21,10 +21,10 @@ One page answering "where are we". Design lives in `FleetGuard_Proposal.md`, seq
 | **2 — Fleet registry** | ✅ **Done** | 20,000 vehicles / 60 depots / ~989k exposure rows. 400 VINs independently vPIC-verified, 400/400 exact. |
 | **3 — Chunking + AI Search** | ✅ **DONE** | Index complete: **1,746,601 chunks, `ready: true`**, matching source exactly. Done-when **re-verified at full corpus** — hybrid differs from ANN on 2 of 3 queries, harm filter 10/10, near-duplicates 10/10 distinct. The earlier check ran at 42% and was repeated before being quoted. |
 | **4 — Model B + golden set** | ⬜ Not started | Scope now measured: variant matches outnumber exact 3:1 (I-030). |
-| **5 — Lakebase + CDF** | ✅ **DONE** | 11 tables, all `REPLICA IDENTITY FULL`; **all 11 CDF history tables exist with exact names, no `_1` suffixes** (I-044 — CDF replicates DDL, correcting an earlier wrong claim). Reference data loaded: depot 60, vehicle 20,000, campaigns 592. **Capture latency measured: 7.1–15.6 s** (I-046). **Outstanding:** the 989k exposure load — a *scope decision*, not unfinished plumbing. |
-| **6 — OAuth wiring** | ⬜ Not started | Unblocked — 5 is done. |
-| **7 — Agent tools + write path** | ⬜ Not started | Unblocked. Needs the exposure-load scope call to populate the work queue. |
-| **8 — App + external surface** | ⬜ Not started | Unblocked. |
+| **5 — Lakebase + CDF** | ✅ **DONE** | 11 tables, all `REPLICA IDENTITY FULL`; **all 11 CDF history tables exist with exact names, no `_1` suffixes** (I-044 — CDF replicates DDL, correcting an earlier wrong claim). Reference data loaded: depot 60, vehicle 20,000, campaigns 592. **Capture latency measured: 7.1–15.6 s** (I-046). **Exposure loaded** — `EXACT` scope, 263,686 rows deduplicated to **118,323** distinct (vin, campaign) pairs. |
+| **6 — OAuth wiring** | 🟡 **Seam built** | Auth seam (E-13) done and tested on both surfaces: `databricks-apps` header provider and `render-u2m` session provider behind one protocol, 401 on failure, never an SP fallback. U2M code exchange itself outstanding. |
+| **7 — Agent tools + write path** | 🟡 **Write path DONE** | Approval gate works end to end: `POST /campaigns/{id}/service-campaign` → 1 service campaign + N work orders + audit row in **one transaction** → CDF → Unity Catalog. Verified on `17V629000` (25 vehicles). Agent tools outstanding. |
+| **8 — App + external surface** | 🟡 **Backend live** | `/queue`, `/campaigns/{id}`, `/service-campaigns` reading Lakebase with per-user identity. React frontend + Render deploy outstanding. |
 | **9 — Model A + backtest** | ✅ **DONE — result is negative** | **The semantic hypothesis is falsified (I-049).** Subdivision *lowered* detection 13.3% → 11.2%, left lift flat (1.24× → 1.26×), and gave **0.0 days** extra lead on shared detections. Published result stays the volume-anomaly measurement: **16.0% vs 11.1%, 1.44×, p≈0.009**. Done-when explicitly required publishing a possibly-negative number as-is; met. |
 | **10 — Governance** | ⬜ Not started | Recommend a visible slice, not the full matrix. |
 | **11 — Deployment hardening** | ⬜ Not started | |
@@ -47,8 +47,10 @@ One page answering "where are we". Design lives in `FleetGuard_Proposal.md`, seq
 | ops (7) | `ops_ingest_watermark` · `ops_recall_poll_state` · `ops_hybrid_query_test` · `ops_lakebase_load` · `ops_cdf_latency` · `ops_psycopg_probe` · `ops_pg_privilege_diagnostic` | measurement + cursor state |
 | api (2) | `bronze_recall_api` · `gold_recall_alert` | 2,117 rows / 653 campaigns · 0 alerts (correct — nothing novel) |
 
-**Lakebase** (`databricks_postgres.bootcamp_students`): 11 `fleetguard_*` tables, 20,652 rows
-loaded. **CDF** (`bootcamp_students.bootcamp_cdc`): 11 `lb_fleetguard_*_history` tables,
+**Lakebase** (`databricks_postgres.bootcamp_students`): 11 `fleetguard_*` tables, **139,000+ rows**
+(vehicle 20,000 · exposure 118,323 · campaign 592 · depot 60 · + service campaigns/work orders/audit).
+Per-user identity verified: 25 Databricks identities exist as Postgres login roles, `current_user`
+resolves to the caller, and `row_security` is `on`. **CDF** (`bootcamp_students.bootcamp_cdc`): 11 `lb_fleetguard_*_history` tables,
 exact names, no collision suffixes.
 
 **Compute:** 1 pipeline (`fleetguard-bronze-silver`, IDLE) · **16 jobs, all manual** ·
