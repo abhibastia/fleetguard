@@ -5,6 +5,30 @@
 **Capstone Project Proposal**
 Prepared as a production architecture specification.
 
+> ## ⚠️ FROZEN DOCUMENT — design intent as of 2026-08-31
+>
+> **This is the proposal as written before the build. It is deliberately not updated.**
+> For what the system actually does today, read **[`ARCHITECTURE.md`](ARCHITECTURE.md)**.
+>
+> A proposal and a specification have incompatible jobs: a proposal must stay honest about
+> *what was proposed*, a specification must stay true *now*. Editing this document to match
+> later findings would destroy the only record of what was believed at the outset — and the
+> gap between the two is the most informative thing in the repository.
+>
+> **Known contradictions with measured results.** These are left in place on purpose:
+>
+> | § | Claim as written | Measured outcome |
+> |---|---|---|
+> | 1, 3, 4.3 | Semantic clustering surfaces defects earlier; *"the semantic half is load-bearing rather than an enhancement"* | **Falsified.** Subdivision lowered detection 13.3%→11.2% and added **0.0 days** of lead on shared detections (I-049). Model A ships volume-anomaly + harm weighting only. |
+> | 4.3 | HDBSCAN over chunk embeddings produces candidate clusters | HDBSCAN labelled **85% of embeddings noise** at every parameterisation tried (I-048). Replaced by k-means subdivision, retained for *aggregation and explanation*, not detection. |
+> | 8.3 | Lakebase CDF capture latency ~15 s *(documented, unmeasured)* | **Measured 7.1–15.6 s**, mean 12.5 s (I-046). |
+> | 4.4 | CDF history tables appear on first write | **Wrong** — CDF replicates DDL; all 11 existed at `CREATE TABLE` (I-044). |
+>
+> The proactive claim itself stands and is measured: **16.0% detection at a median 197-day
+> lead against 11.1% on a volume-matched placebo** (1.44×, z ≈ 2.62, p ≈ 0.009). §1's
+> promise that lead time would be *"validated against held-out historical recalls"* rather
+> than asserted was kept — including where the validation returned an unwelcome answer.
+
 **Diagrams:** `fleetguard_e2e.html` (system architecture) · `fleetguard_identity.html` (identity & authorisation) — self-contained HTML, so they diff in review rather than drifting silently as binaries.
 
 ---

@@ -179,14 +179,22 @@ failed during the build or exists because something adjacent to it failed silent
 
 ## Document map
 
-| File | Purpose |
-|---|---|
-| `STATUS.md` | This page — where we are |
-| `FleetGuard_Proposal.md` | The design, corrected against measured data |
-| `../PLAN.md` | Phase sequencing and definitions of done |
-| `ISSUES.md` | Every problem hit, root cause, resolution. **Silent failures flagged.** |
-| `fleetguard_e2e.html` / `fleetguard_identity.html` | Current diagrams (editable, diffable) |
-| `../CLAUDE.md` | Verified facts — measured numbers that must not be re-derived |
+Each document has exactly one job and a stated lifecycle. A frozen doc that gets edited
+loses its integrity; a living doc that doesn't get edited becomes a lie.
+
+| File | Purpose | Lifecycle |
+|---|---|---|
+| **`ARCHITECTURE.md`** | **What the system is — the living spec** | Living; update with the code |
+| `FleetGuard_Proposal.md` | What was *proposed*, before the build | **FROZEN** 2026-08-31 |
+| `STATUS.md` | This page — where the build has got to | Living, high-churn |
+| `ISSUES.md` | Every problem hit, root cause, resolution. **Silent failures flagged.** | Append-only |
+| `../PLAN.md` | Phase sequencing and definitions of done | Living |
+| `../CLAUDE.md` | Verified facts that must not be re-derived | Living |
+| `fleetguard_e2e.html` / `fleetguard_identity.html` | Diagrams (editable, diffable) | Living |
+
+The proposal is **not** updated to match findings. Its header tabulates the known
+contradictions with measured results — that gap is the record of what the build taught us,
+and erasing it would destroy the only evidence of what was believed at the outset.
 
 ---
 

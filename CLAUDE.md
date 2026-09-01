@@ -7,9 +7,16 @@ page: phase-by-phase state, what is running unattended, what is costing money, a
 "Picking this up tomorrow" section with the next steps in priority order. Keep it current
 at the end of a working session — it is what a cold session resumes from.
 
-Full design in `docs/FleetGuard_Proposal.md`; build sequence in `PLAN.md`; **every problem
-hit during development is logged in `docs/ISSUES.md` — add to it whenever something breaks
-or turns out to be wrong, especially anything that failed silently.**
+**`docs/ARCHITECTURE.md` is the living spec — what the system actually is.** Keep it true;
+update it in the same commit as the code that changes it.
+
+`docs/FleetGuard_Proposal.md` is **FROZEN** at 2026-08-31 — the design as proposed, never
+updated. Do not "fix" it to match later findings: the gap between proposal and architecture
+is the record of what was learned, and its header tabulates the known contradictions.
+
+Build sequence in `PLAN.md`; **every problem hit during development is logged in
+`docs/ISSUES.md` — add to it whenever something breaks or turns out to be wrong, especially
+anything that failed silently.**
 
 ## Verified facts — do not re-derive, do not "correct" without re-checking live
 
