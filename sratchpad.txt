@@ -38,9 +38,6 @@ calibrated confidence
 
 omnigent(beta)
 
-treat genAI project as any other software engineering project, Have clear success criteria/ user stories to work on.
-Have Questions/response of AI agent and validate with stakeholders
-Also can use LLM as judge to evaluate your model
 
 guardrails-PII detection, topic restriction, safety filter.
 

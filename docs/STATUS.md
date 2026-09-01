@@ -185,6 +185,7 @@ loses its integrity; a living doc that doesn't get edited becomes a lie.
 | File | Purpose | Lifecycle |
 |---|---|---|
 | **`ARCHITECTURE.md`** | **What the system is — the living spec** | Living; update with the code |
+| `ENHANCEMENTS.md` | Evaluated backlog — adopt / defer / reject, each with a reason | Living |
 | `FleetGuard_Proposal.md` | What was *proposed*, before the build | **FROZEN** 2026-08-31 |
 | `STATUS.md` | This page — where the build has got to | Living, high-churn |
 | `ISSUES.md` | Every problem hit, root cause, resolution. **Silent failures flagged.** | Append-only |

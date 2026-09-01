@@ -95,6 +95,10 @@ stops 24 h after the last index is deleted.
   related narratives in the same result set.
 
 ### Phase 4 — Model B + golden set + MLflow harness
+*Build per `docs/ENHANCEMENTS.md` E-05 (`mlflow.genai.evaluate` + `Guidelines` scorers
+encoding FleetGuard's own rules), E-06 (ModelConfig, latest-version resolution), E-08
+(synthetic evals for the **agent only** — Model B's golden set must be real labelled
+recall/fleet pairs), E-07 (labeling session, small slice, state the n).*
 - Build the 150-pair golden set as a `mlflow.genai.datasets` UC dataset.
 - Train the recall-match classifier, tune threshold for recall.
 - Wire `mlflow.genai.evaluate()` with `Correctness`/`RetrievalGroundedness`/`Safety`
@@ -149,12 +153,18 @@ driver, so the 40k rows/s reference figure may not hold.
   correct `_pg_change_type`/`_pg_lsn`.
 
 ### Phase 6 — OAuth wiring
+*See `docs/ENHANCEMENTS.md` E-01 — the AI Gateway must sit on our own pay-per-token LLM
+endpoint, not the agent endpoint, which supports inference tables only. Verify live first.*
 - App resource bindings + OBO scopes for the primary surface; external service
   principal + `generate_database_credential()` pool for Render.
 - **Done when:** a signed-in test user sees ABAC-scoped rows/columns in the App; the
   external surface reads only `public_summary`.
 
 ### Phase 7 — Agent tools + write path
+*Build per `docs/ENHANCEMENTS.md` E-02 (`ResponsesAgent`, models-from-code,
+`agents.deploy()`), E-03 (domain trace spans — `fleetguard_agent_action.trace_id` already
+exists for this), E-04 (inference tables), E-09 (LangGraph, chosen for interrupt/resume at
+the human approval gate).*
 - Build the 4 read + 4 write UC Function tools, `EXECUTE` grants for
   `fleetguard_agent_sp`.
 - Wire the human approval gate on `launch_service_campaign()`.

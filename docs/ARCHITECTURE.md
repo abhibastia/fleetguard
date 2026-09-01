@@ -9,6 +9,7 @@ Companion documents, each with one job:
 | [`FleetGuard_Proposal.md`](FleetGuard_Proposal.md) | What was proposed, before the build | **Frozen** at 2026-08-31 |
 | **This file** | What the system *is* | Living — update with the code |
 | [`STATUS.md`](STATUS.md) | Where the build has got to | Living, high-churn |
+| [`ENHANCEMENTS.md`](ENHANCEMENTS.md) | Evaluated backlog — adopt/defer/reject, with reasons | Living |
 | [`ISSUES.md`](ISSUES.md) | Every problem hit, root cause, resolution | Append-only |
 | [`../PLAN.md`](../PLAN.md) | Phase sequencing and definitions of done | Living |
 | [`../CLAUDE.md`](../CLAUDE.md) | Verified facts that must not be re-derived | Living |
