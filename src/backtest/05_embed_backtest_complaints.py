@@ -37,12 +37,20 @@ CREATE TABLE IF NOT EXISTS gold_backtest_embedding (
     comp_top      STRING,
     received_date TIMESTAMP,
     embedding     ARRAY<FLOAT> COMMENT '1024-dim databricks-gte-large-en vector of the narrative',
+    error_message STRING COMMENT 'ai_query errorMessage when failOnError => false swallowed a failure',
     embedded_at   TIMESTAMP
 )
 USING DELTA
 CLUSTER BY (make, model)
 COMMENT 'Narrative embeddings for the Phase 9 semantic arm. Populated incrementally so a failed run never has to be paid for twice.'
 """)
+
+# The first version of this table predates error_message. Adding it here keeps a re-run
+# idempotent instead of requiring the table to be dropped (which would discard paid-for
+# embeddings).
+if "error_message" not in {f.name for f in spark.table("gold_backtest_embedding").schema.fields}:
+    spark.sql("ALTER TABLE gold_backtest_embedding ADD COLUMNS (error_message STRING)")
+    print("added error_message column to existing table")
 
 before = spark.table("gold_backtest_embedding").count()
 todo = spark.sql("""
@@ -64,14 +72,26 @@ print(f"remaining        : {todo:,}")
 # COMMAND ----------
 
 if todo:
+    # `failOnError => false` changes the RETURN TYPE: instead of the bare `returnType`, the
+    # call yields STRUCT<result: ARRAY<FLOAT>, errorMessage: STRING>. Selecting it directly
+    # into an ARRAY<FLOAT> column fails with DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION.
+    # Unpack the struct, and keep errorMessage so a swallowed failure is visible as text
+    # rather than being inferred from a NULL.
     spark.sql(f"""
         INSERT INTO gold_backtest_embedding
-        SELECT c.complaint_id, c.make, c.model, c.comp_top, c.received_date,
-               ai_query('{ENDPOINT}', c.narrative,
-                        returnType => 'ARRAY<FLOAT>', failOnError => false) AS embedding,
+          (complaint_id, make, model, comp_top, received_date,
+           embedding, error_message, embedded_at)
+        SELECT complaint_id, make, model, comp_top, received_date,
+               r.result       AS embedding,
+               r.errorMessage AS error_message,
                current_timestamp() AS embedded_at
-        FROM gold_backtest_complaint c
-        LEFT ANTI JOIN gold_backtest_embedding e USING (complaint_id)
+        FROM (
+            SELECT c.complaint_id, c.make, c.model, c.comp_top, c.received_date,
+                   ai_query('{ENDPOINT}', c.narrative,
+                            returnType => 'ARRAY<FLOAT>', failOnError => false) AS r
+            FROM gold_backtest_complaint c
+            LEFT ANTI JOIN gold_backtest_embedding e USING (complaint_id)
+        )
     """)
     print("insert complete")
 else:
@@ -118,6 +138,16 @@ if v["null_vectors"]:
         "  To retry them:\n"
         "    DELETE FROM gold_backtest_embedding WHERE embedding IS NULL;\n"
         "  then re-run this notebook."
+    )
+    # The actual reasons, not just the count — a systematic cause (rate limiting, a bad
+    # narrative encoding) needs a different fix from a handful of transient failures.
+    display(
+        spark.sql("""
+        SELECT error_message, COUNT(*) AS n
+        FROM gold_backtest_embedding
+        WHERE embedding IS NULL
+        GROUP BY error_message ORDER BY n DESC LIMIT 10
+    """)
     )
     if pct > 1.0:
         problems.append(f"{pct:.2f}% null embeddings exceeds the 1% tolerance")

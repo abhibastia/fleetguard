@@ -26,6 +26,40 @@ no error and passed the obvious check.
 
 ## Tooling / process
 
+### I-047 — A probe that tests a simpler expression than production proves nothing
+*Date:* 2026-09-01 · *Status:* resolved
+
+Before spending ~30M tokens embedding 205,219 narratives, the plan was deliberately to
+probe `ai_query` on a few rows first. The probe passed — 1024-dim vectors, exactly as
+wanted. The full job then failed immediately:
+
+```
+[DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION] Cannot resolve "embedding":
+cannot cast "STRUCT<..., errorMessage: STRING>" to "ARRAY<FLOAT>"
+```
+
+**Cause:** `failOnError => false` changes `ai_query`'s **return type**. Instead of the bare
+`returnType`, it yields `STRUCT<result: ARRAY<FLOAT>, errorMessage: STRING>`. The probe had
+omitted `failOnError`, so it exercised a *different expression* from the one production
+ran — and passed for that reason.
+
+**Fix:** unpack the struct, and keep `errorMessage` as a stored column so a swallowed
+failure is visible as text rather than inferred from a `NULL`:
+
+```sql
+SELECT r.result AS embedding, r.errorMessage AS error_message
+FROM (SELECT ai_query(..., returnType => 'ARRAY<FLOAT>', failOnError => false) AS r ...)
+```
+
+Note `errorMessage` is `''` (empty string), not `NULL`, on success — so failures are
+detected by `embedding IS NULL`, not by the message being null.
+
+**Practice adopted:** a pre-flight probe must run the **exact expression**, with every
+option the production call uses. A simplified probe tests a different thing and its passing
+is not evidence. This one cost only a fast failure because the job dies at planning time —
+but the same mistake in an expression that *runs* would have spent the full budget before
+surfacing.
+
 ### I-046 — A latency probe that never sees the row absent has measured nothing
 *Date:* 2026-09-01 · *Status:* resolved · **CDF latency now measured**
 
