@@ -1,7 +1,7 @@
 # Render blueprint — FleetGuard console + API as ONE service.
 #
 # One service, not two: FastAPI serves /api/* and the built React console together, so there
-# is no CORS and the U2M session cookie is simply sent. The same arrangement moves to
+# is no CORS. The same arrangement moves to
 # Databricks Apps unchanged (E-12).
 #
 # Free tier spins down on inactivity; /healthz is the warm-up endpoint before any demo.
@@ -25,6 +25,11 @@ services:
     startCommand: uvicorn fleetguard_api.main:app --app-dir app/backend --host 0.0.0.0 --port $PORT
     envVars:
       # Required and never inferred — an unset value must not silently pick a trust model.
+      # U2M is retired (ENHANCEMENTS.md E-14) — this service is the PUBLIC EVIDENCE
+      # surface only. The mode is still set explicitly because an unset value must never
+      # silently pick a trust model; every /api route returns 401 here by design, and the
+      # evidence page needs no session. The operator console lives on Databricks Apps
+      # where OBO supplies the user's token.
       - key: FLEETGUARD_AUTH_MODE
         value: render-u2m
       - key: DATABRICKS_HOST

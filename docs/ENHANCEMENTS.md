@@ -260,6 +260,49 @@ cold or it happens live.
 | ~20 Sept | Deploy to **Databricks Apps**, keep **stopped** | Proves the deployment without burning compute |
 | 25–30 Sept demo | **Databricks App** (started for the window) | The only place OBO is genuine; Render stays as fallback link |
 
+### E-14 · U2M / Path D is RETIRED — **decided 2026-09-02**
+
+**Status: REJECTED. Supersedes the Render half of E-12 and §8.7's Path D.**
+
+U2M cannot be built, and on inspection is not wanted.
+
+**It cannot be built.** U2M needs a *custom OAuth app integration* registered in the
+Databricks **account** console. Measured 2026-09-02: the account is a shared bootcamp
+metastore, `current-user me` reports groups `['users']` (not `admins`), and
+`databricks account custom-app-integration list` returns **`Not Found`**. Registering one
+would mean asking the cohort's owners to create an account-wide OAuth client for one
+student's project.
+
+**It is not wanted.** U2M and OBO end in the same place — the app holding a token that
+represents the user. The only difference is who performs the login. Databricks Apps ingress
+does it for free and injects `X-Forwarded-Access-Token`; U2M would have us implement the
+redirect, PKCE and code exchange ourselves, hold a client secret, and register a client.
+**OBO is the stronger identity story with strictly less setup.**
+
+**Consequence — the two surfaces we actually need both work without it:**
+
+| Surface | Auth | Needs OAuth app? |
+|---|---|---|
+| **Render** — public evidence page | **none** | No — live today |
+| **Databricks Apps** — operator console | **OBO** | No — platform-injected |
+| ~~Render operator console~~ | ~~U2M~~ | yes — blocked, and now unnecessary |
+
+Render's role narrows to what §5.2 always described: an **unauthenticated, pre-aggregated,
+read-only evidence surface**. That is not a downgrade — it is the role the architecture
+assigned it before we tried to make it carry the console too.
+
+> [!danger] Do not "solve" this with a PAT or a service principal
+> The obvious workaround — put `DATABRICKS_TOKEN` or an SP secret in Render's env — makes
+> **every request run as one identity**. Our Render URL is public and the API has a write
+> path, so that would let anyone who finds the URL approve service campaigns. It would also
+> contradict §5.1 and §1's "no long-lived credentials anywhere". Seen suggested in the
+> cohort chat; it is wrong for a public surface with writes.
+
+**The auth seam (E-13) survives intact** and is *more* justified, not less: it now spans
+`static-dev` (local) and `databricks-apps` (deployed). `SessionTokenProvider` stays in the
+codebase — it is tested, costs nothing, and is the implementation U2M would need if an
+account admin ever registers a client.
+
 ### E-13 · The auth seam — **MVP requirement**
 
 **Status: ADOPT — in MVP scope, and the reason E-12 is cheap.**
@@ -339,7 +382,7 @@ evidence.
 | 2 | **Agent — minimal**: `ResponsesAgent`, ~3 tools (2 read, 1 gated write), tracing on (E-02/E-03) | §13's action-taking agent requirement |
 | 3 | **Approval gate** writing to `fleetguard_service_campaign` / `_work_order` / `_audit_log` | The human-in-the-loop claim, and the audit trail |
 | 4 | **Frontend**: React + FastAPI on Render (§8.7 phase 1) — queue, exposure detail, approve, agent panel | The only surface a viewer actually sees |
-| 5 | **U2M OAuth (Path D)** behind the **auth seam** (E-13) | Required for the Render console to hold a real user token — and the seam is what makes the September move to Databricks Apps an afternoon rather than a rewrite |
+| 5 | ~~U2M OAuth (Path D)~~ **RETIRED (E-14)** — the auth seam (E-13) stays | U2M needs an account-admin OAuth registration we do not have, and OBO is better anyway. Render serves the public evidence page with **no auth**; the operator console authenticates via OBO on Databricks Apps. |
 | 6 | **Evidence page** — static, showing the 16.0% / 11.1% / 1.44× result | Already measured; costs almost nothing to display |
 
 **Hosting for MVP is Render** (E-12). Databricks Apps deployment is ~20 Sept, kept stopped
@@ -362,12 +405,12 @@ the write tools beyond the single gated one.
 
 Six days for items 1–6 is **aggressive**, and items 2→3→4 are a dependent chain. If it
 slips, cut in this order: the agent panel (leaving a workflow-only console — still a
-complete demo), then the evidence page, then U2M OAuth by demoing locally.
+complete demo), then the evidence page. (U2M is no longer on the list — see E-14.)
 
 **Do not cut the approval gate or the audit trail.** They are the difference between
 FleetGuard and a dashboard, and they are what §5 and §13 are graded on.
 
-**Do not cut the auth seam either** — even if U2M itself is cut and MVP runs on a locally
+**Do not cut the auth seam either** — even though U2M is retired and MVP runs on a locally
 supplied token. The seam is a few lines on day one and a rewrite in week four, and it lands
 on the code path carrying every authorisation guarantee in §5. Cutting the *implementation*
 is fine; cutting the *indirection* is not.

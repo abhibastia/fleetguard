@@ -278,8 +278,9 @@ Two surfaces, one codebase, decided 2026-09-01 (E-12/E-13).
 
 | Window | Surface | Token source |
 |---|---|---|
-| Build → 7 Sept | **Render** (free tier) | U2M OAuth redirect (Path D) — our code obtains it |
-| ~20 Sept → demo | **Databricks App** in `abhi`, kept `STOPPED` between sessions | `X-Forwarded-Access-Token` header — platform-supplied |
+| Build → 7 Sept | **Render** (free tier) — *public evidence page only* | **none** — the page is static and read-only |
+| Local dev | `static-dev` | developer's own token, never leaves the machine |
+| ~20 Sept → demo | **Databricks App** in `abhi`, kept `STOPPED` between sessions — *the operator console* | `X-Forwarded-Access-Token` header — platform-supplied (OBO) |
 
 **Free-edition Databricks Apps are not viable.** Free edition supports Apps, but it is a
 separate workspace *and* account, and app **resource bindings are workspace-local** — it
@@ -287,6 +288,14 @@ cannot bind abhi's Lakebase, warehouse, or serving endpoint. Worse, §5.1's guar
 requires the signed-in user to *be* an abhi identity so UC evaluates ABAC under their token.
 A free-edition user is not, so every query would run as one service principal and the row
 filters and column masks would be decorative.
+
+**U2M (Path D) is retired (E-14).** It required a custom OAuth app registered in the
+Databricks *account* console; measured 2026-09-02, this account's groups are `['users']`
+(not `admins`) and the account API returns `Not Found`, so it cannot be registered. It is
+also unnecessary: U2M and OBO both end with the app holding the user's token, and Apps
+ingress performs the login for free. **Do not substitute a PAT or service principal on
+Render** — the URL is public and the API has a write path, so a single shared identity there
+would let anyone approve service campaigns.
 
 **The auth seam.** The two environments differ in exactly one way — how the user's token
 arrives. Everything downstream (SQL, Lakebase, agent invocation, ABAC) is identical.
