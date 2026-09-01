@@ -16,6 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from .deps import CurrentPrincipal
+from .routers import approval, queue
 
 app = FastAPI(
     title="FleetGuard API",
@@ -44,6 +45,10 @@ class Health(BaseModel):
 class Me(BaseModel):
     user_name: str | None
     token_source: str
+
+
+app.include_router(queue.router)
+app.include_router(approval.router)
 
 
 @app.get("/healthz", response_model=Health, tags=["ops"])
