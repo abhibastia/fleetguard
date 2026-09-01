@@ -28,6 +28,7 @@ ignore = [
 "src/backtest/*.py" = ["F821", "E402", "F401", "F841"]
 "src/lakebase/*.py" = ["F821", "E402", "F401", "F841"]
 "src/search/*.py"   = ["F821", "E402", "F401", "F841"]
+"src/setup/*.py"    = ["F821", "E402", "F401", "F841"]
 
 [tool.ruff.format]
 quote-style = "double"

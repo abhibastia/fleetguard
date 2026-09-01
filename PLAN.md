@@ -181,14 +181,39 @@ lead on 777 post-2010 investigations, against **11.1% on a volume-matched placeb
 (z ≈ 2.62, p ≈ 0.009). Real but modest — a 1.44× lift. Two earlier versions gave flattering
 artefacts (409 days; 160× separation) and were discarded; see `docs/ISSUES.md` I-027.
 
-**Conclusion that reshapes the plan:** volume anomaly alone does **not** carry the
+~~**Conclusion that reshapes the plan:** volume anomaly alone does not carry the
 differentiator. The semantic half is load-bearing, not an enhancement — which makes Phase 3
-mandatory rather than optional.
+mandatory rather than optional.~~
+
+**SUPERSEDED 2026-09-01 by the experiment it motivated (I-049).** The semantic half was
+built and measured, and it does **not** improve detection — it made it worse, with zero
+lead-time gain on shared detections. The volume-anomaly result is therefore not a floor
+awaiting improvement; it is **the result**. Phase 3 remains justified, but by *retrieval*
+for the agent's search tool (§4.3), not by clustering for early detection.
 
 - ✅ Volume-anomaly scoring + backtest harness with a control arm.
-- ⬜ HDBSCAN over embeddings (needs Phase 3), then re-run the harness to measure the lift.
-- **Done when:** a real (possibly negative) lead-time number exists and is published
-  as-is. *A publishable floor already exists* — remaining work is to improve on it.
+- ✅ Semantic arm built and measured (2026-09-01). HDBSCAN was **abandoned** — it labelled
+  85% of embeddings noise and no parameterisation fixed it (I-048); replaced with k-means
+  subdivision inside each existing series.
+- ❌ **The semantic hypothesis is FALSIFIED (I-049).** Detection *fell* 13.3% → 11.2%, lift
+  unchanged at 1.24× → 1.26×, and on the 70 investigations both groupings detect,
+  subdivision produced **0.0 days** of extra lead time. That zero is decisive: had the
+  mechanism worked and merely been outweighed by fragmentation, shared detections would
+  still fire earlier. They do not. The mechanism did not operate.
+- **DONE — done-when MET.** A real lead-time number exists and is published as-is; it
+  happens to be negative, which the definition of done explicitly anticipated.
+
+**Published result — the differentiator:** **16.0% detection at median 197-day lead vs
+11.1% on a volume-matched placebo (1.44×, z ≈ 2.62, p ≈ 0.009)**, from the volume-anomaly
+detector on the full silver corpus. Modest, real, falsifiable, and defended by a control
+arm. *Do not quote the 13.3%/11.2% pair as the headline* — those are the like-for-like
+comparators computed on the restricted 37-month embedded set, and exist only to make the
+v2-vs-v3 comparison valid.
+
+**Phase 3 is not wasted by this.** Hybrid retrieval is verified and load-bearing for the
+agent's search tool (§4.3) — retrieval and clustering are different uses of the same
+embeddings. What is retired is only the claim that semantic clustering improves early
+detection.
 
 ### Phase 10 — Governance
 - Data Classification, ABAC row filters/column masks, DQ Monitors (including the

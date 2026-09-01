@@ -26,6 +26,67 @@ no error and passed the obvious check.
 
 ## Tooling / process
 
+### I-049 — **NEGATIVE RESULT.** Semantic subdivision does not improve lead-time detection
+*Date:* 2026-09-01 · *Status:* resolved (hypothesis falsified, result published as-is)
+
+The central Phase 9 hypothesis — that grouping complaints by *what they describe* rather
+than by NHTSA's component code would surface defect ramps earlier — is **false on this data
+with this detector**. Recorded here because it is the project's most consequential finding,
+not despite being negative.
+
+**The claim under test.** A component code like `SERVICE BRAKES, HYDRAULIC` is a broad
+bucket; a single defect ramp is a fraction of its volume, so the rise is damped by
+everything else in the code. A semantic sub-grouping shrinks the denominator, so the same
+z-score detector should fire *earlier*. A signal-to-noise argument.
+
+**Result** (`gold_lead_time_v3_summary`, both groupings recomputed on the identical
+37-month working set):
+
+| grouping | arm | detected | rate | median lead |
+|---|---|---|---|---|
+| v2 component | REAL | 103/777 | **13.3%** | 240 d |
+| v2 component | PLACEBO | 65/606 | 10.7% | 360 d |
+| v3 semantic | REAL | 87/777 | **11.2%** | 202 d |
+| v3 semantic | PLACEBO | 54/606 | 8.9% | 273 d |
+
+Lift **1.24× → 1.26×** — unchanged. Detection **fell** 13.3% → 11.2%.
+
+**The paired view is what settles it:**
+
+| arm | both | v2-only | v3-only | median lead gain (shared) |
+|---|---|---|---|---|
+| REAL | 70 | 33 | 17 | **0.0 days** |
+| PLACEBO | 39 | 26 | 15 | 0.0 days |
+
+Subdivision lost 33 detections and gained 17, and on the 70 investigations **both** arms
+detect it produced **zero** additional lead time.
+
+**That zero is the finding.** Had the mechanism worked and simply been outweighed by
+fragmentation, the shared detections would still show a positive lead gain — smaller
+denominator, earlier crossing. They show none. The mechanism did not operate at all. This
+is not "needs tuning": subdivision fired on *fewer* things, not on the same things
+*earlier*.
+
+**Why the v2 row reads 13.3% and not the published 16.0%.** v3 runs on the 37-month
+embedded working set, not all of `silver_complaint`, so v2 is **recomputed on that same
+set** as the like-for-like comparator. Comparing v3 against the published number would have
+credited the grouping change with a data-extent difference. The published 16.0% / 11.1% /
+1.44× stands as the headline result — it is measured on the full silver corpus.
+
+**What this costs and what it does not.** Phase 3's index is *not* wasted: hybrid retrieval
+is verified and load-bearing for the agent's search tool (§4.3), which is a different use
+of embeddings from clustering. What is retired is the claim that *semantic clustering
+improves early detection*. The proposal must not assert it.
+
+**Published position:** the differentiator is the **measured 16.0% vs 11.1% volume-anomaly
+result with a control arm (1.44×, p≈0.009)** — modest, real, and falsifiable. §6 already
+committed to publishing the floor honestly; this is that commitment being kept. A defended
+1.44× with a placebo arm is worth more than an unfalsifiable larger claim.
+
+**Cost of the negative result:** ~$5 of embeddings, one 85-minute HDBSCAN run, and roughly
+half a session. Cheap for retiring the project's central open question 24 days before the
+demo rather than discovering it during.
+
 ### I-048 — HDBSCAN labelled 85% of complaint embeddings as noise; hypothesis for it was wrong
 *Date:* 2026-09-01 · *Status:* resolved (approach changed)
 

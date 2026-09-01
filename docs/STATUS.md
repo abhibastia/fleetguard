@@ -19,7 +19,7 @@ One page answering "where are we". Design lives in `FleetGuard_Proposal.md`, seq
 | **6 — OAuth wiring** | ⬜ Not started | Unblocked — 5 is done. |
 | **7 — Agent tools + write path** | ⬜ Not started | Unblocked. Needs the exposure-load scope call to populate the work queue. |
 | **8 — App + external surface** | ⬜ Not started | Unblocked. |
-| **9 — Model A + backtest** | 🟡 **Semantic arm in flight** | Baseline measured (16.0% vs 11.1% placebo). Semantic arm: scope materialised (777 real / 606 placebo), **205,219 narratives embedded** (0 errors), HDBSCAN **running**. v3 changes exactly one thing vs v2 — the grouping key — so any lift is attributable. |
+| **9 — Model A + backtest** | ✅ **DONE — result is negative** | **The semantic hypothesis is falsified (I-049).** Subdivision *lowered* detection 13.3% → 11.2%, left lift flat (1.24× → 1.26×), and gave **0.0 days** extra lead on shared detections. Published result stays the volume-anomaly measurement: **16.0% vs 11.1%, 1.44×, p≈0.009**. Done-when explicitly required publishing a possibly-negative number as-is; met. |
 | **10 — Governance** | ⬜ Not started | Recommend a visible slice, not the full matrix. |
 | **11 — Deployment hardening** | ⬜ Not started | |
 | **12 — Second connector** | ❌ **Cut** | Deliberately dropped for schedule. |
@@ -153,13 +153,17 @@ failed during the build or exists because something adjacent to it failed silent
 
 1. ~~**Phase 5 is completely untested.**~~ **FULLY RETIRED 2026-09-01** — schema, load, CDF
    replication and capture latency are all measured. This was the project's largest risk.
-2. **The differentiator is still the risk, and the verdict is imminent.** 1.44× is
-   defensible, not impressive. The semantic arm is running now. **It may not improve
-   things** — HDBSCAN clusters finer than component codes produce sparser monthly series,
-   and a series that cannot reach `MIN_COUNT = 5` can never fire however good the semantics
-   are. If detection drops, the fragmentation diagnostic distinguishes that mechanical
-   cause from a genuine semantic failure; they need opposite responses. §6 already commits
-   to publishing the floor honestly, which remains the fallback.
+2. ~~**The differentiator is still the risk, and the verdict is imminent.**~~ **RESOLVED
+   2026-09-01 — and the answer is no.** The semantic arm was built and measured; it makes
+   detection *worse* and adds no lead time (I-049). The fallback is now the position: the
+   differentiator is the **measured 16.0% vs 11.1% volume-anomaly result with a control arm
+   (1.44×, p≈0.009)**. This is a genuine risk *retired*, not deferred — the number is known,
+   defensible, and will not move between now and the demo.
+
+   **The remaining risk is presentational, not technical.** The result is modest, so the
+   demo has to sell *rigour* — a control arm, a falsified hypothesis, a published negative —
+   rather than a big number. That is a stronger story than an unfalsifiable 10×, but it has
+   to be told deliberately.
 3. **Scope vs schedule — now the top schedule risk.** Phases 4, 6, 7, 8, 10, 11 are all
    unstarted with **24 days** left, and 6/7/8 (the demo surface) are a dependent chain.
    Phases 3 and 5 are done, so nothing is blocked *technically* — the constraint is purely
@@ -236,63 +240,67 @@ and not a measurement.
 
 ---
 
-## Phase 9 — semantic arm, in flight (1 Sep)
+## Phase 9 — semantic arm: DONE, result is NEGATIVE (1 Sep)
 
-**The experiment.** v3 changes **exactly one thing** versus v2: the detector's grouping key.
+**The hypothesis is falsified.** Grouping complaints by *what they describe* rather than by
+NHTSA's component code does **not** surface defect ramps earlier. Both groupings recomputed
+on the identical 37-month working set:
 
-| | grouping | result |
-|---|---|---|
-| v2 | `(make, model, comp_top)` | 16.0% real vs 11.1% placebo — **1.44×** |
-| v3 | `(make, model, semantic_cluster)` | *running* |
+| grouping | arm | detected | rate | median lead |
+|---|---|---|---|---|
+| v2 component | REAL | 103/777 | **13.3%** | 240 d |
+| v2 component | PLACEBO | 65/606 | 10.7% | 360 d |
+| v3 semantic | REAL | 87/777 | **11.2%** | 202 d |
+| v3 semantic | PLACEBO | 54/606 | 8.9% | 273 d |
 
-Same sustained-run detector, same 24-month window, same volume-matched placebo, same 777
-investigations. Any lift is attributable to the clustering and nothing else. This is only
-true because `gold_backtest_scope` is materialised **once** and shared by both arms — the
-job asserts the real arm still holds exactly 777 investigations and fails otherwise, since
-a moved population makes the comparison meaningless.
+Lift **1.24× → 1.26×** — unchanged. Detection **fell**.
 
-**Built so far:**
+**The decisive number** is in the paired view: on the **70** investigations both groupings
+detect, subdivision produced **0.0 days** of extra lead time (REAL: 70 both, 33 v2-only,
+17 v3-only).
 
-| step | table | state |
-|---|---|---|
-| scope | `gold_backtest_scope` | 777 REAL / 606 PLACEBO investigations |
-| working set | `gold_backtest_complaint` | 205,219 complaints, deduped |
-| embeddings | `gold_backtest_embedding` | **205,219 × 1024**, 0 null, 0 errors, 3.3 min |
-| clustering | `gold_backtest_cluster` | **HDBSCAN running** (~21 min+) |
+Had the mechanism worked and merely been outweighed by fragmentation, those shared
+detections would still fire *earlier*. They do not. Subdivision fired on **fewer things,
+not the same things sooner** — so this is a falsified mechanism, not an under-tuned one.
 
-**The mechanism under test** is signal-to-noise, not cleverness: a component code is a
-broad bucket, so one failure mode's ramp is damped by everything else sharing that code. A
-tighter semantic cluster shrinks the denominator and should let the same z-score fire
-earlier.
+**Read the 13.3% correctly.** That is v2 **recomputed on the restricted 37-month embedded
+set**, existing only to be a like-for-like comparator for v3. The headline result remains
+the full-corpus measurement below. Never quote the 13.3/11.2 pair as the project's result.
 
-**It can fail, and the failure is informative.** Finer clusters ⇒ sparser monthly series ⇒
-fewer series reaching `MIN_COUNT = 5`. Detection could *drop* for a purely mechanical
-reason. The clustering job therefore reports three diagnostics that a lead-time number
-alone would hide: **noise rate per arm** (is the semantic arm detecting on a biased
-subset?), **cluster asymmetry** (is one arm clustered better than the other — the I-027
-failure mode?), and **fragmentation** (series count and mean size, v2 grouping vs v3).
+### Published result — the differentiator
 
-**Known asymmetry, stated up front:** the placebo covers 606 of 777 investigations — 171
-had no volume-matched never-investigated series in their bucket. Rates are per-arm so the
-comparison holds, but the control is a 78% subset, not a mirror.
+> **16.0% detection at a median 197-day lead, against 11.1% on a volume-matched placebo.**
+> **1.44×, z ≈ 2.62, p ≈ 0.009.** Volume-anomaly detector, full silver corpus.
 
-**Deliberate choice:** one *global* clustering, not per `(make, model)`. Per-group models
-would differ in quality across arms, since the placebo was volume-matched at series level
-rather than group level — exactly the asymmetry that manufactured the discarded 160×
-artefact (I-027).
+Modest, real, falsifiable, defended by a control arm — and now also defended by a
+*published negative* on the obvious "just add embeddings" improvement.
+
+**Phase 3 is not invalidated.** Hybrid retrieval is verified and load-bearing for the
+agent's search tool (§4.3). Retrieval and clustering are different uses of the same
+embeddings; only the clustering claim is retired.
+
+**What it cost:** ~$5 of embeddings, one abandoned 85-minute HDBSCAN run (I-048), about
+half a session. Cheap for closing the project's central open question 24 days out rather
+than discovering it mid-demo.
 
 ---
 
 ## Next steps, in order
 
-1. **Finish Phase 9's semantic arm** — read the diagnostics *before* the lead-time number;
-   they decide whether the number means anything. Then build v3 and publish the result
-   as-is, including if it is worse.
-2. **The 989k-row exposure load** — a scope call, not a build task. See Open decisions.
-3. **Phases 6 → 7 → 8**, the demo surface and now the schedule's critical path: a dependent
-   chain, all unstarted, 24 days out. Nothing blocks them technically.
-4. **§8.3 in the proposal** still says the ~15 s figure is documented-not-measured. It is
-   now measured — update that line with the 7.1–15.6 s range.
+**Phase 9 is closed.** All measurement work is done; what remains is building the demo
+surface and correcting the proposal.
+
+1. **Phases 6 → 7 → 8 — the demo surface, and now the only critical path.** A dependent
+   chain, all unstarted, 24 days out, nothing blocking them technically. This is where the
+   remaining time should go.
+2. **Correct the proposal against measured reality.** Three edits, all now evidenced:
+   - §3/§6: the semantic-clustering claim is **falsified** (I-049) — remove or restate it.
+     The differentiator is the 16.0% / 11.1% / 1.44× volume-anomaly result.
+   - §8.3: the ~15 s CDF figure is no longer documented-not-measured — it is **7.1–15.6 s**.
+   - §4.3: keep the hybrid-retrieval claim; it is verified and independent of the clustering
+     result.
+3. **The 989k-row exposure load** — a scope call, not a build task. See Open decisions.
+   Needed for Phase 7's work queue.
 
 **Verification discipline** (earned the hard way, I-043): never infer success from a
 background task's exit code — re-check the live resource. The overnight index watcher
