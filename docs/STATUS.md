@@ -1,6 +1,6 @@
 # FleetGuard — project status
 
-**Last updated:** 2026-08-31 (end of session) · **Demo window:** 25–30 September 2026
+**Last updated:** 2026-09-01 · **Demo window:** 25–30 September 2026 · **24 days out**
 
 One page answering "where are we". Design lives in `FleetGuard_Proposal.md`, sequencing in
 `../PLAN.md`, and every problem hit during the build in `ISSUES.md`.
@@ -11,15 +11,15 @@ One page answering "where are we". Design lives in `FleetGuard_Proposal.md`, seq
 
 | Phase | Status | Detail |
 |---|---|---|
-| **1 — Ingestion + bronze/silver/gold** | 🟡 **~90%** | Ingest job, bronze (4), silver (9) all built and validated. **Outstanding:** chunking → `complaint_chunk`, and 2 of 5 gold tables that are blocked on Phases 3/9. Ingest is **deliberately manual** — no schedule, to avoid consuming shared-workspace compute before it's needed. |
+| **1 — Ingestion + bronze/silver/gold** | 🟡 **~90%** | Ingest job, bronze (4), silver (9) built and validated. Chunking done — `silver_complaint_chunk_indexed`, 1,746,601 chunks. **Outstanding:** `gold_emerging_cluster` + the scope tables that follow it, both blocked on Phase 9's semantic arm. Ingest is **deliberately manual** — no schedule, to avoid consuming shared-workspace compute before it's needed. |
 | **2 — Fleet registry** | ✅ **Done** | 20,000 vehicles / 60 depots / ~989k exposure rows. 400 VINs independently vPIC-verified, 400/400 exact. |
-| **3 — Chunking + AI Search** | ✅ **Done-when met** | Hybrid retrieval verified (I-040): exact-token + semantic in one result set, `columns_to_sync` works, harm filter PASSES 10/10. Index still syncing (~42%, ~6.7h total — I-041); re-run the test after completion to confirm nothing changes. |
+| **3 — Chunking + AI Search** | ✅ **DONE** | Index complete: **1,746,601 chunks, `ready: true`**, matching source exactly. Done-when **re-verified at full corpus** — hybrid differs from ANN on 2 of 3 queries, harm filter 10/10, near-duplicates 10/10 distinct. The earlier check ran at 42% and was repeated before being quoted. |
 | **4 — Model B + golden set** | ⬜ Not started | Scope now measured: variant matches outnumber exact 3:1 (I-030). |
-| **5 — Lakebase + CDF** | ✅ **Schema done** | All **11 tables** created, every one `REPLICA IDENTITY FULL`. CDF round-trip verified end to end on `fleetguard_depot` (I-038). **Outstanding:** populate the tables, and a timed write to measure real capture latency. Unblocks 6–8. |
-| **6 — OAuth wiring** | ⬜ Not started | Blocked on 5. |
-| **7 — Agent tools + write path** | ⬜ Not started | Blocked on 5. |
-| **8 — App + external surface** | ⬜ Not started | Blocked on 5. |
-| **9 — Model A + backtest** | 🟡 **Baseline done** | Volume-anomaly half measured with a control arm. Semantic half outstanding (needs Phase 3). |
+| **5 — Lakebase + CDF** | ✅ **DONE** | 11 tables, all `REPLICA IDENTITY FULL`; **all 11 CDF history tables exist with exact names, no `_1` suffixes** (I-044 — CDF replicates DDL, correcting an earlier wrong claim). Reference data loaded: depot 60, vehicle 20,000, campaigns 592. **Capture latency measured: 7.1–15.6 s** (I-046). **Outstanding:** the 989k exposure load — a *scope decision*, not unfinished plumbing. |
+| **6 — OAuth wiring** | ⬜ Not started | Unblocked — 5 is done. |
+| **7 — Agent tools + write path** | ⬜ Not started | Unblocked. Needs the exposure-load scope call to populate the work queue. |
+| **8 — App + external surface** | ⬜ Not started | Unblocked. |
+| **9 — Model A + backtest** | 🟡 **Semantic arm in flight** | Baseline measured (16.0% vs 11.1% placebo). Semantic arm: scope materialised (777 real / 606 placebo), **205,219 narratives embedded** (0 errors), HDBSCAN **running**. v3 changes exactly one thing vs v2 — the grouping key — so any lift is attributable. |
 | **10 — Governance** | ⬜ Not started | Recommend a visible slice, not the full matrix. |
 | **11 — Deployment hardening** | ⬜ Not started | |
 | **12 — Second connector** | ❌ **Cut** | Deliberately dropped for schedule. |
@@ -30,18 +30,23 @@ One page answering "where are we". Design lives in `FleetGuard_Proposal.md`, seq
 
 **Schema:** `bootcamp_students.fleetguard` (owned by `abhisek.bastia17@gmail.com`, inside a
 *shared* bootcamp metastore — never write outside it).
-**20 tables, ~16.4M rows.**
+**34 tables** (excluding pipeline materialisations and event logs).
 
 | Layer | Tables | Rows |
 |---|---|---|
 | bronze (4) | `bronze_complaints` · `bronze_recalls` · `bronze_investigations` · `bronze_tsbs` | 2,240,289 · 244,925 · 154,367 · 5,801,279 |
-| silver (9) | `silver_complaint` (+quarantine) · `silver_recall` (+q) · `silver_investigation` (+q, +`_case`) · `silver_tsb` (+`_bulletin`) | 2,209,123 · 244,701 · 154,191 · 5,801,279 |
-| gold (6) | `gold_fleet_vehicle` · `gold_fleet_depot` · `gold_fleet_exposure` · `gold_lead_time_backtest` · `gold_lead_time_control` · `gold_lead_time_summary` | 20,000 · 60 · ~989k · 777 · 67 · 2 |
-| ops (2) | `ops_ingest_watermark` · `ops_recall_poll_state` | `If-Modified-Since` cursor · recall poll cursor |
+| silver (10) | `silver_complaint` (+quarantine, +`_chunk`, +`_chunk_indexed`) · `silver_recall` (+q) · `silver_investigation` (+q, +`_case`) · `silver_tsb` (+`_bulletin`) | 2,209,123 · **1,746,601 chunks** · 244,701 · 154,191 · 5,801,279 |
+| gold — fleet (3) | `gold_fleet_vehicle` · `gold_fleet_depot` · `gold_fleet_exposure` | 20,000 · 60 · 989,042 |
+| gold — backtest (6) | `gold_lead_time_backtest` · `_control` · `_summary` · `gold_backtest_scope` · `_complaint` · `_embedding` | 777 · 67 · 2 · 6,649 · 205,219 · **205,219 vectors** |
+| ops (7) | `ops_ingest_watermark` · `ops_recall_poll_state` · `ops_hybrid_query_test` · `ops_lakebase_load` · `ops_cdf_latency` · `ops_psycopg_probe` · `ops_pg_privilege_diagnostic` | measurement + cursor state |
 | api (2) | `bronze_recall_api` · `gold_recall_alert` | 2,117 rows / 653 campaigns · 0 alerts (correct — nothing novel) |
 
-**Compute:** 1 pipeline (`fleetguard-bronze-silver`, IDLE) · 5 jobs, **all manual** ·
-1 serverless SQL warehouse.
+**Lakebase** (`databricks_postgres.bootcamp_students`): 11 `fleetguard_*` tables, 20,652 rows
+loaded. **CDF** (`bootcamp_students.bootcamp_cdc`): 11 `lb_fleetguard_*_history` tables,
+exact names, no collision suffixes.
+
+**Compute:** 1 pipeline (`fleetguard-bronze-silver`, IDLE) · **16 jobs, all manual** ·
+1 serverless SQL warehouse · 1 AI Search endpoint.
 
 **APIs integrated:** vPIC (`DecodeVINValuesBatch`, authoritative for make/model/year) ·
 recalls (`recallsByVehicle`, 200/200 combos, 100 s sweep) · `static.nhtsa.gov` flat files
@@ -137,23 +142,34 @@ failed during the build or exists because something adjacent to it failed silent
 
 | # | Decision | Blocks |
 |---|---|---|
-| **I-026** | **Chunking scope.** 512-token chunking is ~1.0006 chunks/row on complaint narratives (`CDESCR` is `CHAR(2048)`). It genuinely earns its place on investigation summaries (66% exceed one chunk). Keep the near-1:1 table, or index narratives directly? | Phase 3 |
-| **I-018** | **Index lifecycle.** How long to leave the AI Search endpoint up. Suggested: subset while developing, full corpus from ~20 Sept. | Phase 3 cost |
+| **NEW** | **Exposure load scope.** `gold_fleet_exposure` → `fleetguard_vehicle_exposure` is **989,042 rows**. `COPY` is not the constraint (~25 s at the reference rate); the question is what ~1M change events do to a CDF pipeline **shared with ~296 other students**. Options: full, `EXACT`-only (263,686), or a demo slice. Re-measure throughput first — the `PSYCOPG_IMPL=python` fix (I-045) uses the slower pure-Python driver. | Phase 7's work queue |
+| **I-018** | **Index lifecycle.** How long to leave the AI Search endpoint up. Now the only recurring cost at ~$6.72/day; ~24 days to demo ⇒ ~$160 if left running throughout. | Cost |
 | **I-015** | **Streaming vs PII guardrail.** AI Gateway output guardrails don't apply to streaming responses — either no streaming, or drop the §4.5 "second layer" claim. | Phases 7–8 |
+| ~~I-026~~ | ~~Chunking scope.~~ **Resolved by measurement** — the full-corpus hybrid test returned 10/10 distinct `complaint_id`, so the near-1:1 chunk table causes no near-duplicate retrieval problem and needs no read-time dedupe. | — |
 
 ---
 
 ## Risks, honestly
 
-1. ~~**Phase 5 is completely untested.**~~ **RETIRED 2026-08-31** — the CDF round-trip is
-   verified end to end (I-038). What remains is the other 10 tables plus a timed
-   latency measurement, both routine. This was the project's largest risk and it is gone.
-2. **Scope vs schedule.** Eight phases remain in four weeks. Phase 1 alone produced 8 logged
-   issues, 4 of them silent. Cut list already agreed: Phase 12 (done), Feature Store online
-   serving, Genie Agent, Unity AI Gateway, governance reduced to a visible slice.
-3. **The differentiator is real but modest so far.** 1.44× lift is defensible, not
-   impressive. Phase 3 has to improve it — and if it doesn't, §6 already commits to
-   publishing the floor honestly, which is the fallback.
+1. ~~**Phase 5 is completely untested.**~~ **FULLY RETIRED 2026-09-01** — schema, load, CDF
+   replication and capture latency are all measured. This was the project's largest risk.
+2. **The differentiator is still the risk, and the verdict is imminent.** 1.44× is
+   defensible, not impressive. The semantic arm is running now. **It may not improve
+   things** — HDBSCAN clusters finer than component codes produce sparser monthly series,
+   and a series that cannot reach `MIN_COUNT = 5` can never fire however good the semantics
+   are. If detection drops, the fragmentation diagnostic distinguishes that mechanical
+   cause from a genuine semantic failure; they need opposite responses. §6 already commits
+   to publishing the floor honestly, which remains the fallback.
+3. **Scope vs schedule — now the top schedule risk.** Phases 4, 6, 7, 8, 10, 11 are all
+   unstarted with **24 days** left, and 6/7/8 (the demo surface) are a dependent chain.
+   Phases 3 and 5 are done, so nothing is blocked *technically* — the constraint is purely
+   build time. Cut list already agreed: Phase 12 (done), Feature Store online serving,
+   Genie Agent, Unity AI Gateway, governance reduced to a visible slice.
+4. **A pattern worth naming: the tooling lies about success.** Three distinct variants in
+   one day — a watcher exiting `0` at 51% (I-043), `jobs run-now` returning `0` for a
+   `FAILED` run, and the CLI reporting `Error: timed out` while the job ran on healthily.
+   **Only `state.result_state` describes the job.** Every verification in this project reads
+   the live resource, never the client's exit code.
 
 ---
 
@@ -220,19 +236,63 @@ and not a measurement.
 
 ---
 
+## Phase 9 — semantic arm, in flight (1 Sep)
+
+**The experiment.** v3 changes **exactly one thing** versus v2: the detector's grouping key.
+
+| | grouping | result |
+|---|---|---|
+| v2 | `(make, model, comp_top)` | 16.0% real vs 11.1% placebo — **1.44×** |
+| v3 | `(make, model, semantic_cluster)` | *running* |
+
+Same sustained-run detector, same 24-month window, same volume-matched placebo, same 777
+investigations. Any lift is attributable to the clustering and nothing else. This is only
+true because `gold_backtest_scope` is materialised **once** and shared by both arms — the
+job asserts the real arm still holds exactly 777 investigations and fails otherwise, since
+a moved population makes the comparison meaningless.
+
+**Built so far:**
+
+| step | table | state |
+|---|---|---|
+| scope | `gold_backtest_scope` | 777 REAL / 606 PLACEBO investigations |
+| working set | `gold_backtest_complaint` | 205,219 complaints, deduped |
+| embeddings | `gold_backtest_embedding` | **205,219 × 1024**, 0 null, 0 errors, 3.3 min |
+| clustering | `gold_backtest_cluster` | **HDBSCAN running** (~21 min+) |
+
+**The mechanism under test** is signal-to-noise, not cleverness: a component code is a
+broad bucket, so one failure mode's ramp is damped by everything else sharing that code. A
+tighter semantic cluster shrinks the denominator and should let the same z-score fire
+earlier.
+
+**It can fail, and the failure is informative.** Finer clusters ⇒ sparser monthly series ⇒
+fewer series reaching `MIN_COUNT = 5`. Detection could *drop* for a purely mechanical
+reason. The clustering job therefore reports three diagnostics that a lead-time number
+alone would hide: **noise rate per arm** (is the semantic arm detecting on a biased
+subset?), **cluster asymmetry** (is one arm clustered better than the other — the I-027
+failure mode?), and **fragmentation** (series count and mean size, v2 grouping vs v3).
+
+**Known asymmetry, stated up front:** the placebo covers 606 of 777 investigations — 171
+had no volume-matched never-investigated series in their bucket. Rates are per-arm so the
+comparison holds, but the control is a 78% subset, not a mirror.
+
+**Deliberate choice:** one *global* clustering, not per `(make, model)`. Per-group models
+would differ in quality across arms, since the placebo was volume-matched at series level
+rather than group level — exactly the asymmetry that manufactured the discarded 160×
+artefact (I-027).
+
+---
+
 ## Next steps, in order
 
-1. **The 989k-row exposure load** — `gold_fleet_exposure` → `fleetguard_vehicle_exposure`.
-   Still deliberately not run. Postgres `COPY` is not the constraint (40k rows/s ⇒ ~25 s);
-   the open question is what ~1M change events do to a CDF pipeline **shared with ~296
-   other students** on `bootcamp_cdc`. Decide scope first: full 989k, `EXACT`-only
-   (263,686), or a demo-scoped slice. **Note:** the `PSYCOPG_IMPL=python` fix (I-045) uses
-   the slower pure-Python driver, so re-measure throughput at scale rather than assuming
-   the 40k rows/s figure holds.
-2. **Phase 9 semantic upgrade** — HDBSCAN over the now-complete index, re-run the backtest
-   harness, and see whether the 16.0% / 11.1% gap widens. This is the differentiator.
-3. **§8.3 in the proposal** still says the ~15 s figure is documented-not-measured. It is
-   now measured — update that line with the 7–16 s range.
+1. **Finish Phase 9's semantic arm** — read the diagnostics *before* the lead-time number;
+   they decide whether the number means anything. Then build v3 and publish the result
+   as-is, including if it is worse.
+2. **The 989k-row exposure load** — a scope call, not a build task. See Open decisions.
+3. **Phases 6 → 7 → 8**, the demo surface and now the schedule's critical path: a dependent
+   chain, all unstarted, 24 days out. Nothing blocks them technically.
+4. **§8.3 in the proposal** still says the ~15 s figure is documented-not-measured. It is
+   now measured — update that line with the 7.1–15.6 s range.
 
 **Verification discipline** (earned the hard way, I-043): never infer success from a
 background task's exit code — re-check the live resource. The overnight index watcher
