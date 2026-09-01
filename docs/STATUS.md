@@ -73,8 +73,8 @@ Everything here is measured against live data, not estimated. Full derivations i
 
 ### Lead-time backtest — the differentiator
 
-The claim is *complaint accumulation → ODI investigation opens*. Volume-anomaly half of
-Model A only; no embeddings yet.
+The claim is *complaint accumulation → ODI investigation opens*. Volume-anomaly detector
+with harm weighting — **this is the final Model A**, not an interim half.
 
 | Arm | n | Detected | Rate | Median lead |
 |---|---:|---:|---:|---:|
@@ -86,8 +86,14 @@ lift). A secondary signal is stronger than the headline: real detections cluster
 open date while control detections scatter toward the window midpoint, which is the shape a
 detector tracking a genuine ramp produces.
 
-**Implication:** volume anomaly alone does not carry the differentiator. The semantic half
-(Phase 3 → 9) is load-bearing, not an enhancement.
+~~**Implication:** volume anomaly alone does not carry the differentiator. The semantic half
+(Phase 3 → 9) is load-bearing, not an enhancement.~~
+
+**SUPERSEDED 2026-09-01 by the experiment it motivated (I-049).** The semantic arm was
+built and measured: it *lowered* detection to 11.2% and added **0.0 days** of lead on shared
+detections. Volume anomaly does not merely carry the differentiator — it **is** the
+differentiator. The figures above are the published result, not a floor awaiting
+improvement.
 
 ### Corpus
 
