@@ -272,6 +272,31 @@ Stated so they are not mistaken for omissions.
 
 ---
 
+## 8a. Hosting and the auth seam
+
+Two surfaces, one codebase, decided 2026-09-01 (E-12/E-13).
+
+| Window | Surface | Token source |
+|---|---|---|
+| Build → 7 Sept | **Render** (free tier) | U2M OAuth redirect (Path D) — our code obtains it |
+| ~20 Sept → demo | **Databricks App** in `abhi`, kept `STOPPED` between sessions | `X-Forwarded-Access-Token` header — platform-supplied |
+
+**Free-edition Databricks Apps are not viable.** Free edition supports Apps, but it is a
+separate workspace *and* account, and app **resource bindings are workspace-local** — it
+cannot bind abhi's Lakebase, warehouse, or serving endpoint. Worse, §5.1's guarantee
+requires the signed-in user to *be* an abhi identity so UC evaluates ABAC under their token.
+A free-edition user is not, so every query would run as one service principal and the row
+filters and column masks would be decorative.
+
+**The auth seam.** The two environments differ in exactly one way — how the user's token
+arrives. Everything downstream (SQL, Lakebase, agent invocation, ABAC) is identical.
+Therefore the backend resolves the caller's token through **a single swappable provider**
+selected by configuration; **no route handler reads a header or session directly**. This is
+built in MVP, not retrofitted: with the seam the migration is an afternoon, without it a
+rewrite in the final week, on the code path carrying every authorisation guarantee in §5.
+
+---
+
 ## 9. Operations
 
 **Cost.** `fleetguard-vs` (AI Search, STANDARD, 1 unit) at **~$6.72/day** is the only

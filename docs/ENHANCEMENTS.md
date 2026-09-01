@@ -213,6 +213,78 @@ correct: **Genie answers questions over governed tables; the agent does things u
 approval.** Two NL surfaces with distinct jobs is a stronger story than one chatbot
 pretending to be both — and it is why E-10 below is now *upgraded* rather than deferred.
 
+### E-12 · Hosting — Render for building, Databricks Apps for submitting — **decided 2026-09-01**
+
+**Status: ADOPT. Confirms §8.7's phased rollout; the auth seam becomes an MVP requirement.**
+
+Three options were considered.
+
+**❌ Free-edition Databricks App — rejected.** Free edition *does* support Apps (three exist
+there), but it is a **different workspace and a different account**:
+
+| | free-edition | abhi |
+|---|---|---|
+| Workspace | `dbc-6b3a5534-db75` | `dbc-7b106152-caf3` |
+| User | `abhibastia90@gmail.com` | `abhisek.bastia17@gmail.com` |
+
+App **resource bindings are workspace-local**, so a free-edition app cannot bind abhi's
+Lakebase, SQL warehouse, or model-serving endpoint. The only route would be M2M OAuth with a
+stored secret calling abhi's REST endpoints.
+
+That **destroys §5.1 Path A**. The claim is *"identity determines both rows and columns, and
+the frontend cannot bypass it"* — which requires the signed-in user to **be** an abhi
+identity so Unity Catalog evaluates ABAC under their own token. A free-edition user is not
+one, so every query would execute as a single service principal and the row filters and
+column masks become decorative. Rejected: it converts the project's strongest architectural
+claim into a fiction. (All the data is in abhi anyway.)
+
+**✅ Databricks Apps in `abhi` — required, but managed.** `databricks apps start` / `stop`
+both exist, and **all ~40 student apps in that workspace currently sit `STOPPED`** — clearly
+the intended pattern. Deploy once, keep stopped, start for testing and the submission window.
+Not optional: §13 requires a *deployed* application and §5.1's OBO story is only genuine
+inside an App. An identity architecture never deployed is an assertion.
+
+> ⚠️ **Cost UNMEASURED.** `system.billing` is not readable from this account, so no figure is
+> quoted here. Confirm with the workspace admin, or deploy once and observe for a day, before
+> relying on the "stopped is free" assumption.
+
+**✅ Render — right for building, risky for the live demo.** Free tier **spins down on
+inactivity**; a 30–60 s cold start is fine for development and bad if a grader opens the link
+cold or it happens live.
+
+**Decision:**
+
+| Window | Surface | Why |
+|---|---|---|
+| Now → 7 Sept (MVP) | **Render** | Free, fast iteration while code changes hourly |
+| ~20 Sept | Deploy to **Databricks Apps**, keep **stopped** | Proves the deployment without burning compute |
+| 25–30 Sept demo | **Databricks App** (started for the window) | The only place OBO is genuine; Render stays as fallback link |
+
+### E-13 · The auth seam — **MVP requirement**
+
+**Status: ADOPT — in MVP scope, and the reason E-12 is cheap.**
+
+The two hosting environments differ in **exactly one** way:
+
+| | How the user token arrives |
+|---|---|
+| Render (§8.7 phase 1) | U2M OAuth redirect flow (**Path D**) — our code obtains it |
+| Databricks Apps (phase 2) | `X-Forwarded-Access-Token` header — the platform hands it over |
+
+Everything downstream is identical: the SQL, the Lakebase calls, the agent invocation, ABAC
+evaluation. So the backend must resolve the caller's token through **one swappable
+dependency** — a single `get_user_token()` provider selected by configuration — and never
+read the header or the session directly inside a route handler.
+
+**Why this is MVP scope and not a later refactor.** If the seam exists, the September
+migration is an afternoon. If it does not, it is a rewrite in the week we can least afford
+one — and it would land immediately before the demo, on the code path that carries every
+authorisation guarantee in §5. The cheapest moment to build it is the first handler; the
+most expensive is the twentieth.
+
+**Testable now, off-platform:** the provider is plain Python, so both implementations get
+unit tests alongside `vin.py` and `chunking.py` — no workspace required.
+
 ---
 
 ## Tier 3 — genuinely additive; only if Phases 6–8 land early
@@ -267,8 +339,12 @@ evidence.
 | 2 | **Agent — minimal**: `ResponsesAgent`, ~3 tools (2 read, 1 gated write), tracing on (E-02/E-03) | §13's action-taking agent requirement |
 | 3 | **Approval gate** writing to `fleetguard_service_campaign` / `_work_order` / `_audit_log` | The human-in-the-loop claim, and the audit trail |
 | 4 | **Frontend**: React + FastAPI on Render (§8.7 phase 1) — queue, exposure detail, approve, agent panel | The only surface a viewer actually sees |
-| 5 | **U2M OAuth (Path D)** | Required for the Render-hosted console to hold a real user token |
+| 5 | **U2M OAuth (Path D)** behind the **auth seam** (E-13) | Required for the Render console to hold a real user token — and the seam is what makes the September move to Databricks Apps an afternoon rather than a rewrite |
 | 6 | **Evidence page** — static, showing the 16.0% / 11.1% / 1.44× result | Already measured; costs almost nothing to display |
+
+**Hosting for MVP is Render** (E-12). Databricks Apps deployment is ~20 Sept, kept stopped
+until the demo window. The App is *not* MVP scope, but the **auth seam that makes it cheap
+is** — see E-13.
 
 ### Explicitly NOT in MVP
 
@@ -290,6 +366,11 @@ complete demo), then the evidence page, then U2M OAuth by demoing locally.
 
 **Do not cut the approval gate or the audit trail.** They are the difference between
 FleetGuard and a dashboard, and they are what §5 and §13 are graded on.
+
+**Do not cut the auth seam either** — even if U2M itself is cut and MVP runs on a locally
+supplied token. The seam is a few lines on day one and a rewrite in week four, and it lands
+on the code path carrying every authorisation guarantee in §5. Cutting the *implementation*
+is fine; cutting the *indirection* is not.
 
 ---
 

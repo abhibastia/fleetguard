@@ -184,6 +184,11 @@ the human approval gate).*
   row — works live.
 
 ### Phase 8 — Databricks App + external surface
+*Hosting decided (E-12): **Render** through MVP, **Databricks Apps** deployed ~20 Sept and
+kept `STOPPED` between sessions, live demo on the App. Free-edition Apps rejected — separate
+workspace/account, resource bindings are workspace-local, and §5.1's ABAC guarantee needs the
+user to be an `abhi` identity. **The auth seam (E-13) is MVP scope**: one swappable token
+provider, no handler reading headers directly.*
 - `app.yaml`, resource bindings, OBO console (signal queue, approval, work orders).
 - Render: read-only `public_summary` page, `/health`, `/api/stats`.
 - **Done when:** both surfaces are deployed and the App is the primary demoable
