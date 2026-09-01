@@ -26,6 +26,58 @@ no error and passed the obvious check.
 
 ## Tooling / process
 
+### I-048 — HDBSCAN labelled 85% of complaint embeddings as noise; hypothesis for it was wrong
+*Date:* 2026-09-01 · *Status:* resolved (approach changed)
+
+Global HDBSCAN over the 205,219 narrative embeddings returned **85.4% noise** — 175,310
+complaints unclustered, 29,909 in 286 clusters. The semantic arm would have been detecting
+on a 15% subset, and would still have produced a plausible-looking lead-time number. The
+pre-committed diagnostics (noise rate, arm asymmetry, fragmentation) are the only reason
+that number was never computed.
+
+**My stated cause was wrong.** I attributed it to clustering *unnormalised* `gte-large-en`
+vectors under `metric="euclidean"`, reasoning that magnitude tracks narrative length and
+swamps semantic direction. A controlled sweep (`ops_hdbscan_sweep`, 8 configs on a 30k
+sample, ~1 min each) falsified it:
+
+| normalised | pca_dims | noise% | clusters |
+|---|---|---|---|
+| **false** | 50 | 85.8% | 64 |
+| **true** | 50 | **85.4%** | 62 |
+
+L2-normalisation changed noise by 0.4 points. Across the whole sweep noise never fell below
+**75%**, and the configurations that reached it collapsed to 9–17 clusters with a
+5,506-member blob — low noise bought by having no discriminating power.
+
+**Actual conclusion, and it is about the data:** complaint-narrative embeddings do not form
+well-separated density peaks. Complaints about one component are a *continuum* of phrasings,
+not islands. No HDBSCAN parameterisation fixes that.
+
+**Approach changed — the tool was wrong for the question.** HDBSCAN answers "where are the
+natural density clusters, and what is noise?" The actual requirement was a **grouping key
+finer than the component code**, i.e. a partition. HDBSCAN's noise label is not neutral
+here: it discards 85% of the evidence, which is strictly worse than the v2 grouping it was
+meant to improve on. Replaced with k-means **subdivision within each existing series**
+(`08_semantic_subdivision.py`), which assigns every complaint and produces a strict
+refinement of v2 — every v3 series sits inside exactly one v2 series.
+
+**The measured constraint that shaped the replacement:** v2 has 2,763 series with a
+**median of 10 complaints** over 24 months (mean 74.3 — heavily skewed) and **11,493**
+months reaching `MIN_COUNT = 5`. Subdividing a 10-complaint series guarantees it can never
+fire again, so subdivision applies only to series with ≥100 complaints. That is not
+cherry-picking: such series never fired under v2 either, and the rule is a pure function of
+**complaint volume, never of arm**, so it cannot advantage the real arm over its control.
+
+**Process lessons:**
+1. **Do not tune at 85 minutes per attempt.** The first full run cost 85 min; the sweep
+   answered the same question in ~1 min per configuration on a 30k sample. Sample-first,
+   full-run-once.
+2. **Include the failing baseline in the sweep.** Keeping the unnormalised config in the
+   grid is what falsified the hypothesis; without it, normalising *and* re-tuning together
+   would have produced a change with no attributable cause.
+3. Sample-size sensitivity is real — HDBSCAN density estimates shift with `n`, so a sweep
+   chooses a *region*, not a prediction.
+
 ### I-047 — A probe that tests a simpler expression than production proves nothing
 *Date:* 2026-09-01 · *Status:* resolved
 
