@@ -309,10 +309,11 @@ account admin ever registers a client.
 
 The two hosting environments differ in **exactly one** way:
 
-| | How the user token arrives |
+| Environment | How the user token arrives |
 |---|---|
-| Render (§8.7 phase 1) | U2M OAuth redirect flow (**Path D**) — our code obtains it |
-| Databricks Apps (phase 2) | `X-Forwarded-Access-Token` header — the platform hands it over |
+| **Local dev** | `static-dev` — the developer's own token from `databricks auth token` |
+| **Databricks Apps** | `X-Forwarded-Access-Token` header — the platform hands it over (OBO) |
+| ~~Render console~~ | ~~U2M redirect (Path D)~~ — **retired, E-14.** Render serves the public evidence page with no auth. `SessionTokenProvider` remains implemented and tested against the day an account admin registers a client. |
 
 Everything downstream is identical: the SQL, the Lakebase calls, the agent invocation, ABAC
 evaluation. So the backend must resolve the caller's token through **one swappable
