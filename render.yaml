@@ -7,7 +7,10 @@
 # Free tier spins down on inactivity; /healthz is the warm-up endpoint before any demo.
 services:
   - type: web
-    name: fleetguard
+    # Deliberately distinctive: `fleetguard` on onrender.com is already claimed by an
+    # unrelated Express app, and Render silently appends a suffix when a name is taken —
+    # which makes the deployed URL unpredictable and easy to confuse with someone else's.
+    name: fleetguard-console-abhi
     runtime: python
     plan: free
     region: oregon
