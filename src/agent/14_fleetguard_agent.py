@@ -66,6 +66,7 @@ print(f"model : {MODEL_NAME}\nllm   : {LLM_ENDPOINT}\nindex : {INDEX}")
 # MAGIC
 # MAGIC import mlflow
 # MAGIC from databricks.sdk import WorkspaceClient
+# MAGIC from databricks.sdk.service.sql import StatementParameterListItem
 # MAGIC from mlflow.entities import SpanType
 # MAGIC from mlflow.models import ModelConfig, set_model
 # MAGIC from mlflow.pyfunc import ResponsesAgent
@@ -142,7 +143,10 @@ print(f"model : {MODEL_NAME}\nllm   : {LLM_ENDPOINT}\nindex : {INDEX}")
 # MAGIC             FROM {CATALOG}.{SCHEMA}.gold_fleet_exposure
 # MAGIC             WHERE campaign_number = :cid GROUP BY match_basis
 # MAGIC         """,
-# MAGIC         parameters=[{"name": "cid", "value": campaign_id}],
+# MAGIC         # Typed parameter objects, not dicts: the SDK calls .as_dict() on these and a
+# MAGIC         # plain dict raises AttributeError. Parameterised, never interpolated —
+# MAGIC         # campaign_id reaches this tool from model output.
+# MAGIC         parameters=[StatementParameterListItem(name="cid", value=campaign_id)],
 # MAGIC         wait_timeout="30s",
 # MAGIC     )
 # MAGIC     rows = (stmt.result.data_array or []) if stmt.result else []
