@@ -613,6 +613,12 @@ this in week 1 rather than week 4 is the entire reason for running the backtest 
 The harness (`gold_lead_time_backtest`, `gold_lead_time_control`, `gold_lead_time_summary`)
 is now the measurement instrument for that improvement, with a control arm built in.
 
+> **➤ Superseded in part by [I-049].** The paragraph above was a *prediction*, and the
+> harness it describes went on to falsify it: the semantic arm lowered detection and added
+> zero lead time. This entry is left unedited — it is an append-only record of what was
+> concluded on 2026-08-31, and the prediction being wrong is precisely what makes running
+> the measurement worthwhile. **The 16.0% / 11.1% / 1.44× figures above remain current.**
+
 ---
 
 ## Pipeline (Phase 1 — chunking / AI Search sizing)
