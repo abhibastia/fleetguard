@@ -194,18 +194,45 @@ manual-trigger. Stop it by deleting the index then the endpoint.
 
 ---
 
+## Phase 5 — Lakebase loaded and CDF measured (1 Sep)
+
+**Reference tables loaded**, each reconciling exactly against source:
+
+| table | rows | load |
+|---|---|---|
+| `fleetguard_depot` | 60 | 0.0 s |
+| `fleetguard_vehicle` | 20,000 | 0.5 s (~40k rows/s) |
+| `fleetguard_recall_campaign` | 592 | 0.0 s |
+
+**CDF replicated all of it.** Depot's history reconciles exactly to the I-038 test —
+61 insert / 60 `update_preimage` / 60 `update_postimage` / 1 delete, which is the original
+60 inserts plus 59 upsert-conflicts plus the one previously-deleted row re-inserted. That
+confirms `ON CONFLICT DO UPDATE` **and** `REPLICA IDENTITY FULL` in one arithmetic check.
+
+**All 11 history tables exist with exact names, no `_1` suffixes** — the naming risk
+(I-036) is fully retired across every table, not just the one round-tripped in I-038.
+
+**CDF capture latency MEASURED** (`ops_cdf_latency`, 3/3 true measurements):
+**7.1 – 15.6 s, mean 12.5 s.** State it as a *range consistent with a ~15 s flush*, never
+as one averaged number; size demos against the **15.6 s worst case**. Comfortably supports
+§8.3's sub-minute claim. See I-046 for why the first attempt (21.55 s) was an upper bound
+and not a measurement.
+
+---
+
 ## Next steps, in order
 
-1. **Populate Lakebase from gold.** *In progress* — `fleetguard-load-reference-from-gold`
-   loads depot (60), vehicle (20,000) and recall_campaign (fleet-exposed campaigns only).
-   Deliberately **excludes** `gold_fleet_exposure` for now: it is **989,042 rows**, and
-   pushing that through a *shared* Public-Preview CDF pipeline without a measured
-   throughput figure risks affecting the other ~296 students on `bootcamp_cdc`. The
-   reference load produces that figure; size the exposure load from it.
-2. **Time a write end to end** — §8.3's ~15 s capture figure is still *documented*, not
-   *measured*. `ops_lakebase_load` now persists the commit epoch as the `t0` for it.
-3. **Phase 9 semantic upgrade** — HDBSCAN over the now-complete index, re-run the backtest
+1. **The 989k-row exposure load** — `gold_fleet_exposure` → `fleetguard_vehicle_exposure`.
+   Still deliberately not run. Postgres `COPY` is not the constraint (40k rows/s ⇒ ~25 s);
+   the open question is what ~1M change events do to a CDF pipeline **shared with ~296
+   other students** on `bootcamp_cdc`. Decide scope first: full 989k, `EXACT`-only
+   (263,686), or a demo-scoped slice. **Note:** the `PSYCOPG_IMPL=python` fix (I-045) uses
+   the slower pure-Python driver, so re-measure throughput at scale rather than assuming
+   the 40k rows/s figure holds.
+2. **Phase 9 semantic upgrade** — HDBSCAN over the now-complete index, re-run the backtest
    harness, and see whether the 16.0% / 11.1% gap widens. This is the differentiator.
+3. **§8.3 in the proposal** still says the ~15 s figure is documented-not-measured. It is
+   now measured — update that line with the 7–16 s range.
 
 **Verification discipline** (earned the hard way, I-043): never infer success from a
 background task's exit code — re-check the live resource. The overnight index watcher

@@ -26,6 +26,45 @@ no error and passed the obvious check.
 
 ## Tooling / process
 
+### I-046 — A latency probe that never sees the row absent has measured nothing
+*Date:* 2026-09-01 · *Status:* resolved · **CDF latency now measured**
+
+First attempt at the §8.3 capture-latency measurement reported **21.55 s** with
+`polls = 1`. It found the probe row on its *first* check, so it never observed the row
+absent — that is an **upper bound, not a measurement**, and most of the 21.55 s was Spark's
+own cold query-startup cost rather than CDF. Quoted as "measured latency" it would have
+been wrong in both directions at once: too slow (it included startup) and unfounded (it
+never bracketed the event).
+
+A related trap, avoided from the start: the history table's `_timestamp` is the **Postgres
+commit** timestamp, not the moment the row became queryable in Delta. Differencing it
+against the writing client's clock yields ~0.3 s — a flattering number that measures clock
+skew, not replication.
+
+**Fixes, all three needed:** warm the query path with the exact query shape before the
+clock starts (steady-state cost printed, so the resolution floor is visible — 0.57 s here);
+poll tightly (0.5 s); and require `observed_absent` before treating a run as a measurement,
+recording `is_upper_bound = true` otherwise.
+
+**Result (3/3 true measurements, `ops_cdf_latency`):**
+
+| probe | latency | polls |
+|---|---|---|
+| 1 | 7.13 s | 5 |
+| 2 | 14.74 s | 13 |
+| 3 | 15.63 s | 14 |
+
+Range **7.1–15.6 s**, mean **12.5 s**. The spread is not noise — it is the signature of a
+**periodic ~15 s flush**: a write lands wherever it falls in the current window, so latency
+scatters up to the flush interval. This corroborates Databricks' documented ~15 s as a
+*flush interval*, not as a typical latency.
+
+**How to state it:** "measured 7–16 s end to end, n=3, consistent with a ~15 s flush" —
+never a single averaged number, and never below the observed floor. Databricks publishes no
+SLA here, so the worst observed case (15.6 s) is the one a demo should be sized against.
+This comfortably supports §8.3's **sub-minute** claim, which is what the proposal actually
+needs.
+
 ### I-045 — `psycopg[binary]` 3.3.5 aborts the serverless kernel: FIPS self-test failure
 *Date:* 2026-09-01 · *Status:* resolved
 
