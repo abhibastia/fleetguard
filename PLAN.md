@@ -36,6 +36,16 @@ verifiable work. Grounded in what was already confirmed live before build start 
    `If-None-Match` with the exact advertised ETag returns `200` and the full body —
    the ETag is published and ignored. Build change detection on `If-Modified-Since` only.
 
+## MVP target — 7 September 2026
+
+One vertical slice end to end: recall → ranked exposure → human approval → work orders in
+Lakebase → CDF → browser. Phases 6, 7 and 8 are cut to the minimum that achieves it; full
+scope for each remains below and resumes after the 7th. Definition, in/out lists and cut
+order live in `docs/ENHANCEMENTS.md`.
+
+**MVP blocker to resolve first:** the `gold_fleet_exposure` load scope (989,042 rows) —
+without it there is no work queue.
+
 ## Phases
 
 ### Phase 1 — Ingestion + bronze/silver/gold  🟡 ~85% (2026-08-31)

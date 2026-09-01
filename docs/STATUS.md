@@ -1,6 +1,12 @@
 # FleetGuard — project status
 
-**Last updated:** 2026-09-01 · **Demo window:** 25–30 September 2026 · **24 days out**
+**Last updated:** 2026-09-01 · **MVP target: 7 September** · **Demo: 25–30 September**
+
+> **MVP = one vertical slice working end to end:** recall lands → exposure ranked → human
+> approves → work orders written to Lakebase → visible in UC via CDF → visible in a browser.
+> Scope, cut order and the explicit *not-in-MVP* list are in
+> [`ENHANCEMENTS.md`](ENHANCEMENTS.md#mvp--target-7-september-2026-6-days). Landing MVP on
+> the 7th leaves ~18 days to improve a working system rather than finish one.
 
 One page answering "where are we". Design lives in `FleetGuard_Proposal.md`, sequencing in
 `../PLAN.md`, and every problem hit during the build in `ISSUES.md`.

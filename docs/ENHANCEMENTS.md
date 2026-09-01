@@ -158,19 +158,77 @@ justification; adopting it because our core flow has a suspend-and-resume step i
 
 ---
 
+### E-11 · Conversational surface and persona model — **decided 2026-09-01**
+
+**Status: ADOPT the split below. Reject persona routing by agent.**
+
+Question raised: should FleetGuard have a chatbot UI, with employees, managers and
+consumers reaching it through a supervisor agent?
+
+**Chat: yes — beside the workflow, not as the workflow.** The core value is a *workflow*:
+campaign lands → 2,116 exposed F-250s ranked by depot and severity → approve → work orders.
+That is a queue and a form. Conversing through a ranked exposure list is strictly worse, and
+§7's deterministic guarantee is far harder to demonstrate in prose than in a list that either
+contains the right VINs or does not. But §13 requires an action-taking agent, and one exists
+in §4.5 with four read and four write tools. So: **agent chat panel alongside the queue**,
+proposing actions that the existing approval gate executes. This also keeps the demo's
+strongest moment — the deterministic recall→work-order path — free of LLM variance.
+
+**Persona routing via a supervisor agent: rejected, on security grounds.** This supersedes
+the weaker "nothing to supervise" reasoning in the rejection table below.
+
+Persona differences in FleetGuard are an **authorisation problem, not an orchestration
+problem**, and §5.1 already solves it:
+
+> *"One template — identity determines both rows and columns, and the frontend cannot bypass
+> it."*
+
+A supervisor routing by persona would re-implement that in prompt space. **An LLM deciding
+what a user may see is not a security boundary.** It converts a claim we can *prove* — UC
+evaluates ABAC under the user's own token — into one we would have to hope holds. The
+correct mechanism is already designed in §5.3: tools are UC Functions with per-principal
+`EXECUTE` grants, so *"a tool the agent has not been granted cannot be invoked, regardless of
+what the model attempts."* Same agent, different identity, different capability, enforced
+**below** the model.
+
+**"Consumer" is not one of our personas.** All five are internal (safety manager, depot
+manager, reliability analyst, VP Ops, platform engineer). §5.2's public surface is an
+unauthenticated, pre-aggregated, read-only evidence page whose principal holds `SELECT` on
+`public_summary` alone. A chatbot there would be actively harmful: unauthenticated LLM
+access is a token-burn and prompt-injection vector, and it is the one surface where a
+hallucination is publicly visible with no operator to catch it. **Static page.**
+
+**Resulting surface map:**
+
+| Persona | Surface | NL access |
+|---|---|---|
+| Safety manager (primary) | Queue + approval + **agent chat panel** | Full agent; write tools gated by approval |
+| Depot manager | Work-order queue | Agent, read tools only |
+| Reliability analyst | Pattern explorer | Agent, VINs masked by ABAC |
+| VP Ops | Dashboard + **Genie** | Genie only (analytics NL, read-only) |
+| Public | Static evidence page | **None** |
+
+Note §2 already assigns VP Ops a *Genie Agent* rather than a chatbot, and that split is
+correct: **Genie answers questions over governed tables; the agent does things under
+approval.** Two NL surfaces with distinct jobs is a stronger story than one chatbot
+pretending to be both — and it is why E-10 below is now *upgraded* rather than deferred.
+
+---
+
 ## Tier 3 — genuinely additive; only if Phases 6–8 land early
 
 ### E-10 · Genie + UC metric views, as a pair
-**Status: DEFER, adopt together or not at all.** Currently on the cut list, though §9 calls
-Genie "load-bearing".
+**Status: UPGRADED to post-MVP committed (was: defer).** E-11 gives Genie a defined job —
+the VP Ops analytics surface — rather than leaving it a loose platform feature, which is why
+this moves up.
 
 They belong together: Genie over raw tables invents joins, whereas Genie over a **metric
 view** is constrained to defined measures. Defining `exposure_rate`, `open_work_orders`,
-`mean_time_to_remediate` once gives the dashboards and the NL interface a single semantic
-layer — and serves the "reliability analyst" persona in §2 that nothing currently serves.
+`mean_time_to_remediate` once gives the dashboard and the NL interface a single semantic
+layer.
 
 Metric views appear **zero** times in our docs today. Real gap, moderate value, non-trivial
-cost.
+cost. **Not in MVP.**
 
 ---
 
@@ -178,7 +236,7 @@ cost.
 
 | Item | Why not |
 |---|---|
-| **Agent Bricks / supervisor agent** | Different product from the Agent Framework (`CLAUDE.md`). A supervisor needs specialised sub-agents to supervise; we have one agent with eight governed tools. Adds orchestration with nothing to orchestrate. |
+| **Agent Bricks / supervisor agent** | Two reasons, the second decisive. (1) Different product from the Agent Framework (`CLAUDE.md`); a supervisor needs specialised sub-agents, and we have one agent with eight governed tools. (2) **Routing personas through an agent puts access control in prompt space** — see E-11. UC ABAC and per-principal `EXECUTE` grants enforce it below the model, provably; an LLM router would downgrade that to a hope. |
 | **DSPy** | Prompt optimisation against a metric. Our agent's quality bar is tool-grounding and approval-gating, not prompt search. New dependency, no path to a FleetGuard objective. |
 | **Omnigent** | Beta. Not 24 days before a demo. |
 | **The Day 4 chat-app template wholesale** | Node/TypeScript AppKit. §8.7 commits to React + FastAPI on Render first, Databricks Apps second, for stated reasons. Worth reading for the Apps phase; adopting it would discard a deliberate decision. |
@@ -186,12 +244,62 @@ cost.
 
 ---
 
+## MVP — target **7 September 2026** (6 days)
+
+Demo is 25–30 September. An MVP at 7 Sept leaves ~18 days to improve on a working system
+rather than to finish one. That ordering is right, but only if **MVP is defined narrowly
+enough to actually land** — an undefined MVP will absorb every item in this document.
+
+### MVP is one vertical slice, working end to end
+
+> **A recall campaign lands → exposed vehicles ranked by depot and severity → a human
+> approves → work orders are written to Lakebase → the change appears in Unity Catalog via
+> CDF → all of it visible in a browser.**
+
+Plus the agent proposing the campaign, and the measured backtest result displayed as
+evidence.
+
+### In scope
+
+| # | Item | Why it is load-bearing |
+|---|---|---|
+| 1 | **Exposure load into Lakebase** (scope decision first) | Without it there is no work queue. The one hard blocker. |
+| 2 | **Agent — minimal**: `ResponsesAgent`, ~3 tools (2 read, 1 gated write), tracing on (E-02/E-03) | §13's action-taking agent requirement |
+| 3 | **Approval gate** writing to `fleetguard_service_campaign` / `_work_order` / `_audit_log` | The human-in-the-loop claim, and the audit trail |
+| 4 | **Frontend**: React + FastAPI on Render (§8.7 phase 1) — queue, exposure detail, approve, agent panel | The only surface a viewer actually sees |
+| 5 | **U2M OAuth (Path D)** | Required for the Render-hosted console to hold a real user token |
+| 6 | **Evidence page** — static, showing the 16.0% / 11.1% / 1.44× result | Already measured; costs almost nothing to display |
+
+### Explicitly NOT in MVP
+
+Deferred with intent, not forgotten: **Model B and the evaluation harness** (Phase 4) ·
+**E-01 AI Gateway** · **E-05 scorers** · **E-07 labeling** · **E-10 Genie + metric views** ·
+**Databricks Apps migration** (§8.7 phase 2) · governance beyond what ABAC gives for free ·
+the write tools beyond the single gated one.
+
+> **E-01 is deferred as *build*, not as *correction*.** The proposal's §4.5 guardrail claim
+> is wrong today and must be fixed in the documents **before** MVP regardless — a known-false
+> claim left standing is worse than a missing feature. Verifying the endpoint restriction
+> live is a 15-minute task; building the gateway is post-MVP.
+
+### The honest risk
+
+Six days for items 1–6 is **aggressive**, and items 2→3→4 are a dependent chain. If it
+slips, cut in this order: the agent panel (leaving a workflow-only console — still a
+complete demo), then the evidence page, then U2M OAuth by demoing locally.
+
+**Do not cut the approval gate or the audit trail.** They are the difference between
+FleetGuard and a dashboard, and they are what §5 and §13 are graded on.
+
+---
+
 ## Scope reality check
 
-Phases 6, 7 and 8 — the demo surface — are **unstarted at 24 days out**, and they are a
-dependent chain. This backlog is safe only because Tier 0 and Tier 1 are *how those phases
-get built*, not work beside them.
+Phases 6, 7 and 8 — the demo surface — are **unstarted**, and they are a dependent chain.
+This backlog is safe only because Tier 0 and Tier 1 are *how those phases get built*, not
+work beside them.
 
-**If time compresses, Tier 3 goes first, then E-07 and E-08.** Tier 0 (E-01) is not
-optional: it corrects a claim already written into the proposal, and leaving a known-false
-claim in place is worse than omitting the feature entirely.
+**Post-MVP order (7 → 25 Sept):** E-01 (gateway, corrects a claim) → E-05 (scorers, makes
+domain rules checkable) → Phase 4 Model B → E-07 → E-10 → Databricks Apps migration.
+
+**If time compresses, Tier 3 goes first, then E-07 and E-08.**
