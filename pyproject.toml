@@ -36,7 +36,7 @@ indent-style = "space"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src"]
+pythonpath = ["src", "app/backend"]
 addopts = "-q --strict-markers"
 markers = [
     "integration: hits the live Databricks workspace; skipped unless --run-integration",
