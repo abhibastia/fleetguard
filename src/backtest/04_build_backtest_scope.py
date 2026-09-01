@@ -22,7 +22,17 @@
 CATALOG, SCHEMA = "bootcamp_students", "fleetguard"
 spark.sql(f"USE {CATALOG}.{SCHEMA}")
 
-LOOKBACK_MONTHS = 24
+LOOKBACK_MONTHS = 24  # detection window: how far before open_date a run may start
+
+# The working set must extend FURTHER BACK than the detection window. The detector's
+# baseline is `ROWS BETWEEN 12 PRECEDING AND 1 PRECEDING` with `base_months >= 6`, so a
+# candidate month at the far edge of the lookback still needs 12 months of history behind
+# it. v2 reads all of silver_complaint and gets that for free. If the semantic arm embedded
+# only the 24-month window, its earliest months would have no baseline, could never reach
+# `base_months >= 6`, and so could never fire — silently deleting exactly the long-lead
+# detections this project exists to find, and making v3 look worse for a reason that has
+# nothing to do with semantics.
+EMBED_MONTHS = 37  # 24 lookback + 12 baseline + 1
 MIN_NARRATIVE_CHARS = 20  # matches fleetguard.chunking.MIN_NARRATIVE_CHARS
 
 # COMMAND ----------
@@ -139,7 +149,7 @@ JOIN gold_backtest_scope k
   ON k.make = s.make AND k.model = s.model
  AND k.comp_top = SPLIT(s.component, ':')[0]
 WHERE s.received_date <  k.open_date
-  AND s.received_date >= ADD_MONTHS(k.open_date, -{LOOKBACK_MONTHS})
+  AND s.received_date >= ADD_MONTHS(k.open_date, -{EMBED_MONTHS})
   AND s.narrative IS NOT NULL
   AND LENGTH(TRIM(s.narrative)) >= {MIN_NARRATIVE_CHARS}
 """)
