@@ -11,14 +11,32 @@ import { api, ApiError, type QueueItem } from "../lib/api";
 export function Queue({ onOpen }: { onOpen: (id: string) => void }) {
   const [items, setItems] = useState<QueueItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [gated, setGated] = useState(false);
 
   useEffect(() => {
     api
       .queue()
       .then(setItems)
-      .catch((e: ApiError) => setError(e.message));
+      .catch((e: ApiError) => (e.status === 401 ? setGated(true) : setError(e.message)));
   }, []);
 
+  // A 401 here is expected until the Databricks OAuth app is registered. Explaining that is
+  // far better than a red error a viewer would read as a broken deployment.
+  if (gated)
+    return (
+      <div className="panel">
+        <h3 style={{ marginTop: 0 }}>Sign-in required</h3>
+        <p className="muted">
+          The operator queue reads live fleet exposure under <em>your</em> Databricks identity,
+          so it needs an authenticated session. User sign-in is not yet configured on this
+          deployment.
+        </p>
+        <p className="muted" style={{ marginBottom: 0 }}>
+          The <strong>Evidence</strong> tab needs no sign-in — it carries the measured
+          early-warning result and its control arm.
+        </p>
+      </div>
+    );
   if (error) return <div className="error">{error}</div>;
   if (!items) return <p className="muted">Loading exposure…</p>;
 

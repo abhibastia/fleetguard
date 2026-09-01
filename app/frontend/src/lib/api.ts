@@ -27,7 +27,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (res.status === 401) {
     // Fail loudly rather than rendering an empty queue, which would read as "no exposure"
     // — the most dangerous possible mistake in a recall console.
-    throw new ApiError(401, "Not signed in. Your session may have expired.");
+    throw new ApiError(401, "Sign-in required.");
   }
   if (!res.ok) {
     let detail = res.statusText;

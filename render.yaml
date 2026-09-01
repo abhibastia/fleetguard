@@ -1,0 +1,39 @@
+# Render blueprint — FleetGuard console + API as ONE service.
+#
+# One service, not two: FastAPI serves /api/* and the built React console together, so there
+# is no CORS and the U2M session cookie is simply sent. The same arrangement moves to
+# Databricks Apps unchanged (E-12).
+#
+# Free tier spins down on inactivity; /healthz is the warm-up endpoint before any demo.
+services:
+  - type: web
+    name: fleetguard
+    runtime: python
+    plan: free
+    region: oregon
+    healthCheckPath: /healthz
+    # Python-only build. The console is built LOCALLY by scripts/build_console.sh and
+    # committed, because Render's Python runtime does not guarantee Node — building the
+    # frontend here would add a deploy-time dependency that can fail for reasons unrelated
+    # to the change being deployed. Rebuild and commit the console when the frontend changes.
+    buildCommand: pip install -r app/backend/requirements.txt
+    startCommand: cd app/backend && uvicorn fleetguard_api.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      # Required and never inferred — an unset value must not silently pick a trust model.
+      - key: FLEETGUARD_AUTH_MODE
+        value: render-u2m
+      - key: DATABRICKS_HOST
+        value: https://dbc-7b106152-caf3.cloud.databricks.com
+      - key: FLEETGUARD_PG_PROJECT
+        value: projects/summer-bootcamp-2026-v2
+      # Set in the Render dashboard, never committed. From the custom OAuth app integration
+      # registered in the Databricks ACCOUNT console (not the workspace admin console).
+      - key: DATABRICKS_CLIENT_ID
+        sync: false
+      - key: DATABRICKS_CLIENT_SECRET
+        sync: false
+      # Signs the session cookie holding the user's OAuth token.
+      - key: FLEETGUARD_SESSION_SECRET
+        generateValue: true
+      - key: PYTHON_VERSION
+        value: "3.12"
