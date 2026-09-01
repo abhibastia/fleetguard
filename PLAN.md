@@ -69,7 +69,26 @@ does not consume shared-workspace compute before the demo window. Schedule it in
   live vPIC — 400/400 exact match on make, model and year, 0 failures.
 - Segment mix 45% pickup / 40% van / 15% Class 7-8, spanning GVWR Class 1D→8, 47 models.
 
-### Phase 3 — Chunking + AI Search
+### Phase 3 — Chunking + AI Search  ✅ DONE (2026-09-01)
+*Index `complaint_chunk_idx` on endpoint `fleetguard-vs`, **1,746,601 chunks, `ready:
+true`** — matching `silver_complaint_chunk_indexed` exactly. ~7 h to build.*
+
+**Done-when MET, verified at full corpus** (`ops_hybrid_query_test`). The earlier check ran
+against a 42%-built index and was re-run before being quoted:
+
+| query | ANN vs HYBRID |
+|---|---|
+| component code + symptom | **differs** — hybrid surfaces `FOUNDATION COMPONENTS:HOSES, LINES/PIPING` |
+| pure paraphrase | **differs** — hybrid finds `ENGINE`/`VEHICLE SPEED CONTROL`; ANN drifts to `AIR BAGS` |
+| `TAKATA airbag inflator` | identical — both saturate on `AIR BAGS` |
+
+Harm-filtered retrieval (§4.3) **10/10 PASS**. Near-duplicate audit **10/10 distinct
+`complaint_id`** — the sibling-chunk concern (I-023) does not materialise at full corpus,
+so the agent's search tool does not need read-time dedupe.
+
+*Cost note:* `fleetguard-vs` is the project's only recurring charge, ~$6.72/day. Billing
+stops 24 h after the last index is deleted.
+
 - Build the Delta Sync Index over `complaint_chunk` (`embedding_source_column`,
   hybrid ANN+BM25).
 - **Done when:** a hybrid query returns component-code exact matches AND semantically
@@ -82,7 +101,29 @@ does not consume shared-workspace compute before the demo window. Schedule it in
   for the agent/retrieval path, separately from classical precision/recall for Model B.
 - **Done when:** precision/recall numbers exist and are real, not placeholders.
 
-### Phase 5 — Lakebase schema + CDF  🟡 ROUND-TRIP PROVEN (2026-08-31)
+### Phase 5 — Lakebase schema + CDF  ✅ DONE (2026-09-01)
+*Reference tables loaded and CDF measured end to end. Only the bulk exposure load remains,
+and that is a **scope decision**, not unfinished plumbing — see "Outstanding" below.*
+
+**Loaded from gold**, each reconciling exactly against source: `fleetguard_depot` 60,
+`fleetguard_vehicle` 20,000 (0.5 s, ~40k rows/s), `fleetguard_recall_campaign` 592.
+
+**CDF replicated all of it**, and depot's history reconciles arithmetically to the I-038
+test: 61 `insert` / 60 `update_preimage` / 60 `update_postimage` / 1 `delete` = the original
+60 inserts, plus 59 upsert-conflicts, plus the one previously-deleted row re-inserted. That
+single check confirms `ON CONFLICT DO UPDATE` **and** `REPLICA IDENTITY FULL`.
+
+**All 11 history tables exist with exact names and no `_1` collision suffixes** — CDF
+replicates DDL, so they appeared when the `CREATE TABLE`s committed rather than on first
+write (I-044 corrects the opposite claim). The naming risk (I-036) is retired for every
+table, not just the one round-tripped.
+
+**Capture latency MEASURED** (`ops_cdf_latency`): **7.1 – 15.6 s**, mean 12.5 s, 3/3 true
+measurements. Report as a range consistent with a ~15 s flush, never one averaged number;
+size demos against the 15.6 s worst case. Supports §8.3's sub-minute claim. I-046 records
+why the first attempt (21.55 s) was an upper bound, not a measurement.
+
+### Phase 5 (original definition) — Lakebase schema + CDF
 *Naming `fleetguard_<entity>` → `lb_fleetguard_<entity>_history` (I-036). Destination
 `bootcamp_students.bootcamp_cdc`, authorised.*
 
@@ -95,8 +136,12 @@ FULL`; 60 inserts, 1 update, 1 delete appeared in
 `abhisek.bastia17@gmail.com`. Script is idempotent and transactional
 (`src/lakebase/08_create_remaining_tables.py`).
 
-*Outstanding:* populate the tables from gold, and a timed write to measure real capture
-latency rather than citing the documented ~15 s.
+*Outstanding:* the bulk `gold_fleet_exposure` load (989,042 rows) into
+`fleetguard_vehicle_exposure`. Postgres `COPY` is not the constraint; the open question is
+what ~1M change events do to a CDF pipeline **shared with ~296 other students**. Decide
+scope — full, `EXACT`-only (263,686), or a demo slice — before running. Re-measure
+throughput at scale: the `PSYCOPG_IMPL=python` fix (I-045) uses the slower pure-Python
+driver, so the 40k rows/s reference figure may not hold.
 
 - Create the 11-table Postgres schema, `REPLICA IDENTITY FULL` on every table.
 - Enable Lakebase CDF at schema level (UI or API — resolved by the pre-work above).
