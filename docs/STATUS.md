@@ -170,39 +170,46 @@ failed during the build or exists because something adjacent to it failed silent
 
 ---
 
-## Picking this up tomorrow
+## Where we are — 1 Sep
 
-**Running unattended:** the AI Search index sync. Last measured **23:47 — 1,130,850 of
-1,746,601 chunks (64.7%), `ready: false`**, sustaining ~4,000 rows/min. Projected complete
-around **02:20**, ~7 h end to end. First thing in the morning, confirm it against the live
-resource rather than trusting any recorded number:
+**AI Search index: COMPLETE.** `ready: true`, **1,746,601 of 1,746,601** chunks (100%),
+matching `silver_complaint_chunk_indexed` exactly. ~7 h end to end.
 
-```bash
-databricks vector-search-indexes get-index \
-  bootcamp_students.fleetguard.complaint_chunk_idx --profile abhi
-```
+**Phase 3 done-when re-confirmed at full corpus** (`fleetguard-hybrid-query-test`, results
+in `ops_hybrid_query_test`). The earlier verdict was taken on a 42%-built index, so it had
+to be repeated before it could be quoted:
 
-Read `status.ready` — it must be `true`, and `indexed_row_count` must reach 1,746,601.
-**Do not infer readiness from a watcher's exit code**: the overnight watcher exited `0`
-having timed out at 51%, still reporting `ready=False` (I-043). Nor add `-o json` to that
-command — it breaks the output; the default is already JSON.
+| Query | ANN vs HYBRID |
+|---|---|
+| component code + symptom | **differs** — hybrid surfaces `FOUNDATION COMPONENTS:HOSES, LINES/PIPING` |
+| pure paraphrase | **differs** — hybrid finds `ENGINE`/`VEHICLE SPEED CONTROL`; ANN drifts to `AIR BAGS` |
+| `TAKATA airbag inflator` | identical — both saturate on `AIR BAGS` |
 
-Then re-run the hybrid test to confirm nothing changed qualitatively at full corpus:
-`fleetguard-hybrid-query-test`. Until `ready: true`, any hybrid result is measured against
-a partial corpus and cannot be compared with the earlier partial-index run.
+Harm filter **10/10 PASS**. Near-duplicate audit **10/10 distinct `complaint_id`** — the
+sibling-chunk concern (I-023) does not materialise at full corpus, so the agent's search
+tool does not need read-time dedupe after all.
 
 **Billing:** `fleetguard-vs` is the only recurring cost, ~$6.72/day. Everything else is
 manual-trigger. Stop it by deleting the index then the endpoint.
 
-**Highest-value next steps, in order:**
+---
 
-1. **Populate the Lakebase tables from gold** — `gold_fleet_vehicle` → `fleetguard_vehicle`,
-   `gold_fleet_exposure` → `fleetguard_vehicle_exposure`, etc. This also makes the other ten
-   CDF history tables materialise, since CDF creates a destination on first *write*, not on
-   `CREATE TABLE`. Unblocks the §8.3 velocity demo.
+## Next steps, in order
+
+1. **Populate Lakebase from gold.** *In progress* — `fleetguard-load-reference-from-gold`
+   loads depot (60), vehicle (20,000) and recall_campaign (fleet-exposed campaigns only).
+   Deliberately **excludes** `gold_fleet_exposure` for now: it is **989,042 rows**, and
+   pushing that through a *shared* Public-Preview CDF pipeline without a measured
+   throughput figure risks affecting the other ~296 students on `bootcamp_cdc`. The
+   reference load produces that figure; size the exposure load from it.
 2. **Time a write end to end** — §8.3's ~15 s capture figure is still *documented*, not
-   *measured*. One timed insert closes that.
-3. **Phase 9 semantic upgrade** — HDBSCAN over the now-populated index, re-run the backtest
+   *measured*. `ops_lakebase_load` now persists the commit epoch as the `t0` for it.
+3. **Phase 9 semantic upgrade** — HDBSCAN over the now-complete index, re-run the backtest
    harness, and see whether the 16.0% / 11.1% gap widens. This is the differentiator.
+
+**Verification discipline** (earned the hard way, I-043): never infer success from a
+background task's exit code — re-check the live resource. The overnight index watcher
+exited `0` while its own last line read `ready=False`. Also: don't add `-o json` to
+`vector-search-indexes get-index`; it breaks the output, which is already JSON.
 
 **Do not** attempt an index rebuild inside the demo window — it is most of a working day.
