@@ -17,7 +17,9 @@ services:
     # frontend here would add a deploy-time dependency that can fail for reasons unrelated
     # to the change being deployed. Rebuild and commit the console when the frontend changes.
     buildCommand: pip install -r app/backend/requirements.txt
-    startCommand: cd app/backend && uvicorn fleetguard_api.main:app --host 0.0.0.0 --port $PORT
+    # --app-dir rather than `cd`: it inserts the directory into sys.path explicitly,
+    # instead of relying on uvicorn picking up the working directory.
+    startCommand: uvicorn fleetguard_api.main:app --app-dir app/backend --host 0.0.0.0 --port $PORT
     envVars:
       # Required and never inferred — an unset value must not silently pick a trust model.
       - key: FLEETGUARD_AUTH_MODE
