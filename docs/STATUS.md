@@ -1,6 +1,6 @@
 # FleetGuard — project status
 
-**Last updated:** 2026-09-02 (session end) · **MVP target: 7 September — MET** · **Demo: 25–30 September**
+**Last updated:** 2026-09-03 (session end) · **MVP target: 7 September — MET** · **Demo: 25–30 September**
 
 > **MVP = one vertical slice working end to end:** recall lands → exposure ranked → human
 > approves → work orders written to Lakebase → visible in UC via CDF → visible in a browser.
@@ -26,7 +26,7 @@ next-actions list in priority order.** Design lives in `FleetGuard_Proposal.md`,
 | **5 — Lakebase + CDF** | ✅ **DONE** | 11 tables, all `REPLICA IDENTITY FULL`; **all 11 CDF history tables exist with exact names, no `_1` suffixes** (I-044 — CDF replicates DDL, correcting an earlier wrong claim). Reference data loaded: depot 60, vehicle 20,000, campaigns 592. **Capture latency measured: 7.1–15.6 s** (I-046). **Exposure loaded** — `EXACT` scope, 263,686 rows deduplicated to **118,323** distinct (vin, campaign) pairs. |
 | **6 — OAuth wiring** | ✅ **DONE — with a login** | Auth seam (E-13) tested on both surfaces, 401 on failure, never an SP fallback. **U2M retired (E-14)** — needs an account-admin OAuth registration we do not have, and OBO on Databricks Apps is stronger with less setup. **Render now has a working sign-in (2026-09-02): GitHub OAuth, `app-login` mode, two-tier authorization (read for anyone signed in; approve only for `FLEETGUARD_APPROVERS`).** Verified end to end in a browser. |
 | **7 — Agent tools + write path** | ✅ **DONE** | Write path end to end: `POST /campaigns/{id}/service-campaign` → 1 service campaign + N work orders + audit row in **one transaction** → CDF → UC. Agent: `ResponsesAgent`, **4 tools** (complaint search · fleet exposure · **emerging signals** · propose campaign), MLflow tracing, smoke tests pass against live index + warehouse. **The agent proposes, never launches** — asserted in the build, so a change that lets it self-launch fails. **Logged, validated, registered and DEPLOYED** 2026-09-02: endpoint `agents_bootcamp_students-fleetguard-fleetguard_agent`, inference tables on (`fleetguard_agent_payload`). Console chat panel wired (`POST /api/chat`, caller's token, non-streaming). **The first deployed version answered a 25-vehicle recall with "no vehicles affected" (I-050)** — undeclared table resource plus an unchecked statement status. **Fixed in version 2, verified live:** returns 25 vehicles / 22 depots / EXACT with the tier stated, and a nonexistent campaign returns a distinguishable "the lookup ran and found zero". |
-| **8 — App + external surface** | 🟡 **Public surface live** | FastAPI serves `/api/*` **and** the built React console from one service — no CORS, SPA deep-link fallback. Four views: queue (+ assistant panel), campaign approval, **Emerging signals**, evidence. Verified end to end against live Lakebase. **Deployed to Render 2026-09-02** — https://fleetguard-console-abhi.onrender.com, chat panel included. Every `/api` route there returns 401 by design (no sign-in; U2M retired), so the panel renders an explanation rather than an error. **Signed-in console live on Render** over a committed snapshot — the host can hold no Databricks credential (SP creation admin-only, PATs disabled, Lakebase auth is OAuth-only; all measured). Anonymous visitors land on Evidence, not a login wall (I-057). **Outstanding:** the Databricks App (~20 Sept), where OBO supplies a real Databricks identity and the data goes live. |
+| **8 — App + external surface** | 🟡 **Public surface live** | FastAPI serves `/api/*` **and** the built React console from one service — no CORS, SPA deep-link fallback. Four views: queue (+ assistant panel), campaign approval, **Emerging signals**, evidence. Verified end to end against live Lakebase. **Deployed to Render 2026-09-02** — https://fleetguard-console-abhi.onrender.com, chat panel included. Every `/api` route there returns 401 by design (no sign-in; U2M retired), so the panel renders an explanation rather than an error. **Signed-in console live on Render** over a committed snapshot — the host can hold no Databricks credential (SP creation admin-only, PATs disabled, Lakebase auth is OAuth-only; all measured). Anonymous visitors land on Evidence, not a login wall (I-057). **End-to-end review + visual redesign, 2026-09-03** — 8 bugs found and fixed, 49 new tests, console restyled (same colour-rationing rule, more depth/craft); verified against a live headless-browser check of both the local build and the redeployed Render site. **Outstanding:** the Databricks App (~20 Sept), where OBO supplies a real Databricks identity and the data goes live. |
 | **9 — Model A + backtest** | ✅ **DONE — result is negative** | **The semantic hypothesis is falsified (I-049).** Subdivision *lowered* detection 13.3% → 11.2%, left lift flat (1.24× → 1.26×), and gave **0.0 days** extra lead on shared detections. Published result stays the volume-anomaly measurement: **16.0% vs 11.1%, 1.44×, p≈0.009**. Done-when explicitly required publishing a possibly-negative number as-is; met. |
 | **10 — Governance** | ✅ **Visible slice DONE** | Postgres RLS on `fleetguard_vehicle`, `ENABLE`+`FORCE`, proved under real toggled states including the exposure join. Fail-open, nobody enrolled yet — mechanism real, enrollment is future work. Not the full ABAC/DQ-monitor matrix, by design. |
 | **11 — Deployment hardening** | ⬜ Not started | |
@@ -261,6 +261,45 @@ loses its integrity; a living doc that doesn't get edited becomes a lie.
 The proposal is **not** updated to match findings. Its header tabulates the known
 contradictions with measured results — that gap is the record of what the build taught us,
 and erasing it would destroy the only evidence of what was believed at the outset.
+
+---
+
+## Where we are — 3 Sep
+
+**End-to-end review and a visual redesign, both landed and verified live — no new capability,
+all hardening.** Two separate passes, same session.
+
+**1. Adversarial code review.** Read every backend router, the auth seam, `db.py`,
+`scoping.py`, and every stateful frontend view — not "does it run" but "what happens on the
+second transition through this effect, the second concurrent request, the reachable-but-untested
+branch." Found and fixed 8 real bugs: the session-expiry gap (**I-062** — cookie `max_age` only
+controls when the browser stops sending a session, not how long the server honours it), the
+`chat.py` 502-instead-of-503 for signed-in Render users, App.tsx's redirect loop on a second
+"Recall queue" click, matching stale-response races in Campaign.tsx and Signals.tsx, a dead
+docstring, and an unguarded `zip()`. Logged rather than silently resolved: **I-063**, no
+idempotency check on campaign approval — a product decision, not a code-review call. 49 new
+tests came out of the pass (detail in the Testing section above and in `ISSUES.md`).
+
+**2. Console redesign.** Same visual language, more craft — no new colours, no new information
+density; the original CSS's own "severity legible, colour rationed" rule stayed the rule. Two-
+layer shadows, left-accent spines on stat cards and message boxes instead of background tint
+alone, a brand-mark chip, pill-hover nav tabs, colour-matched glow shadows on the primary/danger
+buttons, an accent rail on hover for clickable table rows, themed scrollbars, a signed radial
+glow behind the sign-in card. All motion is 120–250ms hover/press feedback, never idle
+animation, and collapses under `prefers-reduced-motion`.
+
+**Verified, not assumed.** Installed a headless Chromium locally and screenshotted every view —
+queue, campaign detail, signals, evidence, sign-in — in both themes, against a real backend
+running in `snapshot` mode with actual data, before committing anything. Then checked the live
+deployment: confirmed the served bundle hashes (`index-CZ4VHG3q.js` / `index-CoeEXbtC.css`)
+match the local build exactly, and screenshotted the live site's evidence page and sign-in gate
+in both themes. Campaign detail and the operator queue can't be screenshotted live without a
+real GitHub session — the deployment's own auth gate, working as designed, not a gap — so the
+local snapshot-mode screenshot stands in for them, since it is the same built bundle.
+
+Commits: `719d9b1` / `75f7688` / `50b7577` (the review), `043e747` (three frontend bugfixes),
+`604d01e` (docs), `8f79d26` (the redesign). Pushed to `main`; Render auto-redeployed and was
+confirmed serving the new build.
 
 ---
 
