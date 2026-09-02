@@ -27,7 +27,7 @@ no error and passed the obvious check.
 ## Tooling / process
 
 ### I-050 — The deployed agent reported "no vehicles affected" for a 25-vehicle recall — **SILENT**
-*Date:* 2026-09-02 · *Status:* fix applied, awaiting redeploy verification
+*Date:* 2026-09-02 · *Status:* **resolved and verified on the live endpoint**
 
 **Symptom.** The freshly deployed agent endpoint was asked *"Which fleet vehicles does recall
 17V629000 affect?"* and answered, confidently and in well-formed prose, that **no fleet
@@ -85,6 +85,13 @@ could not look" — the model has no way to tell them apart, and prose will pape
 difference perfectly.
 
 Corollary for the demo: every agent assertion must pin a number. "It ran" is not a test.
+
+**Verification (version 2, live endpoint, 100% traffic).** The same question now returns
+"**25 vehicles** across **22 depots** … all **EXACT** matches", states the tier unprompted,
+declines to describe the remedy because no tool supplied it, and says it cannot launch the
+campaign. A deliberately nonexistent campaign (`99V999000`) returns a *distinguishable*
+answer: "I can confirm the lookup ran and returned zero matched vehicles" — an absence the
+agent can now vouch for, which is the whole point of the fix.
 
 ---
 
