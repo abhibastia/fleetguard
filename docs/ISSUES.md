@@ -26,6 +26,50 @@ no error and passed the obvious check.
 
 ## Tooling / process
 
+### I-057 — Google flagged the deployment as a "Dangerous site" — the login wall was the trigger
+*Date:* 2026-09-02 · *Status:* resolved (signature removed; false positive reported)
+
+**Symptom.** After completing GitHub sign-in, Chrome interstitialed the Render deployment:
+*"Dangerous site — Attackers on the site that you tried visiting might trick you into
+installing software or revealing things like your passwords…"*
+
+**First response was to verify, not to explain it away.** A "dangerous site" warning on your
+own deployment has exactly two readings — a compromise, or a false positive — and assuming
+the flattering one is how a real compromise gets talked past. Checks run:
+
+```
+served /assets/index-CF4cbtpj.js   sha256 9caba468…13301a
+local  build, same file            sha256 9caba468…13301a   ← byte-identical
+```
+
+The served `index.html` also matched the build exactly: no injected script, no third-party
+origin, nothing added. Integrity confirmed; the warning was a classifier verdict, not evidence
+of intrusion.
+
+**Root cause.** Safe Browsing was reacting to the *shape* of the site, and it was right to.
+The entire anonymous surface was a single "Continue with GitHub" prompt, served from a
+zero-reputation `*.onrender.com` subdomain that shares a reputation neighbourhood with
+whatever else is hosted there. A credential prompt with no surrounding content on a
+throwaway-looking host is a textbook phishing signature.
+
+**Resolution.** Two changes, one of which was worth making regardless:
+1. The false positive was reported to Google.
+2. **Anonymous visitors now land on the Evidence page** — the measured result, its control arm
+   and its stated limits — with sign-in as a header action rather than a wall. An explicit
+   link (`#/queue`) is still honoured; only the *default* landing changed, because a shared
+   link must go where it says.
+
+**Lesson.** The classifier was describing a genuine design mistake in security language. The
+public URL exists to show a measured result to people who will never sign in, and the first
+thing it showed them was a form. **When an automated system flags your work, check whether it
+is wrong about the facts but right about the shape** — here the "phishing signature" and "bad
+front door" were the same defect, and fixing the product fixed the flag.
+
+Durable fix if it recurs: a custom domain. `*.onrender.com` subdomains inherit a shared
+reputation; a domain you own builds its own.
+
+---
+
 ### I-056 — `StatementParameterListItem` sends values as STRING, so `LIMIT :n` is rejected
 *Date:* 2026-09-02 · *Status:* resolved
 

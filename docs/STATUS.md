@@ -24,9 +24,9 @@ next-actions list in priority order.** Design lives in `FleetGuard_Proposal.md`,
 | **3 — Chunking + AI Search** | ✅ **DONE** | Index complete: **1,746,601 chunks, `ready: true`**, matching source exactly. Done-when **re-verified at full corpus** — hybrid differs from ANN on 2 of 3 queries, harm filter 10/10, near-duplicates 10/10 distinct. The earlier check ran at 42% and was repeated before being quoted. |
 | **4 — Model B + golden set** | ⬜ Not started | Scope now measured: variant matches outnumber exact 3:1 (I-030). |
 | **5 — Lakebase + CDF** | ✅ **DONE** | 11 tables, all `REPLICA IDENTITY FULL`; **all 11 CDF history tables exist with exact names, no `_1` suffixes** (I-044 — CDF replicates DDL, correcting an earlier wrong claim). Reference data loaded: depot 60, vehicle 20,000, campaigns 592. **Capture latency measured: 7.1–15.6 s** (I-046). **Exposure loaded** — `EXACT` scope, 263,686 rows deduplicated to **118,323** distinct (vin, campaign) pairs. |
-| **6 — OAuth wiring** | ✅ **Done (scope reduced)** | Auth seam (E-13) tested on both surfaces, 401 on failure, never an SP fallback. **U2M retired (E-14)** — needs an account-admin OAuth registration we do not have, and OBO on Databricks Apps is stronger with less setup. Render serves the public evidence page with no auth. |
+| **6 — OAuth wiring** | ✅ **DONE — with a login** | Auth seam (E-13) tested on both surfaces, 401 on failure, never an SP fallback. **U2M retired (E-14)** — needs an account-admin OAuth registration we do not have, and OBO on Databricks Apps is stronger with less setup. **Render now has a working sign-in (2026-09-02): GitHub OAuth, `app-login` mode, two-tier authorization (read for anyone signed in; approve only for `FLEETGUARD_APPROVERS`).** Verified end to end in a browser. |
 | **7 — Agent tools + write path** | ✅ **DONE** | Write path end to end: `POST /campaigns/{id}/service-campaign` → 1 service campaign + N work orders + audit row in **one transaction** → CDF → UC. Agent: `ResponsesAgent`, **4 tools** (complaint search · fleet exposure · **emerging signals** · propose campaign), MLflow tracing, smoke tests pass against live index + warehouse. **The agent proposes, never launches** — asserted in the build, so a change that lets it self-launch fails. **Logged, validated, registered and DEPLOYED** 2026-09-02: endpoint `agents_bootcamp_students-fleetguard-fleetguard_agent`, inference tables on (`fleetguard_agent_payload`). Console chat panel wired (`POST /api/chat`, caller's token, non-streaming). **The first deployed version answered a 25-vehicle recall with "no vehicles affected" (I-050)** — undeclared table resource plus an unchecked statement status. **Fixed in version 2, verified live:** returns 25 vehicles / 22 depots / EXACT with the tier stated, and a nonexistent campaign returns a distinguishable "the lookup ran and found zero". |
-| **8 — App + external surface** | 🟡 **Public surface live** | FastAPI serves `/api/*` **and** the built React console from one service — no CORS, SPA deep-link fallback. Four views: queue (+ assistant panel), campaign approval, **Emerging signals**, evidence. Verified end to end against live Lakebase. **Deployed to Render 2026-09-02** — https://fleetguard-console-abhi.onrender.com, chat panel included. Every `/api` route there returns 401 by design (no sign-in; U2M retired), so the panel renders an explanation rather than an error. **Outstanding:** the Databricks App (~20 Sept), where OBO supplies the identity that makes queue + chat live. |
+| **8 — App + external surface** | 🟡 **Public surface live** | FastAPI serves `/api/*` **and** the built React console from one service — no CORS, SPA deep-link fallback. Four views: queue (+ assistant panel), campaign approval, **Emerging signals**, evidence. Verified end to end against live Lakebase. **Deployed to Render 2026-09-02** — https://fleetguard-console-abhi.onrender.com, chat panel included. Every `/api` route there returns 401 by design (no sign-in; U2M retired), so the panel renders an explanation rather than an error. **Signed-in console live on Render** over a committed snapshot — the host can hold no Databricks credential (SP creation admin-only, PATs disabled, Lakebase auth is OAuth-only; all measured). Anonymous visitors land on Evidence, not a login wall (I-057). **Outstanding:** the Databricks App (~20 Sept), where OBO supplies a real Databricks identity and the data goes live. |
 | **9 — Model A + backtest** | ✅ **DONE — result is negative** | **The semantic hypothesis is falsified (I-049).** Subdivision *lowered* detection 13.3% → 11.2%, left lift flat (1.24× → 1.26×), and gave **0.0 days** extra lead on shared detections. Published result stays the volume-anomaly measurement: **16.0% vs 11.1%, 1.44×, p≈0.009**. Done-when explicitly required publishing a possibly-negative number as-is; met. |
 | **10 — Governance** | ⬜ Not started | Recommend a visible slice, not the full matrix. |
 | **11 — Deployment hardening** | ⬜ Not started | |
@@ -434,6 +434,17 @@ edge, not an oracle."* v2 dropped after verification (I-052); one entity billing
 5. **Phase 10 governance** — a visible slice (Postgres RLS on depot scoping, making §5.1
    literally true), not the full matrix.
 
+### The public deployment, as it now stands
+
+**https://fleetguard-console-abhi.onrender.com** — `auth_mode: app-login`,
+`data_mode: snapshot`. Anonymous: Evidence only. Signed in with GitHub: queue (60 campaigns),
+Emerging (48 signals, 2 fleet-relevant), campaign detail. Approval returns **501** by design —
+the surface has no credential to write with, and simulating the write would be worse than
+refusing. Refresh the snapshot with `scripts/export_demo_snapshot.py --profile abhi`.
+
+Three env vars live only in the Render dashboard, never committed: `GITHUB_CLIENT_ID`,
+`GITHUB_CLIENT_SECRET`, `FLEETGUARD_APPROVERS`.
+
 ### Things that are true and easy to forget
 
 - **The endpoint bills continuously** (`scale_to_zero_enabled: False`), serving **version 3**,
@@ -449,10 +460,13 @@ edge, not an oracle."* v2 dropped after verification (I-052); one entity billing
   old version stays provisioned and billing while routing looks perfectly correct. Build the
   `update-config` payload by reading the surviving entity's live config **programmatically**;
   hand-copying is how `MLFLOW_EXPERIMENT_ID` gets dropped.
+- **A login page on a fresh `*.onrender.com` subdomain trips Google Safe Browsing** (I-057) —
+  verify integrity by byte-comparing the served bundle before assuming a false positive, then
+  remove the signature by landing anonymous visitors on content rather than a form.
 - **`StatementParameterListItem` binds values as STRING** (I-056) — fine for `= :id`, rejected
   for `LIMIT :n`. Coerce to a bounded int and interpolate; after `int()` it cannot carry SQL.
 
-### Verification discipline — earned seven times (I-021, I-043, I-050, I-051, I-054, I-055, I-056)
+### Verification discipline — earned eight times (I-021, I-043, I-050, I-051, I-054, I-055, I-056, I-057)
 
 Never infer success from an exit code. Never infer correctness from the absence of an
 exception. **Assert a number.** And for documents: a living spec accumulates *intentions that

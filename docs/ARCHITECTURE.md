@@ -286,11 +286,33 @@ Stated so they are not mistaken for omissions.
 
 Two surfaces, one codebase, decided 2026-09-01 (E-12/E-13).
 
-| Window | Surface | Token source |
-|---|---|---|
-| Build → 7 Sept | **Render** (free tier) — *public evidence page only* | **none** — the page is static and read-only |
-| Local dev | `static-dev` | developer's own token, never leaves the machine |
-| ~20 Sept → demo | **Databricks App** in `abhi`, kept `STOPPED` between sessions — *the operator console* | `X-Forwarded-Access-Token` header — platform-supplied (OBO) |
+| Window | Surface | Auth mode | Data source |
+|---|---|---|---|
+| Now → demo | **Render** (free tier) — public evidence **+ signed-in console** | `app-login` — GitHub OAuth, app-owned session | **snapshot** (committed, captured from live Lakebase) |
+| Local dev | developer machine | `static-dev` — developer's own token | live Lakebase |
+| ~20 Sept → demo | **Databricks App** in `abhi`, kept `STOPPED` between sessions — *the operator console* | `databricks-apps` — `X-Forwarded-Access-Token` (OBO) | live Lakebase |
+
+**Render runs on a snapshot because it can hold no Databricks credential.** Measured
+2026-09-02, every route is closed on this account: `service-principals create` →
+*"only accessible by admins"*; `tokens list` → *"User does not have permission to use
+tokens"*; Lakebase roles are all `LAKEBASE_OAUTH_V1` (no password auth, credentials are
+minted from a Databricks token and last an hour); and the account-level OAuth app needed for
+U2M requires account admin. Not a design preference — an enumerated dead end.
+
+So `app-login` is the one provider whose `Principal` carries **no** Databricks token, and
+that makes an invariant load-bearing: `build_token_provider` **refuses to start** unless
+`FLEETGUARD_DATA_MODE=snapshot`. The two settings cannot drift apart.
+
+**Authorization on Render is two-tier and app-enforced.** Signing in grants *read*.
+Approving requires membership of `FLEETGUARD_APPROVERS` — signing in proves who you are, not
+that you may dispatch work orders against a fleet. And the approval endpoint returns **501**
+in snapshot mode rather than simulating a write: a plausible service-campaign id for a
+campaign that was never created would be a lie told by the safety-critical path.
+
+§5.1's "identity determines both rows and columns, and the frontend cannot bypass it" is a
+statement about the **Databricks App** surface, where UC and Postgres enforce it. On Render
+it is app-enforced through `scoping.py`, over immutable data, with writes disabled. Stated
+here rather than implied.
 
 **Free-edition Databricks Apps are not viable.** Free edition supports Apps, but it is a
 separate workspace *and* account, and app **resource bindings are workspace-local** — it
@@ -303,13 +325,18 @@ filters and column masks would be decorative.
 Databricks *account* console; measured 2026-09-02, this account's groups are `['users']`
 (not `admins`) and the account API returns `Not Found`, so it cannot be registered. It is
 also unnecessary: U2M and OBO both end with the app holding the user's token, and Apps
-ingress performs the login for free. **Do not substitute a PAT or service principal on
-Render** — the URL is public and the API has a write path, so a single shared identity there
-would let anyone approve service campaigns.
+ingress performs the login for free.
 
-**The agent chat panel ships to Render but is gated there.** `POST /api/chat` invokes the
-serving endpoint with the *caller's* token, so on a surface with no sign-in every call
-returns 401 and the panel renders an explanation rather than an error. That is the seam
+**The "no shared identity on Render" rule stands, and has been satisfied rather than
+waived.** Its stated reason was that the URL is public and the API has a write path, so one
+shared identity would let anyone approve service campaigns. Both halves are now addressed:
+there *is* a sign-in, and the write path is disabled on that surface entirely. No Databricks
+credential exists there to share — see the table above.
+
+**The agent chat panel ships to Render but stays inert there.** `POST /api/chat` invokes the
+serving endpoint with the caller's *Databricks* token — which `app-login` does not issue — so
+every call returns 401 and the panel renders an explanation rather than an error. Signing in
+with GitHub proves identity to the app; it grants nothing on Databricks. That is the seam
 behaving correctly, not a defect: the panel is functional the moment it runs somewhere that
 supplies an identity, which is verified locally (`static-dev`) and is what Databricks Apps
 supplies via OBO. Giving Render a service-principal identity so the public panel "works"
@@ -317,6 +344,14 @@ would be an **amendment to the decision above, not an exception to it** — the 
 there is the write path, and the chat route has none, but it would still expose
 workspace-billed LLM inference and complaint-narrative retrieval to anyone with the URL.
 Decide it explicitly if it comes up.
+
+**The public landing page is Evidence, not a login screen.** Google Safe Browsing flagged
+the deployment as a *"Dangerous site"* while its entire anonymous surface was a "Continue with
+GitHub" prompt on a zero-reputation shared subdomain — a textbook phishing signature (I-057).
+The served bundle was byte-compared against the local build to rule out compromise before
+concluding it was a false positive. Anonymous visitors now land on the measured result, with
+sign-in as a header action; an explicit link such as `#/queue` is still honoured, because a
+shared link must go where it says.
 
 **The auth seam.** The two environments differ in exactly one way — how the user's token
 arrives. Everything downstream (SQL, Lakebase, agent invocation, ABAC) is identical.
