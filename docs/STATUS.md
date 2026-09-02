@@ -28,7 +28,7 @@ next-actions list in priority order.** Design lives in `FleetGuard_Proposal.md`,
 | **7 — Agent tools + write path** | ✅ **DONE** | Write path end to end: `POST /campaigns/{id}/service-campaign` → 1 service campaign + N work orders + audit row in **one transaction** → CDF → UC. Agent: `ResponsesAgent`, **4 tools** (complaint search · fleet exposure · **emerging signals** · propose campaign), MLflow tracing, smoke tests pass against live index + warehouse. **The agent proposes, never launches** — asserted in the build, so a change that lets it self-launch fails. **Logged, validated, registered and DEPLOYED** 2026-09-02: endpoint `agents_bootcamp_students-fleetguard-fleetguard_agent`, inference tables on (`fleetguard_agent_payload`). Console chat panel wired (`POST /api/chat`, caller's token, non-streaming). **The first deployed version answered a 25-vehicle recall with "no vehicles affected" (I-050)** — undeclared table resource plus an unchecked statement status. **Fixed in version 2, verified live:** returns 25 vehicles / 22 depots / EXACT with the tier stated, and a nonexistent campaign returns a distinguishable "the lookup ran and found zero". |
 | **8 — App + external surface** | 🟡 **Public surface live** | FastAPI serves `/api/*` **and** the built React console from one service — no CORS, SPA deep-link fallback. Four views: queue (+ assistant panel), campaign approval, **Emerging signals**, evidence. Verified end to end against live Lakebase. **Deployed to Render 2026-09-02** — https://fleetguard-console-abhi.onrender.com, chat panel included. Every `/api` route there returns 401 by design (no sign-in; U2M retired), so the panel renders an explanation rather than an error. **Signed-in console live on Render** over a committed snapshot — the host can hold no Databricks credential (SP creation admin-only, PATs disabled, Lakebase auth is OAuth-only; all measured). Anonymous visitors land on Evidence, not a login wall (I-057). **Outstanding:** the Databricks App (~20 Sept), where OBO supplies a real Databricks identity and the data goes live. |
 | **9 — Model A + backtest** | ✅ **DONE — result is negative** | **The semantic hypothesis is falsified (I-049).** Subdivision *lowered* detection 13.3% → 11.2%, left lift flat (1.24× → 1.26×), and gave **0.0 days** extra lead on shared detections. Published result stays the volume-anomaly measurement: **16.0% vs 11.1%, 1.44×, p≈0.009**. Done-when explicitly required publishing a possibly-negative number as-is; met. |
-| **10 — Governance** | ⬜ Not started | Recommend a visible slice, not the full matrix. |
+| **10 — Governance** | ✅ **Visible slice DONE** | Postgres RLS on `fleetguard_vehicle`, `ENABLE`+`FORCE`, proved under real toggled states including the exposure join. Fail-open, nobody enrolled yet — mechanism real, enrollment is future work. Not the full ABAC/DQ-monitor matrix, by design. |
 | **11 — Deployment hardening** | ⬜ Not started | |
 | **12 — Second connector** | ❌ **Cut** | Deliberately dropped for schedule. |
 
@@ -200,14 +200,14 @@ failed during the build or exists because something adjacent to it failed silent
    demo has to sell *rigour* — a control arm, a falsified hypothesis, a published negative —
    rather than a big number. That is a stronger story than an unfalsifiable 10×, but it has
    to be told deliberately.
-3. ~~**Scope vs schedule.**~~ **Retired 2026-09-02 — the demo chain is built, and so is the
-   last capability gap.** Phases 4/6/7/8 all shipped: Model B with a real, leak-checked
-   precision/recall (4), auth seam + GitHub login (6), agent with 4 tools + evaluation gates
-   (7), console live on Render with themes and a signed-in operator surface (8). What is left
-   is the Databricks App migration (~20 Sept, an afternoon per the seam) and Phase 10
-   governance — both polish on a system that already works end to end. Cut list unchanged
+3. ~~**Scope vs schedule.**~~ **Retired 2026-09-02 — every phase but the App migration is
+   done.** Phases 4/6/7/8/10 all shipped: Model B with a real, leak-checked precision/recall
+   (4), auth seam + GitHub login (6), agent with 4 tools + evaluation gates (7), console live
+   on Render with themes and a signed-in operator surface (8), Postgres RLS proved live on
+   depot scoping (10). What is left is the Databricks App migration (~20 Sept, an afternoon
+   per the seam) — the last item on the whole plan, not one of several. Cut list unchanged
    and still agreed: Feature Store online serving, Genie Agent, Unity AI Gateway, governance
-   reduced to a visible slice.
+   kept at its visible slice rather than the full matrix.
 4. **A pattern worth naming: the tooling lies about success.** Three distinct variants in
    one day — a watcher exiting `0` at 51% (I-043), `jobs run-now` returning `0` for a
    `FAILED` run, and the CLI reporting `Error: timed out` while the job ran on healthily.
@@ -480,8 +480,26 @@ edge, not an oracle."* v2 dropped after verification (I-052); one entity billing
    tautologically tied to the golden set's negative-label rule rather than learned; fixed and
    retrained. This was the largest remaining *capability* gap — closing it, everything left
    on this list is polish or the App migration.
-6. **Phase 10 governance** — a visible slice (Postgres RLS on depot scoping, making §5.1
-   literally true), not the full matrix.
+6. ~~**Phase 10 governance.**~~ **Done 2026-09-02 — the visible slice, proved live.**
+   Postgres RLS on `fleetguard_vehicle`, `ENABLE` **and** `FORCE` (owner cannot bypass it
+   either — plain `ENABLE` alone would have let the table owner's own connection skip the
+   policy entirely). Fail-open by design: no row in `fleetguard_depot_assignment` = full
+   access, unchanged from before this existed; an assignment restricts to that depot, below
+   the application. **Proved, not configured** — toggled this identity's own assignment row
+   and measured real row counts under both states, including the join through
+   `fleetguard_vehicle_exposure` (the console never queries `fleetguard_vehicle` alone, so an
+   unjoined policy would protect nothing real). Re-verified independently after the run:
+   `relrowsecurity=True`, `relforcerowsecurity=True`, assignment table empty, unrestricted
+   count back to 20,000.
+   **Original design needed a rewrite mid-flight:** the plan called for a purpose-made
+   Postgres role to prove restriction under a genuinely different identity — this account has
+   no `CREATEROLE` on the shared Lakebase instance, correctly restricted on infrastructure
+   shared with ~296 other students. `FORCE ROW LEVEL SECURITY` made the proof work under this
+   identity's own connection instead, and is the better result regardless of the blocker: it
+   closes a real gap (owner-bypass) the original design would have left open.
+   **Not the full matrix, and said so:** no principal is currently enrolled, so every real
+   caller is on the fail-open path today. The mechanism is real and proved; enrollment is
+   future work, stated plainly in `scoping.py` rather than implied away.
 
 ### The public deployment, as it now stands
 
@@ -524,7 +542,7 @@ Three env vars live only in the Render dashboard, never committed: `GITHUB_CLIEN
 - **`StatementParameterListItem` binds values as STRING** (I-056) — fine for `= :id`, rejected
   for `LIMIT :n`. Coerce to a bounded int and interpolate; after `int()` it cannot carry SQL.
 
-### Verification discipline — earned nine times (I-021, I-043, I-050, I-051, I-054, I-055, I-056, I-057, I-058)
+### Verification discipline — earned ten times (I-021, I-043, I-050, I-051, I-054, I-055, I-056, I-057, I-058, I-060)
 
 Never infer success from an exit code. Never infer correctness from the absence of an
 exception. **Assert a number.** And for documents: a living spec accumulates *intentions that

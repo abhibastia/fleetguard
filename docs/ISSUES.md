@@ -26,6 +26,42 @@ no error and passed the obvious check.
 
 ## Tooling / process
 
+### I-061 — No `CREATEROLE` on the shared Lakebase instance; `FORCE ROW LEVEL SECURITY` was the fix, not a workaround
+*Date:* 2026-09-02 · *Status:* resolved, and the redesign is a better result than the original plan
+
+**Symptom.** `src/lakebase/15_enable_depot_rls.py`'s first run failed at `CREATE ROLE`:
+`InsufficientPrivilege: permission denied to drop role — Only roles with the CREATEROLE
+attribute and the ADMIN option on the target roles may drop roles.` Measured directly:
+`rolcreaterole = false` for this identity on `projects/summer-bootcamp-2026-v2`.
+
+**This is correct behaviour, not a bug to route around.** The Lakebase instance is shared
+infrastructure with ~25+ Databricks identities as Postgres login roles (measured 2026-09-01)
+across ~296 bootcamp students. Being unable to create or drop arbitrary Postgres roles on
+shared infrastructure is the platform working as intended, and the response was to redesign
+the proof, not to seek elevated privileges.
+
+**The redesign turned out stronger than the original plan.** The original design created a
+purpose-made role, connected as it, and measured restricted row counts — valid, but it also
+implicitly relied on something never checked: whether the table **owner's own connection**
+was even subject to the policy. It was not — Postgres exempts table owners from RLS by
+default. Adding `ALTER TABLE ... FORCE ROW LEVEL SECURITY` closed that gap and let the whole
+proof run under this identity's own connection: no new role needed, and the owner-bypass loop
+hole — which would have made "the frontend cannot bypass it" false for any owner-connected
+caller regardless of policy content — is now closed rather than merely untested.
+
+**Resolution.** Proof redesigned around three states of this identity's own
+`fleetguard_depot_assignment` row (absent → present → removed again), each measured with real
+row counts under `FORCE ROW LEVEL SECURITY`, asserted, not trusted. Independently re-verified
+after the run via a fresh connection: `relrowsecurity=True`, `relforcerowsecurity=True`,
+assignment table empty, unrestricted count restored to 20,000.
+
+**Lesson.** A blocked privilege is sometimes information about the correct design, not an
+obstacle to the one already chosen. Checking *why* a permission is denied — here, shared
+multi-tenant infrastructure with 296 other identities — pointed at a fix (`FORCE`) that closed
+a real gap the original design hadn't noticed yet, rather than just working around the block.
+
+---
+
 ### I-060 — Model B's first training run had leakage from its own golden-set label rule
 *Date:* 2026-09-02 · *Status:* fixed, retraining
 

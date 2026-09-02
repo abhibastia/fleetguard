@@ -262,11 +262,33 @@ agent's search tool (§4.3) — retrieval and clustering are different uses of t
 embeddings. What is retired is only the claim that semantic clustering improves early
 detection.
 
-### Phase 10 — Governance
-- Data Classification, ABAC row filters/column masks, DQ Monitors (including the
-  Lakebase CDF lag monitor from §8.4), System Tables.
-- **Done when:** DQ Monitoring dashboard shows live freshness/drift signals, not just
-  config.
+### Phase 10 — Governance ✅ VISIBLE SLICE DONE (2026-09-02); full matrix cut for schedule
+*Cut to a visible slice on 2026-08-31 (see Phase 12's note): Postgres RLS on depot scoping,
+proved once, not the full Data Classification / ABAC / DQ Monitors / System Tables matrix.*
+
+**Postgres RLS live on `fleetguard_vehicle`** — `ENABLE` **and** `FORCE ROW LEVEL SECURITY`,
+additive/fail-open via `fleetguard_depot_assignment` (no assignment row = unrestricted,
+unchanged from before). `src/lakebase/15_enable_depot_rls.py`.
+
+**Proved under real restricted and unassigned states, not trusted on config alone** — the
+notebook toggles this identity's own assignment row and measures actual row counts,
+including the join through `fleetguard_vehicle_exposure` the console actually reads (RLS on
+`fleetguard_vehicle` alone protects nothing if that join isn't also filtered — checked, and
+it is). Independently re-verified after the run: `relrowsecurity=True`,
+`relforcerowsecurity=True`, assignment table empty, unrestricted count back to 20,000.
+
+**Design detour, and why:** the original design created a purpose-made Postgres role to
+prove restriction under a genuinely different identity. This account has no `CREATEROLE` on
+the shared Lakebase instance — correctly restricted, on infrastructure shared with ~296
+other students. `FORCE ROW LEVEL SECURITY` made the proof possible under this identity's own
+connection instead, and is a strictly better result: without `FORCE`, Postgres exempts table
+owners from RLS by default, which would have made "the frontend cannot bypass it" false for
+any owner-connected caller regardless of policy content.
+
+**Done when: met, for the reduced scope.** No principal is currently enrolled in
+`fleetguard_depot_assignment`, so every real caller is on the fail-open path today — the
+mechanism exists and is proved; nobody has been assigned through it yet. That is stated
+plainly in `scoping.py`'s own docstring, not left implicit.
 
 ### Phase 11 — Deployment hardening
 - `table_update` trigger wired to `lb_<table>_history` (per §8.3's YAML), Render

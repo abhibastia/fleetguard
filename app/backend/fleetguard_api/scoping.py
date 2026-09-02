@@ -3,16 +3,25 @@
 Same discipline as the auth seam (E-13): the *enforcement mechanism* will change, so the
 decision lives in one module rather than spread across handlers.
 
-**Where enforcement stands today.** Measured 2026-09-01: Databricks identities exist as
-Postgres login roles, connections resolve `current_user` to the caller's own email, and
-`row_security` is `on`. So Postgres RLS can enforce depot scoping *below* the application —
-which is what keeps §5.1's "the frontend cannot bypass it" literally true once the policies
-are written (Phase 10).
+**Where enforcement stands today.** As of 2026-09-02, Postgres RLS is live on
+`fleetguard_vehicle` — `ENABLE` **and** `FORCE ROW LEVEL SECURITY`, so even the table owner's
+own connection is subject to it, not exempted (Postgres exempts owners by default; without
+`FORCE` the policy would be decorative for exactly the identity most likely to be probing it).
+The policy is additive and fail-open: a principal with no row in
+`fleetguard_depot_assignment` sees everything, unchanged from before; a principal explicitly
+assigned a depot sees only that depot's vehicles, enforced *below* the application. Proved,
+not merely configured — `src/lakebase/15_enable_depot_rls.py` measures real row counts under
+both states, including the join through `fleetguard_vehicle_exposure` that the console
+actually reads, and fails loudly if either is wrong.
 
-Until those policies exist, scoping is **application-enforced** by the predicates below.
-That is stated plainly rather than implied: an unwritten RLS policy provides no protection,
-and a document claiming otherwise would be the kind of unfalsifiable assertion this project
-has spent weeks removing.
+This is genuinely Phase 10's *visible slice*, not the full governance matrix — no principal
+is currently enrolled in `fleetguard_depot_assignment`, so today every caller is on the
+fail-open path in practice. The predicates below remain the application-enforced layer for
+every caller until someone is deliberately assigned a depot; once RLS enrollment happens,
+they become defence-in-depth behind it rather than the only control. That is stated plainly
+rather than implied — a mechanism that exists but enrolls nobody protects nobody yet, and a
+document claiming otherwise would be the kind of unfalsifiable assertion this project has
+spent weeks removing.
 
 `ScopeMode.FLEET_WIDE` is not an absence of governance — it is the reliability-analyst view
 from §2, which is deliberately fleet-wide *with VINs masked*.
@@ -58,8 +67,11 @@ def resolve_scope(principal: Principal, depot_id: str | None = None) -> Scope:
     absence of one. `depot_id` narrows voluntarily (the depot-manager view) without
     implying it is enforced.
 
-    When Phase 10 lands, this function reads the caller's group membership and the
-    predicates below become defence-in-depth behind RLS rather than the only control.
+    RLS itself is live (see the module docstring) but nobody is enrolled in
+    `fleetguard_depot_assignment` yet, so this function does not consult it — every caller
+    is on the fail-open path regardless of what `resolve_scope` returns. Once real
+    assignments exist, this should read them and the predicates below become defence-in-depth
+    behind RLS rather than the only control.
     """
     if depot_id:
         return Scope(

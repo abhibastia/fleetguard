@@ -54,7 +54,8 @@ against 11.1% on a volume-matched placebo** (1.44×, z ≈ 2.62, p ≈ 0.009).
 | 7 Agent tools + write path | ⬜ Not started |
 | 8 App + external surface | ⬜ Not started |
 | 9 Model A + backtest | ✅ Done — **result is negative**, see §6 |
-| 10 Governance · 11 Hardening | ⬜ Not started |
+| 10 Governance | ✅ Visible slice — Postgres RLS on depot scoping, proved live |
+| 11 Hardening | ⬜ Not started |
 | 12 Second connector | ❌ Cut for schedule |
 
 Everything lives in one schema, `bootcamp_students.fleetguard`, inside a **shared** bootcamp
@@ -326,6 +327,18 @@ campaign that was never created would be a lie told by the safety-critical path.
 statement about the **Databricks App** surface, where UC and Postgres enforce it. On Render
 it is app-enforced through `scoping.py`, over immutable data, with writes disabled. Stated
 here rather than implied.
+
+**The Postgres half of that claim is now real, not aspirational (Phase 10's visible slice,
+2026-09-02).** `fleetguard_vehicle` has RLS **enabled and forced** — forced specifically so
+the table owner's own connection cannot bypass the policy either, which plain `ENABLE` would
+have allowed by default. The policy is additive and fail-open through
+`fleetguard_depot_assignment`: no assignment row means unrestricted, exactly as before this
+existed; an assignment restricts to that depot, enforced below the application. Proved under
+real toggled states — including the join through `fleetguard_vehicle_exposure` the console
+actually reads — not trusted on configuration alone (`src/lakebase/15_enable_depot_rls.py`).
+**Nobody is currently enrolled**, so every live caller is on the fail-open path in practice;
+the mechanism is real, the enrollment is the remaining work, and both halves of that
+sentence are said on purpose.
 
 **Free-edition Databricks Apps are not viable.** Free edition supports Apps, but it is a
 separate workspace *and* account, and app **resource bindings are workspace-local** — it
