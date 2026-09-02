@@ -58,24 +58,9 @@
       ]
     },
     {
-      "name": "ds_evidence_arms",
-      "displayName": "Backtest arms",
-      "queryLines": [
-        "SELECT arm, n, detected, detect_rate_pct, median_lead_days ",
-        "FROM gold_lead_time_summary"
-      ]
-    },
-    {
-      "name": "ds_evidence_lift",
-      "displayName": "Backtest headline (pivoted)",
-      "queryLines": [
-        "SELECT\n",
-        "  MAX(CASE WHEN arm LIKE 'REAL%' THEN detect_rate_pct END) AS real_rate,\n",
-        "  MAX(CASE WHEN arm LIKE 'PLACEBO%' THEN detect_rate_pct END) AS placebo_rate,\n",
-        "  ROUND(MAX(CASE WHEN arm LIKE 'REAL%' THEN detect_rate_pct END) / MAX(CASE WHEN arm LIKE 'PLACEBO%' THEN detect_rate_pct END), 2) AS lift,\n",
-        "  MAX(CASE WHEN arm LIKE 'REAL%' THEN median_lead_days END) AS real_median_lead\n",
-        "FROM gold_lead_time_summary"
-      ]
+      "name": "ds_evidence_metrics",
+      "displayName": "Evidence metrics (governed)",
+      "asset_name": "bootcamp_students.fleetguard.evidence_metrics"
     },
     {
       "name": "ds_trust_recon",
@@ -411,50 +396,50 @@
         {
           "widget": {
             "name": "kpi-real-rate",
-            "queries": [{"name": "main_query", "query": {"datasetName": "ds_evidence_lift", "fields": [{"name": "real_rate", "expression": "`real_rate`"}], "disaggregated": true}}],
-            "spec": {"version": 2, "widgetType": "counter", "encodings": {"value": {"fieldName": "real_rate", "displayName": "Detected · real arm", "formatTemplate": "{{ @formatted }}%"}}, "frame": {"title": "Detected · real arm", "showTitle": true}}
+            "queries": [{"name": "main_query", "query": {"datasetName": "ds_evidence_metrics", "fields": [{"name": "measure(Real Detection Rate %)", "expression": "MEASURE(`Real Detection Rate %`)"}], "disaggregated": false}}],
+            "spec": {"version": 2, "widgetType": "counter", "encodings": {"value": {"fieldName": "measure(Real Detection Rate %)", "displayName": "Detected · real arm", "format": {"type": "number", "decimalPlaces": {"type": "exact", "places": 1}}, "formatTemplate": "{{ @formatted }}%"}}, "frame": {"title": "Detected · real arm", "showTitle": true}}
           },
           "position": {"x": 0, "y": 2, "width": 3, "height": 4}
         },
         {
           "widget": {
             "name": "kpi-placebo-rate",
-            "queries": [{"name": "main_query", "query": {"datasetName": "ds_evidence_lift", "fields": [{"name": "placebo_rate", "expression": "`placebo_rate`"}], "disaggregated": true}}],
-            "spec": {"version": 2, "widgetType": "counter", "encodings": {"value": {"fieldName": "placebo_rate", "displayName": "Detected · placebo", "formatTemplate": "{{ @formatted }}%"}}, "frame": {"title": "Detected · placebo", "showTitle": true}}
+            "queries": [{"name": "main_query", "query": {"datasetName": "ds_evidence_metrics", "fields": [{"name": "measure(Placebo Detection Rate %)", "expression": "MEASURE(`Placebo Detection Rate %`)"}], "disaggregated": false}}],
+            "spec": {"version": 2, "widgetType": "counter", "encodings": {"value": {"fieldName": "measure(Placebo Detection Rate %)", "displayName": "Detected · placebo", "format": {"type": "number", "decimalPlaces": {"type": "exact", "places": 1}}, "formatTemplate": "{{ @formatted }}%"}}, "frame": {"title": "Detected · placebo", "showTitle": true}}
           },
           "position": {"x": 3, "y": 2, "width": 3, "height": 4}
         },
         {
           "widget": {
             "name": "kpi-lift",
-            "queries": [{"name": "main_query", "query": {"datasetName": "ds_evidence_lift", "fields": [{"name": "lift", "expression": "`lift`"}], "disaggregated": true}}],
-            "spec": {"version": 2, "widgetType": "counter", "encodings": {"value": {"fieldName": "lift", "displayName": "Lift", "formatTemplate": "{{ @formatted }}×"}}, "frame": {"title": "Lift", "showTitle": true}}
+            "queries": [{"name": "main_query", "query": {"datasetName": "ds_evidence_metrics", "fields": [{"name": "measure(Lift)", "expression": "MEASURE(`Lift`)"}], "disaggregated": false}}],
+            "spec": {"version": 2, "widgetType": "counter", "encodings": {"value": {"fieldName": "measure(Lift)", "displayName": "Lift", "format": {"type": "number", "decimalPlaces": {"type": "exact", "places": 2}}, "formatTemplate": "{{ @formatted }}×"}}, "frame": {"title": "Lift", "showTitle": true}}
           },
           "position": {"x": 6, "y": 2, "width": 3, "height": 4}
         },
         {
           "widget": {
             "name": "kpi-median-lead",
-            "queries": [{"name": "main_query", "query": {"datasetName": "ds_evidence_lift", "fields": [{"name": "real_median_lead", "expression": "`real_median_lead`"}], "disaggregated": true}}],
-            "spec": {"version": 2, "widgetType": "counter", "encodings": {"value": {"fieldName": "real_median_lead", "displayName": "Median lead", "formatTemplate": "{{ @formatted }}d"}}, "frame": {"title": "Median lead", "showTitle": true}}
+            "queries": [{"name": "main_query", "query": {"datasetName": "ds_evidence_metrics", "fields": [{"name": "measure(Real Median Lead Days)", "expression": "MEASURE(`Real Median Lead Days`)"}], "disaggregated": false}}],
+            "spec": {"version": 2, "widgetType": "counter", "encodings": {"value": {"fieldName": "measure(Real Median Lead Days)", "displayName": "Median lead", "formatTemplate": "{{ @formatted }}d"}}, "frame": {"title": "Median lead", "showTitle": true}}
           },
           "position": {"x": 9, "y": 2, "width": 3, "height": 4}
         },
-        {"widget": {"name": "section-arms", "multilineTextboxSpec": {"lines": ["## Real vs. placebo\n"]}}, "position": {"x": 0, "y": 6, "width": 12, "height": 1}},
+        {"widget": {"name": "section-arms", "multilineTextboxSpec": {"lines": ["## Real vs. placebo — from `evidence_metrics`, the governed metric view\n"]}}, "position": {"x": 0, "y": 6, "width": 12, "height": 1}},
         {
           "widget": {
             "name": "arm-detect-rate",
-            "queries": [{"name": "main_query", "query": {"datasetName": "ds_evidence_arms", "fields": [
-              {"name": "arm", "expression": "`arm`"},
-              {"name": "detect_rate_pct", "expression": "`detect_rate_pct`"}
-            ], "disaggregated": true}}],
+            "queries": [{"name": "main_query", "query": {"datasetName": "ds_evidence_metrics", "fields": [
+              {"name": "Arm", "expression": "`Arm`"},
+              {"name": "measure(Detection Rate %)", "expression": "MEASURE(`Detection Rate %`)"}
+            ], "disaggregated": false}}],
             "spec": {
               "version": 3, "widgetType": "bar",
               "frame": {"title": "Detection rate by arm", "showTitle": true},
               "encodings": {
-                "x": {"fieldName": "arm", "scale": {"type": "categorical"}, "displayName": "Arm"},
-                "y": {"fieldName": "detect_rate_pct", "scale": {"type": "quantitative"}, "displayName": "Detected %"},
-                "color": {"fieldName": "arm", "scale": {"type": "categorical", "mappings": [
+                "x": {"fieldName": "Arm", "scale": {"type": "categorical"}, "displayName": "Arm"},
+                "y": {"fieldName": "measure(Detection Rate %)", "scale": {"type": "quantitative"}, "displayName": "Detected %"},
+                "color": {"fieldName": "Arm", "scale": {"type": "categorical", "mappings": [
                   {"value": "REAL (investigated series)", "color": "#009E73"},
                   {"value": "PLACEBO (never investigated)", "color": "#8C9196"}
                 ]}}
@@ -466,22 +451,22 @@
         {
           "widget": {
             "name": "arm-detail",
-            "queries": [{"name": "main_query", "query": {"datasetName": "ds_evidence_arms", "fields": [
-              {"name": "arm", "expression": "`arm`"},
-              {"name": "n", "expression": "`n`"},
-              {"name": "detected", "expression": "`detected`"},
-              {"name": "detect_rate_pct", "expression": "`detect_rate_pct`"},
-              {"name": "median_lead_days", "expression": "`median_lead_days`"}
-            ], "disaggregated": true}}],
+            "queries": [{"name": "main_query", "query": {"datasetName": "ds_evidence_metrics", "fields": [
+              {"name": "Arm", "expression": "`Arm`"},
+              {"name": "measure(Investigations)", "expression": "MEASURE(`Investigations`)"},
+              {"name": "measure(Detected)", "expression": "MEASURE(`Detected`)"},
+              {"name": "measure(Detection Rate %)", "expression": "MEASURE(`Detection Rate %`)"},
+              {"name": "measure(Median Lead Days)", "expression": "MEASURE(`Median Lead Days`)"}
+            ], "disaggregated": false}}],
             "spec": {
               "version": 2, "widgetType": "table",
               "frame": {"title": "Arm detail", "showTitle": true},
               "encodings": {"columns": [
-                {"fieldName": "arm", "displayName": "Arm"},
-                {"fieldName": "n", "displayName": "Investigations"},
-                {"fieldName": "detected", "displayName": "Detected"},
-                {"fieldName": "detect_rate_pct", "displayName": "Rate %", "format": {"type": "number", "decimalPlaces": {"type": "exact", "places": 1}}},
-                {"fieldName": "median_lead_days", "displayName": "Median lead (days)"}
+                {"fieldName": "Arm", "displayName": "Arm"},
+                {"fieldName": "measure(Investigations)", "displayName": "Investigations"},
+                {"fieldName": "measure(Detected)", "displayName": "Detected"},
+                {"fieldName": "measure(Detection Rate %)", "displayName": "Rate %", "format": {"type": "number", "decimalPlaces": {"type": "exact", "places": 1}}},
+                {"fieldName": "measure(Median Lead Days)", "displayName": "Median lead (days)"}
               ]}
             }
           },
