@@ -67,12 +67,15 @@ def featurize(df: pd.DataFrame) -> pd.DataFrame:
     r = df["recall_model"].str.upper().fillna("")
 
     out = pd.DataFrame(index=df.index)
+    # strict=True: `m` and `r` come from the same dataframe so are always the same length
+    # today, but a silent truncation on a future mismatch would misalign every row after
+    # it — features computed against the wrong label — rather than raising immediately.
     # String-similarity family: different metrics fail differently, so more than one is kept
     # rather than picking a single "best" one that happens to fit this sample.
-    out["ratio"] = [fuzz.ratio(a, b) for a, b in zip(m, r)]
-    out["partial_ratio"] = [fuzz.partial_ratio(a, b) for a, b in zip(m, r)]
-    out["token_sort_ratio"] = [fuzz.token_sort_ratio(a, b) for a, b in zip(m, r)]
-    out["token_set_ratio"] = [fuzz.token_set_ratio(a, b) for a, b in zip(m, r)]
+    out["ratio"] = [fuzz.ratio(a, b) for a, b in zip(m, r, strict=True)]
+    out["partial_ratio"] = [fuzz.partial_ratio(a, b) for a, b in zip(m, r, strict=True)]
+    out["token_sort_ratio"] = [fuzz.token_sort_ratio(a, b) for a, b in zip(m, r, strict=True)]
+    out["token_set_ratio"] = [fuzz.token_set_ratio(a, b) for a, b in zip(m, r, strict=True)]
 
     # model_is_substring_of_recall / recall_is_substring_of_model deliberately OMITTED —
     # see I-060 above. Do not re-add without re-deriving the golden set's negative rule
@@ -83,11 +86,11 @@ def featurize(df: pd.DataFrame) -> pd.DataFrame:
     m_tokens = m.str.split().apply(set)
     r_tokens = r.str.split().apply(set)
     out["token_jaccard"] = [
-        len(a & b) / len(a | b) if (a | b) else 0.0 for a, b in zip(m_tokens, r_tokens)
+        len(a & b) / len(a | b) if (a | b) else 0.0 for a, b in zip(m_tokens, r_tokens, strict=True)
     ]
     out["first_word_matches"] = [
         (a.split()[0] if a.split() else "") == (b.split()[0] if b.split() else "")
-        for a, b in zip(m, r)
+        for a, b in zip(m, r, strict=True)
     ]
     return out
 

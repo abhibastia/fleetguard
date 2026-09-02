@@ -188,9 +188,15 @@ def approve_campaign(
 
 @router.get("/service-campaigns", tags=["approval"])
 def list_service_campaigns(principal: CurrentPrincipal, limit: int = 50) -> list[dict]:
+    """Recently launched service campaigns — what the demo checks after approving.
+
+    A string literal placed after the snapshot-mode return below is NOT a docstring to the
+    interpreter — it silently becomes a dead no-op statement, and FastAPI's generated docs
+    lose this endpoint's description with no error anywhere. Caught in the 2026-09-02 repo
+    review; the docstring belongs here, before any code.
+    """
     if snapshot.is_snapshot():
         return []  # nothing has been approved on a read-only surface, and that is the truth
-    """Recently launched service campaigns — what the demo checks after approving."""
     with connect(principal) as conn, conn.cursor() as cur:
         cur.execute(
             f"""SELECT s.service_campaign_id, s.campaign_id, s.title, s.vehicle_count,

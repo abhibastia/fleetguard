@@ -78,6 +78,18 @@ def chat(principal: CurrentPrincipal, req: ChatRequest) -> ChatReply:
             detail="Agent is not configured (DATABRICKS_HOST unset).",
         )
 
+    # `app-login` principals (Render) are signed in but carry no Databricks token by design
+    # (snapshot.py's whole reason for existing). Checked explicitly, before the call, rather
+    # than left to fail downstream: an empty bearer token still reaches the real serving
+    # endpoint, comes back 401, and without this check that surfaces as a generic 502 —
+    # exactly the confusing case the frontend's dedicated "assistant is offline" state exists
+    # to avoid, and it would only ever fire for the 503 branch above, never this one.
+    if not principal.token:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="This deployment has no Databricks credential to query the agent with.",
+        )
+
     url = f"{host}/serving-endpoints/{AGENT_ENDPOINT}/invocations"
     body = {"input": [t.model_dump() for t in req.messages]}
 

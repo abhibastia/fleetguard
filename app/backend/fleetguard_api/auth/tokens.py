@@ -22,8 +22,14 @@ off-platform, like `fleetguard.vin` and `fleetguard.chunking`.
 from __future__ import annotations
 
 import os
+import time
 from dataclasses import dataclass
 from typing import Protocol
+
+# Matches auth_routes.SESSION_TTL_S — the cookie's own max_age. Kept as a plain constant
+# rather than imported from auth_routes because this module is deliberately free of FastAPI
+# imports (see the module docstring); auth_routes imports FROM here, not the reverse.
+DEFAULT_SESSION_TTL_S = 8 * 3600
 
 # Lowercase by convention; HTTP headers are case-insensitive and every ASGI server this
 # runs behind normalises to lowercase before we see them.
@@ -99,9 +105,17 @@ class SessionTokenProvider:
     storage decision (cookie, Redis, signed JWT) can change without touching the seam.
     """
 
-    def __init__(self, session_lookup, cookie_name: str = "fg_session") -> None:
+    def __init__(
+        self,
+        session_lookup,
+        cookie_name: str = "fg_session",
+        session_ttl_s: float = DEFAULT_SESSION_TTL_S,
+        now_fn=time.time,
+    ) -> None:
         self._lookup = session_lookup
         self._cookie_name = cookie_name
+        self._ttl_s = session_ttl_s
+        self._now = now_fn
 
     def resolve(self, headers: dict[str, str]) -> Principal:
         lowered = {k.lower(): v for k, v in headers.items()}
@@ -112,6 +126,11 @@ class SessionTokenProvider:
         session = self._lookup(session_id)
         if not session or not session.get("access_token"):
             raise AuthError("session unknown or expired; re-authenticate")
+        # Server-side expiry, not just the cookie's client-side max_age. Without this, a
+        # session outlives the browser's willingness to send it — the cookie's `max_age` is
+        # a client-side courtesy, not an access control (I-062: found in the 2026-09-02 repo
+        # review; a captured or replayed session value was honoured by the server forever).
+        _check_not_expired(session, self._ttl_s, self._now)
 
         return Principal(
             token=session["access_token"],
@@ -134,9 +153,17 @@ class AppLoginTokenProvider:
     handing a Lakebase query an empty token and letting it fail somewhere less obvious.
     """
 
-    def __init__(self, session_lookup, cookie_name: str = "fg_session") -> None:
+    def __init__(
+        self,
+        session_lookup,
+        cookie_name: str = "fg_session",
+        session_ttl_s: float = DEFAULT_SESSION_TTL_S,
+        now_fn=time.time,
+    ) -> None:
         self._lookup = session_lookup
         self._cookie_name = cookie_name
+        self._ttl_s = session_ttl_s
+        self._now = now_fn
 
     def resolve(self, headers: dict[str, str]) -> Principal:
         lowered = {k.lower(): v for k, v in headers.items()}
@@ -147,6 +174,9 @@ class AppLoginTokenProvider:
         session = self._lookup(session_id)
         if not session or not session.get("user_name"):
             raise AuthError("session unknown or expired; sign in again")
+        # See SessionTokenProvider — same server-side expiry gap, same fix (I-062). This is
+        # the provider Render actually runs, so this check is the one that matters live.
+        _check_not_expired(session, self._ttl_s, self._now)
 
         return Principal(
             token="",  # deliberate: there is no Databricks credential on this surface
@@ -170,6 +200,21 @@ class StaticTokenProvider:
 
     def resolve(self, headers: dict[str, str]) -> Principal:  # noqa: ARG002 - by design
         return self._principal
+
+
+def _check_not_expired(session: dict, ttl_s: float, now_fn) -> None:
+    """Enforce server-side session lifetime — the cookie's `max_age` only controls when the
+    browser stops sending it, not how long the server honours it.
+
+    Fails closed on a session with no `created` timestamp, rather than treating unknown age
+    as valid. Every session this codebase creates (`routers/auth_routes.py::callback`)
+    stamps `created` at creation; a session missing it did not come from that path, and
+    trusting it indefinitely would be exactly the "fall back to a broader principal" this
+    module's own rules forbid.
+    """
+    created = session.get("created")
+    if created is None or (now_fn() - created) > ttl_s:
+        raise AuthError("session expired; sign in again")
 
 
 def _cookie_value(cookie_header: str, name: str) -> str | None:
