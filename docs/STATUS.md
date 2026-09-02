@@ -64,9 +64,16 @@ recalls (`recallsByVehicle`, 200/200 combos, 100 s sweep) · `static.nhtsa.gov` 
 1. AI Search endpoint `fleetguard-vs` (STANDARD, 1 unit) — **~$6.72/day**, started 2026-08-31.
 2. Model Serving endpoint `agents_bootcamp_students-fleetguard-fleetguard_agent` (Small CPU),
    started 2026-09-02. **`scale_to_zero_enabled` is `False`** — `agents.deploy()` did not
-   enable it — so this bills continuously, not per query. Rate not yet measured; check
-   `system.billing.usage` once records appear rather than quoting an estimate. Enabling
-   scale-to-zero trades idle cost for a cold start on the first demo question.
+   enable it — so this bills continuously, not per query. Enabling scale-to-zero would trade
+   idle cost for a cold start on the first demo question.
+   **The rate cannot be self-served from this workspace:** `system.billing` requires
+   `USE SCHEMA`, which a non-admin on a shared metastore does not have, and the public
+   pricing pages publish GPU serving DBU rates only — there is no CPU workload-size table.
+   Get the grant, use the pricing calculator, or read the bill; do not quote an estimate.
+   **Redeploying does not retire the old version.** `agents.deploy()` of v2 left v1
+   `DEPLOYMENT_READY` at 0% traffic — two containers billing for one agent. Removed
+   2026-09-02 via `serving-endpoints update-config`; endpoint re-verified afterwards
+   (25 vehicles / 22 depots / EXACT). Check for this after every redeploy.
 
 Nothing else recurs: no Lakebase tables, no schedules.
 Stop it with `databricks vector-search-indexes delete-index bootcamp_students.fleetguard.complaint_chunk_idx`
