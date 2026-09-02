@@ -91,3 +91,39 @@ for t in traces:
         print()
 
 print(f"\n{fails} failing assessments")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Return the failures as the notebook result
+# MAGIC
+# MAGIC `print` output is visible in the run page but is **not** retrievable through the Jobs
+# MAGIC API, so a caller driving this from the CLI sees a successful run and no findings.
+# MAGIC `dbutils.notebook.exit` puts the answer where the API can read it.
+
+# COMMAND ----------
+
+import json
+
+report = {"run_id": RUN_ID, "metrics": run.data.metrics, "failures": []}
+
+for t in traces:
+    for a in t.info.assessments or []:
+        fb = getattr(a, "feedback", None)
+        value = getattr(fb, "value", None) if fb else None
+        if value is None or value in (True, "yes", "pass", 1):
+            continue
+        report["failures"].append(
+            {
+                "question": str(getattr(t.info, "request_preview", "") or "")[:200],
+                # The answer, not just the verdict. A scorer alleging a violation is a claim
+                # about text; judging the claim without reading that text is how a false
+                # positive becomes a "finding".
+                "answer": str(getattr(t.info, "response_preview", "") or "")[:1200],
+                "scorer": getattr(a, "name", "?"),
+                "value": str(value),
+                "rationale": (getattr(a, "rationale", "") or "")[:700],
+            }
+        )
+
+dbutils.notebook.exit(json.dumps(report, default=str))
