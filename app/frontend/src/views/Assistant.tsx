@@ -14,6 +14,7 @@ export function Assistant() {
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [gated, setGated] = useState(false);
 
   async function send() {
     const question = draft.trim();
@@ -30,6 +31,14 @@ export function Assistant() {
       setTurns([...next, { role: "assistant", content: reply }]);
     } catch (e) {
       const err = e as ApiError;
+      if (err.status === 401) {
+        // Expected on the public deployment: the agent is queried with the *caller's*
+        // identity, and this surface has no sign-in. Explaining that is the honest answer —
+        // a bare "Sign-in required" on a demo page reads as a broken build.
+        setGated(true);
+        setTurns(turns);
+        return;
+      }
       // 503 means the serving endpoint is stopped — a normal state for a project that does
       // not leave billing compute running. Say so plainly instead of showing a raw error.
       setError(
@@ -49,6 +58,17 @@ export function Assistant() {
         Searches 1.75M complaint narratives and fleet exposure. It can <em>propose</em> a
         service campaign; only you can approve one.
       </p>
+
+      {gated && (
+        <div className="panel" style={{ marginBottom: 12 }}>
+          <p className="muted" style={{ margin: 0, fontSize: 13 }}>
+            The assistant answers under <em>your</em> Databricks identity — it never queries as
+            the application — so it needs an authenticated session. This public deployment has
+            no sign-in, so it is read-only. The <strong>Evidence</strong> tab needs no session
+            and carries the measured result.
+          </p>
+        </div>
+      )}
 
       <div className="turns">
         {turns.length === 0 && !busy && (
