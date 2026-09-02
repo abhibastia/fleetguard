@@ -26,7 +26,7 @@ next-actions list in priority order.** Design lives in `FleetGuard_Proposal.md`,
 | **5 — Lakebase + CDF** | ✅ **DONE** | 11 tables, all `REPLICA IDENTITY FULL`; **all 11 CDF history tables exist with exact names, no `_1` suffixes** (I-044 — CDF replicates DDL, correcting an earlier wrong claim). Reference data loaded: depot 60, vehicle 20,000, campaigns 592. **Capture latency measured: 7.1–15.6 s** (I-046). **Exposure loaded** — `EXACT` scope, 263,686 rows deduplicated to **118,323** distinct (vin, campaign) pairs. |
 | **6 — OAuth wiring** | ✅ **Done (scope reduced)** | Auth seam (E-13) tested on both surfaces, 401 on failure, never an SP fallback. **U2M retired (E-14)** — needs an account-admin OAuth registration we do not have, and OBO on Databricks Apps is stronger with less setup. Render serves the public evidence page with no auth. |
 | **7 — Agent tools + write path** | ✅ **DONE** | Write path end to end: `POST /campaigns/{id}/service-campaign` → 1 service campaign + N work orders + audit row in **one transaction** → CDF → UC. Agent: `ResponsesAgent`, 3 tools, MLflow tracing, smoke tests pass against live index + warehouse. **The agent proposes, never launches** — asserted in the build, so a change that lets it self-launch fails. **Logged, validated, registered and DEPLOYED** 2026-09-02: endpoint `agents_bootcamp_students-fleetguard-fleetguard_agent`, inference tables on (`fleetguard_agent_payload`). Console chat panel wired (`POST /api/chat`, caller's token, non-streaming). **The first deployed version answered a 25-vehicle recall with "no vehicles affected" (I-050)** — undeclared table resource plus an unchecked statement status. **Fixed in version 2, verified live:** returns 25 vehicles / 22 depots / EXACT with the tier stated, and a nonexistent campaign returns a distinguishable "the lookup ran and found zero". |
-| **8 — App + external surface** | 🟡 **Public surface live** | FastAPI serves `/api/*` **and** the built React console from one service — no CORS, SPA deep-link fallback. Three views: queue, campaign approval, evidence. Verified end to end against live Lakebase. **Deployed to Render 2026-09-02** — https://fleetguard-console-abhi.onrender.com, chat panel included. Every `/api` route there returns 401 by design (no sign-in; U2M retired), so the panel renders an explanation rather than an error. **Outstanding:** the Databricks App (~20 Sept), where OBO supplies the identity that makes queue + chat live. |
+| **8 — App + external surface** | 🟡 **Public surface live** | FastAPI serves `/api/*` **and** the built React console from one service — no CORS, SPA deep-link fallback. Four views: queue (+ assistant panel), campaign approval, **Emerging signals**, evidence. Verified end to end against live Lakebase. **Deployed to Render 2026-09-02** — https://fleetguard-console-abhi.onrender.com, chat panel included. Every `/api` route there returns 401 by design (no sign-in; U2M retired), so the panel renders an explanation rather than an error. **Outstanding:** the Databricks App (~20 Sept), where OBO supplies the identity that makes queue + chat live. |
 | **9 — Model A + backtest** | ✅ **DONE — result is negative** | **The semantic hypothesis is falsified (I-049).** Subdivision *lowered* detection 13.3% → 11.2%, left lift flat (1.24× → 1.26×), and gave **0.0 days** extra lead on shared detections. Published result stays the volume-anomaly measurement: **16.0% vs 11.1%, 1.44×, p≈0.009**. Done-when explicitly required publishing a possibly-negative number as-is; met. |
 | **10 — Governance** | ⬜ Not started | Recommend a visible slice, not the full matrix. |
 | **11 — Deployment hardening** | ⬜ Not started | |
@@ -46,16 +46,18 @@ next-actions list in priority order.** Design lives in `FleetGuard_Proposal.md`,
 | silver (10) | `silver_complaint` (+quarantine, +`_chunk`, +`_chunk_indexed`) · `silver_recall` (+q) · `silver_investigation` (+q, +`_case`) · `silver_tsb` (+`_bulletin`) | 2,209,123 · **1,746,601 chunks** · 244,701 · 154,191 · 5,801,279 |
 | gold — fleet (3) | `gold_fleet_vehicle` · `gold_fleet_depot` · `gold_fleet_exposure` | 20,000 · 60 · 989,042 |
 | gold — backtest (6) | `gold_lead_time_backtest` · `_control` · `_summary` · `gold_backtest_scope` · `_complaint` · `_embedding` | 777 · 67 · 2 · 6,649 · 205,219 · **205,219 vectors** |
+| gold — signals (1) | `gold_emerging_signal` — live detector output, same rule as the backtest | **48** (9 live · 2 fleet-relevant) |
 | ops (7) | `ops_ingest_watermark` · `ops_recall_poll_state` · `ops_hybrid_query_test` · `ops_lakebase_load` · `ops_cdf_latency` · `ops_psycopg_probe` · `ops_pg_privilege_diagnostic` | measurement + cursor state |
 | api (2) | `bronze_recall_api` · `gold_recall_alert` | 2,117 rows / 653 campaigns · 0 alerts (correct — nothing novel) |
 
 **Lakebase** (`databricks_postgres.bootcamp_students`): 11 `fleetguard_*` tables, **139,000+ rows**
+(`fleetguard_defect_signal` populated 2026-09-02 — 48 signals; empty since Phase 5 until then)
 (vehicle 20,000 · exposure 118,323 · campaign 592 · depot 60 · + service campaigns/work orders/audit).
 Per-user identity verified: 25 Databricks identities exist as Postgres login roles, `current_user`
 resolves to the caller, and `row_security` is `on`. **CDF** (`bootcamp_students.bootcamp_cdc`): 11 `lb_fleetguard_*_history` tables,
 exact names, no collision suffixes.
 
-**Compute:** 1 pipeline (`fleetguard-bronze-silver`, IDLE) · **16 jobs, all manual** ·
+**Compute:** 1 pipeline (`fleetguard-bronze-silver`, IDLE) · **19 jobs, all manual** (+`fleetguard-deploy-agent`, `-emerging-signals`, `-load-signals`) ·
 1 serverless SQL warehouse · 1 AI Search endpoint.
 
 **APIs integrated:** vPIC (`DecodeVINValuesBatch`, authoritative for make/model/year) ·
@@ -394,50 +396,61 @@ than discovering it mid-demo.
 
 ## Picking this up tomorrow
 
-**MVP is 5 days out (7 Sept) and the vertical slice is essentially closed.** Recall → exposure
-→ human approval → work orders → CDF → UC → browser all work, and the agent works. What
-remains is polish, one cost decision, and the migration that makes the console *usable* by
-someone other than a developer.
+**MVP is complete, five days early.** The vertical slice runs end to end — recall lands →
+exposure ranked → human approves → work orders → CDF → UC → browser — the agent is deployed
+and verified, the proactive half exists, and the evidence page serves generated figures. The
+7 September target is met; everything below is *improving a working system*, which was the
+point of landing early.
 
-In priority order:
+Every item on yesterday's list is closed: the endpoint decision (keep), `/evidence` (built),
+and the proposal corrections (already discharged by the freeze header — the item should never
+have been on the list).
 
-1. ~~**Decide the agent endpoint's fate.**~~ **Decided 2026-09-02: keep it running for now.**
-   Revisit if the bill warrants it; to retire it, delete the endpoint and redeploy from
-   registered version 2 with `fleetguard-deploy-agent` (job `602170435434673`),
-   `model_version=2` — about 15 minutes.
-2. ~~**`GET /evidence`.**~~ **Done 2026-09-02.** The page no longer hardcodes anything: it
-   fetches `/api/evidence`, which serves a snapshot generated by `scripts/export_evidence.py`
-   from `gold_lead_time_summary`, with **lift and the two-proportion z recomputed from the
-   arm counts** (reproducing the published 1.44× / z 2.62 / p 0.0087 exactly). Snapshot
-   rather than a request-time query because the evidence page is the *public* surface and a
-   live read would need a Databricks credential on a public host, which §8a forbids. The
-   route is deliberately unauthenticated and three tests lock that asymmetry in both
-   directions — `/evidence` public, `/queue` and `/chat` still 401.
-3. ~~**Correct the proposal against measured reality.**~~ **Already discharged — and it was
-   never an edit to make.** The proposal is FROZEN; correcting its body would destroy the
-   record of what was believed at the outset, which is the point of freezing it. All three
-   items are recorded in its header contradiction table instead: the falsified semantic
-   claim (§1/3/4.3, I-049), the measured CDF latency (§8.3, 7.1–15.6 s), and HDBSCAN's 85%
-   noise (§4.3, I-048) — plus the CDF-replicates-DDL correction (§4.4, I-044). The
-   hybrid-retrieval claim needed no action; it is verified and stands. **This item sat on
-   the list for two days asking for a change the freeze policy forbids** — verify a
-   next-action against `CLAUDE.md` before acting on it.
-4. **Databricks App (~20 Sept).** The one thing that makes the queue and chat live for a
-   real user, via OBO. Keep it `STOPPED` between sessions — `apps create` provisions billing
-   compute on *create*, not on deploy.
-5. **Post-MVP backlog:** E-01 (AI Gateway on the LLM endpoint, not the agent endpoint),
-   E-05 (`Guidelines` scorers — the "never call an investigation a recall" rule is a natural
-   first scorer), Phase 4 Model B, E-07, E-10.
+### Next, in priority order
 
-**Verification discipline** (earned three times over: I-043, I-021, and now I-050): never
-infer success from an exit code, and never infer correctness from the absence of an
-exception. Re-check the live resource, and **assert a number**. The agent build passed green
-while shipping an endpoint that told an operator a 25-vehicle recall affected nobody.
+1. **Give the agent a signals tool.** It has three tools — complaint search, fleet exposure,
+   propose campaign — and knows nothing about `gold_emerging_signal`. Asked "what's emerging
+   for our fleet?" it cannot answer, which is the project's headline question. A fourth tool
+   over `fleetguard_defect_signal` is ~20 lines and reuses the deployed endpoint; needs a
+   re-log, register, and redeploy (and **check `served_entities` afterwards** — the old
+   version stays provisioned).
+2. **Databricks App (~20 Sept).** Still the one thing that makes queue, assistant and
+   Emerging live for a real user, via OBO. The auth seam means it is an afternoon. Keep it
+   `STOPPED` between sessions — `apps create` provisions billing compute on *create*.
+3. **E-05 evaluation scorers, now with three concrete targets.** `Guidelines` scorers for:
+   never call an investigation a recall; always state the match tier; **never report a tool
+   failure as a business answer** (I-050). The third only exists as a scorer idea because the
+   failure actually happened.
+4. **Refresh discipline for the two snapshots.** `gold_emerging_signal` and
+   `evidence.json` are both point-in-time and both regenerate by hand
+   (`fleetguard-emerging-signals` + `fleetguard-load-signals`; `scripts/export_evidence.py`).
+   Decide before the demo whether to refresh them on the day — the signals table is dated
+   `as_of 2026-08` and a reviewer will notice.
+5. **Phase 4 Model B** — scores the `MODEL_VARIANT` residual (3:1 over exact, I-030). The
+   largest remaining *capability* gap; everything else on this list is polish.
+6. **Phase 10 governance** — a visible slice (Postgres RLS on depot scoping, making §5.1
+   literally true), not the full matrix.
 
-Corollary, now written into the agent: **any tool an LLM can call must distinguish "I looked
-and found nothing" from "I could not look."** The model cannot tell them apart and prose
-papers over the difference perfectly.
+### Things that are true and easy to forget
 
-**Do not** attempt an AI Search index rebuild inside the demo window — it is most of a
-working day. And don't add `-o json` to `vector-search-indexes get-index`; it breaks output
-that is already JSON.
+- **The endpoint bills continuously** (`scale_to_zero_enabled: False`). Kept up by decision
+  2026-09-02. Retire with `fleetguard-deploy-agent` + version 2 to bring it back.
+- **`/` on Render is cached** — it served a stale `index.html` for minutes after a successful
+  deploy. Probe an API route to confirm a deploy, not the console page. A 401 from a gated
+  route proves it exists; an unknown path returns **200 HTML** via the SPA catch-all.
+- **Lakebase notebooks need the `fgenv` serverless environment**, not `%pip` — a missing
+  dependency there fails as `ModuleNotFoundError` at cell 1.
+
+### Verification discipline — earned four times (I-021, I-043, I-050, I-051)
+
+Never infer success from an exit code. Never infer correctness from the absence of an
+exception. **Assert a number.** And for documents: a living spec accumulates *intentions that
+read as descriptions* — when it says the system does X, `grep` for X rather than judging
+whether it sounds right.
+
+Corollary, now enforced in the agent: **any tool an LLM can call must distinguish "I looked
+and found nothing" from "I could not look."**
+
+**Do not** rebuild the AI Search index inside the demo window — it is most of a working day.
+And don't add `-o json` to `vector-search-indexes get-index`; it breaks output that is
+already JSON.
