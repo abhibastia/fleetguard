@@ -26,6 +26,34 @@ no error and passed the obvious check.
 
 ## Tooling / process
 
+### I-059 — `gold_fleet_exposure` has no source file in the repo
+*Date:* 2026-09-02 · *Status:* open, non-blocking
+
+**Symptom.** Starting Phase 4 (Model B), `src/fleet/04_build_fleet_registry.py` was expected
+to contain the `EXACT`/`MODEL_VARIANT` matching logic behind `gold_fleet_exposure`. It does
+not — that notebook builds only `gold_fleet_vehicle` and `gold_fleet_depot`. The table exists
+live (989,042 rows, matching the proposal's measured figures exactly) but whatever built it
+was run ad hoc and never committed.
+
+**Recovered from the live schema** (not from source, since none exists): `match_basis` is
+`EXACT` when `model = recall_model` after make and manufacture-window agreement, `VARIANT`
+otherwise. Confirmed on real rows — e.g. `FREIGHTLINER SPRINTER` vs recall model
+`SPRINTER 4500` (variant), and, more importantly, `FORD TRANSIT CONNECT` vs recall model
+`TRANSIT` — a substring relationship where Transit Connect and Transit are genuinely different
+platforms. That pairing is a live example of exactly the false-positive risk Model B exists to
+score.
+
+**Resolution — deferred, not fixed.** Reconstructing the exact original SQL is not on the
+critical path for Model B, which reads the table as-is. Logged so the gap doesn't surprise the
+next person, and so Model B's own source is written from the start rather than run ad hoc the
+same way.
+
+**Lesson.** A table with no corresponding committed notebook is itself worth treating as a
+finding — this project's own convention (every Databricks change gets a runbook, every table a
+source file) was skipped once, silently, and only surfaced when someone needed to build on it.
+
+---
+
 ### I-058 — The agent's evaluation failed it for *promising not to* invent a recall — **SILENT**
 *Date:* 2026-09-02 · *Status:* resolved
 
