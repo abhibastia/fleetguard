@@ -325,7 +325,9 @@ import fleetguard_agent as fga
 hits = fga.search_complaints("brake pedal went to the floor", limit=3)
 print(f"search_complaints -> {len(hits)} hits")
 for h in hits:
-    print("   ", str(h.get("component"))[:44], "|", str(h.get("chunk_text"))[:60].replace("\n", " "))
+    print(
+        "   ", str(h.get("component"))[:44], "|", str(h.get("chunk_text"))[:60].replace("\n", " ")
+    )
 
 exp = fga.lookup_fleet_exposure("17V629000")
 print(f"\nlookup_fleet_exposure -> {exp['by_match_tier']}")
@@ -334,3 +336,165 @@ prop = fga.propose_service_campaign("17V629000", "Park It steering defect")
 print(f"\npropose_service_campaign -> {prop['status']}  exact={prop['exact_vehicles']}")
 assert prop["status"] == "PROPOSED_AWAITING_HUMAN_APPROVAL", "agent must not self-launch"
 print("\nsmoke tests passed")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Log the agent (models-from-code)
+# MAGIC
+# MAGIC `resources` is the load-bearing argument. It tells Model Serving which endpoints and
+# MAGIC indexes the deployed model needs, so the endpoint's own credential is granted them at
+# MAGIC startup. Omit one and the agent logs cleanly, deploys cleanly, and then fails at the
+# MAGIC first tool call with a permission error — a failure that only appears in production.
+# MAGIC
+# MAGIC The SQL warehouse resource class is name-checked at runtime rather than assumed: the
+# MAGIC `mlflow.models.resources` vocabulary has changed across versions, and this project has
+# MAGIC already been bitten twice by asserting a name from memory.
+
+# COMMAND ----------
+
+import importlib.metadata as _md
+
+import mlflow
+from mlflow.models import resources as _res
+
+print("Databricks resource classes available in mlflow", mlflow.__version__, ":")
+print("  " + ", ".join(sorted(n for n in dir(_res) if n.startswith("Databricks"))))
+
+resources = [
+    _res.DatabricksServingEndpoint(endpoint_name=LLM_ENDPOINT),
+    _res.DatabricksVectorSearchIndex(index_name=INDEX),
+]
+
+# Added only if this MLflow version actually has the class — see note above.
+if hasattr(_res, "DatabricksSQLWarehouse"):
+    resources.append(_res.DatabricksSQLWarehouse(warehouse_id=WAREHOUSE_ID))
+else:
+    print("!! DatabricksSQLWarehouse not present — grant the warehouse to the endpoint by hand")
+
+for r in resources:
+    print("resource:", r)
+
+# Pin to what actually ran here, rather than to a range that may resolve differently in the
+# serving container six weeks from now.
+PIP = [
+    f"mlflow=={_md.version('mlflow')}",
+    f"databricks-sdk=={_md.version('databricks-sdk')}",
+    f"openai=={_md.version('openai')}",
+]
+print("\npip_requirements:", PIP)
+
+# COMMAND ----------
+
+INPUT_EXAMPLE = {
+    "input": [
+        {
+            "role": "user",
+            "content": "Which fleet vehicles does recall 17V629000 affect, and should we act?",
+        }
+    ]
+}
+
+with mlflow.start_run(run_name="fleetguard-agent-v1") as run:
+    model_info = mlflow.pyfunc.log_model(
+        python_model="fleetguard_agent.py",
+        name="agent",
+        resources=resources,
+        model_config={
+            "catalog": CATALOG,
+            "schema": SCHEMA,
+            "llm_endpoint": LLM_ENDPOINT,
+            "warehouse_id": WAREHOUSE_ID,
+        },
+        input_example=INPUT_EXAMPLE,
+        pip_requirements=PIP,
+    )
+
+print(f"model_uri : {model_info.model_uri}")
+print(f"run_id    : {run.info.run_id}")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Validate the logged artifact before registering
+# MAGIC
+# MAGIC Loading it back proves the file executes standalone and that `ModelConfig` resolves from
+# MAGIC the *packaged* config rather than the `agent_config.yaml` sitting in the notebook's
+# MAGIC working directory — the failure mode where an agent works in the notebook and dies in
+# MAGIC the container.
+
+# COMMAND ----------
+
+from mlflow.models import validate_serving_input
+
+validate_serving_input(model_info.model_uri, INPUT_EXAMPLE)
+print("serving input schema OK")
+
+loaded = mlflow.pyfunc.load_model(model_info.model_uri)
+reply = loaded.predict(INPUT_EXAMPLE)
+
+texts = [
+    c.get("text", "")
+    for item in reply["output"]
+    for c in item.get("content", [])
+    if c.get("type") == "output_text"
+]
+answer = "\n".join(texts)
+print("\n--- agent reply ---\n", answer[:1500])
+
+assert answer.strip(), "agent returned no text"
+# The proposal tool must never be presented as a launch. If the model starts claiming it
+# dispatched work orders, that is the single most damaging regression this system can have.
+assert "work order" not in answer.lower() or "approv" in answer.lower(), (
+    "agent mentioned work orders without mentioning approval"
+)
+print("\nround-trip validation passed")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Register in Unity Catalog
+# MAGIC
+# MAGIC Registration is free and reversible. It is deliberately separated from `agents.deploy()`
+# MAGIC below, which is neither.
+
+# COMMAND ----------
+
+mlflow.set_registry_uri("databricks-uc")
+
+registered = mlflow.register_model(model_uri=model_info.model_uri, name=MODEL_NAME)
+print(f"registered: {registered.name}  version={registered.version}")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Deploy — gated, because this one bills
+# MAGIC
+# MAGIC `agents.deploy()` provisions a Model Serving endpoint that bills for as long as it is
+# MAGIC running, and enables inference tables (E-04). This workspace is a shared bootcamp
+# MAGIC metastore and the project has already been surprised once by compute that started
+# MAGIC billing the moment it was created.
+# MAGIC
+# MAGIC So the deploy is behind a widget that defaults to `false`. Running this notebook end to
+# MAGIC end logs, validates and registers the agent — and stops. Flip `deploy` to `true`
+# MAGIC deliberately, with the demo window in mind, and **stop the endpoint when the demo is
+# MAGIC over**.
+
+# COMMAND ----------
+
+dbutils.widgets.dropdown("deploy", "false", ["false", "true"], "Create serving endpoint (BILLS)")
+DEPLOY = dbutils.widgets.get("deploy") == "true"
+
+if not DEPLOY:
+    print("deploy=false — skipping agents.deploy(). Nothing is billing.")
+    print(
+        f"To deploy later: run this job with deploy=true, or deploy {MODEL_NAME} "
+        f"version {registered.version} from the UI."
+    )
+else:
+    from databricks import agents
+
+    deployment = agents.deploy(model_name=MODEL_NAME, model_version=registered.version)
+    print(f"endpoint : {deployment.endpoint_url}")
+    print(f"review   : {getattr(deployment, 'review_app_url', 'n/a')}")
+    print("\nThis endpoint is now billing. Stop it when the demo is done.")
