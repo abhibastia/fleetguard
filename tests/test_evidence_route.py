@@ -48,3 +48,9 @@ def test_queue_stays_gated(client: TestClient) -> None:
 def test_chat_stays_gated(client: TestClient) -> None:
     resp = client.post("/api/chat", json={"messages": [{"role": "user", "content": "hi"}]})
     assert resp.status_code == 401
+
+
+def test_signals_stay_gated(client: TestClient) -> None:
+    # Signals read fleet exposure. Evidence is the *only* public route; if this ever
+    # returns 200 the exemption has been widened past what §8a permits.
+    assert client.get("/api/signals").status_code == 401

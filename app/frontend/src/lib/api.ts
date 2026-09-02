@@ -88,6 +88,31 @@ export interface ChatReply {
   endpoint: string;
 }
 
+export interface Signal {
+  signal_id: string;
+  series_key: string;
+  make: string | null;
+  model: string | null;
+  component: string;
+  run_start: string | null;
+  run_end: string | null;
+  run_len: number | null;
+  max_z: number | null;
+  complaint_count: number | null;
+  harm_share: number | null;
+  fleet_vehicles: number;
+  is_live: boolean;
+  status: string;
+}
+
+export interface SignalSummary {
+  total: number;
+  live: number;
+  fleet_relevant: number;
+  as_of_month: string | null;
+  signals: Signal[];
+}
+
 export interface EvidenceArm {
   n: number;
   detected: number;
@@ -122,6 +147,8 @@ export const api = {
     }),
   chat: (messages: ChatTurn[]) =>
     request<ChatReply>("/chat", { method: "POST", body: JSON.stringify({ messages }) }),
+  signals: (fleetOnly = false) =>
+    request<SignalSummary>(`/signals?fleet_only=${fleetOnly}`),
   evidence: () => request<Evidence>("/evidence"),
   serviceCampaigns: () => request<Record<string, unknown>[]>("/service-campaigns"),
 };
