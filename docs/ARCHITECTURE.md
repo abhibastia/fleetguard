@@ -48,7 +48,7 @@ against 11.1% on a volume-matched placebo** (1.44×, z ≈ 2.62, p ≈ 0.009).
 | 1 Ingestion + medallion | ✅ Done — `gold_emerging_cluster` **descoped** (cluster-grained, and there is no clustering); replaced by `gold_emerging_signal` |
 | 2 Fleet registry | ✅ Done |
 | 3 Chunking + AI Search | ✅ Done — verified at full corpus |
-| 4 Model B + golden set | ⬜ Not started |
+| 4 Model B + golden set | ✅ Done — precision 83.7% / recall 96.3%, real numbers on the evidence page |
 | 5 Lakebase + CDF | ✅ Done — loaded and latency-measured |
 | 6 OAuth wiring | ⬜ Not started |
 | 7 Agent tools + write path | ⬜ Not started |
@@ -191,8 +191,21 @@ the current corpus and keeps runs still firing at the corpus edge. It is what
 `gold_emerging_cluster` was for, at the grain the detector actually uses. `harm_share` on that
 table is **descriptive triage only** and is not an input to firing.
 
-**Model B — recall-to-fleet matcher (planned).** Scores the `MODEL_VARIANT` residual that
-exact matching misses. Not built.
+**Model B — recall-to-fleet matcher.** Scores the `MODEL_VARIANT` residual that exact matching
+misses (725,356 of 989,042 exposure rows, I-030) — ranks ambiguity, never performs the match.
+Gradient-boosted, isotonic-calibrated, threshold tuned for recall (target 0.90).
+
+**Golden set is text-derived, not human-labelled.** 765 (campaign, make, model) pairs, labels
+from whether the vehicle model appears in NHTSA's own `defect_description` — real regulatory
+text, not synthetic (E-08 forbids synthetic labels here specifically). 621 positive, 144
+negative, 69 excluded as genuinely ambiguous rather than force-labelled.
+
+**I-060 — the first run leaked and was caught before being reported.** Precision=1.000 at
+threshold=1.000 traced to a feature (`model_is_substring_of_recall`) that was 0% by
+*construction* of the negative-label rule, not by anything learned. Fixed, retrained.
+**Reported: precision 83.7%, recall 96.3%, ROC-AUC 0.925** on a 230-row held-out split —
+published on the evidence page (`GET /api/evidence` → `model_b`), per the proposal's own
+requirement that precision/recall appear on the application's own page.
 
 ---
 

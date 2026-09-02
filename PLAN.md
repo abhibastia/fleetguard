@@ -104,16 +104,38 @@ stops 24 h after the last index is deleted.
 - **Done when:** a hybrid query returns component-code exact matches AND semantically
   related narratives in the same result set.
 
-### Phase 4 — Model B + golden set + MLflow harness
-*Build per `docs/ENHANCEMENTS.md` E-05 (`mlflow.genai.evaluate` + `Guidelines` scorers
-encoding FleetGuard's own rules), E-06 (ModelConfig, latest-version resolution), E-08
-(synthetic evals for the **agent only** — Model B's golden set must be real labelled
-recall/fleet pairs), E-07 (labeling session, small slice, state the n).*
-- Build the 150-pair golden set as a `mlflow.genai.datasets` UC dataset.
-- Train the recall-match classifier, tune threshold for recall.
-- Wire `mlflow.genai.evaluate()` with `Correctness`/`RetrievalGroundedness`/`Safety`
-  for the agent/retrieval path, separately from classical precision/recall for Model B.
-- **Done when:** precision/recall numbers exist and are real, not placeholders.
+### Phase 4 — Model B + golden set + MLflow harness ✅ DONE (2026-09-02)
+*Built per `docs/ENHANCEMENTS.md` E-08 (synthetic evals for the **agent only** — Model B's
+golden set is real, not generated). E-05/E-06/E-07 as originally scoped for the agent are
+separately covered by `16_evaluate_agent.py`; this phase's own MLflow harness is classical
+precision/recall, not `mlflow.genai.evaluate()`, since Model B is a classifier, not a
+generative model.*
+
+**Golden set — 765 pairs, not a `mlflow.genai.datasets` UC dataset as originally planned.**
+Labels are derived from NHTSA's own `defect_description` recall-scope text (real regulatory
+language: *"Ford is recalling certain 2022 Super Duty F-250, F-350…"*), not from a live
+labeling session — the plain `mlflow.genai.datasets` path fits generative eval rows, not a
+binary match/no-match label with provenance attached, and text-derivation gave 765 usable
+pairs (621 positive / 144 negative / 69 excluded as ambiguous) versus a 150-pair target.
+Spot-checked by hand, including the case that motivated the whole approach: `RAM PROMASTER
+CITY` vs recall model `PROMASTER` correctly labelled negative — different platforms, and
+the recall text names only "ProMaster vans". See `src/fleet/05_build_model_b_golden_set.py`.
+
+**Classifier — gradient-boosted, isotonic-calibrated, threshold tuned for recall (0.90
+target).** Features are string-similarity metrics over the *structured* `model`/`recall_model`
+fields only — deliberately never the `defect_description` text the labels were derived from.
+`src/fleet/06_train_model_b.py`.
+
+**I-060 — leakage found and fixed before reporting.** The first run scored an implausible
+precision=1.000 at threshold=1.000. Traced to the golden set's own negative-label rule
+requiring `recall_model NOT LIKE '%model%'` — making that boolean tautologically 0% for every
+negative by construction, not by anything learned. Removed from the feature set; retrained.
+**Real, reported numbers: precision 83.7%, recall 96.3%, ROC-AUC 0.925** — the number this
+project stands behind.
+
+**Done when: met.** Precision/recall are real, logged to MLflow (not placeholders), and
+published on the evidence page per the proposal's own requirement (§6) —
+`GET /api/evidence` → `model_b`, sourced by `scripts/export_evidence.py`, never hand-typed.
 
 ### Phase 5 — Lakebase schema + CDF  ✅ DONE (2026-09-01)
 *Reference tables loaded and CDF measured end to end. Only the bulk exposure load remains,

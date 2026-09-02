@@ -22,7 +22,7 @@ next-actions list in priority order.** Design lives in `FleetGuard_Proposal.md`,
 | **1 — Ingestion + bronze/silver/gold** | ✅ **DONE** | Ingest job, bronze (4), silver (9) built and validated. Chunking done — `silver_complaint_chunk_indexed`, 1,746,601 chunks. **`gold_emerging_cluster` is descoped, not outstanding** (checked 2026-09-02): it was cluster-grained and there is no clustering — HDBSCAN abandoned (I-048), semantic subdivision falsified (I-049), and the shipping detector keys on `make|model|comp_top`. Replaced by **`gold_emerging_signal`**, the same rule applied to the current corpus. Ingest is **deliberately manual** — no schedule, to avoid consuming shared-workspace compute before it's needed. |
 | **2 — Fleet registry** | ✅ **Done** | 20,000 vehicles / 60 depots / ~989k exposure rows. 400 VINs independently vPIC-verified, 400/400 exact. |
 | **3 — Chunking + AI Search** | ✅ **DONE** | Index complete: **1,746,601 chunks, `ready: true`**, matching source exactly. Done-when **re-verified at full corpus** — hybrid differs from ANN on 2 of 3 queries, harm filter 10/10, near-duplicates 10/10 distinct. The earlier check ran at 42% and was repeated before being quoted. |
-| **4 — Model B + golden set** | ⬜ Not started | Scope now measured: variant matches outnumber exact 3:1 (I-030). |
+| **4 — Model B + golden set** | ✅ **DONE** | 765-pair golden set from NHTSA's own recall text (real, not synthetic, E-08). Precision **83.7%**, recall **96.3%**, ROC-AUC 0.925 — published on the evidence page. Caught and fixed its own training-feature leakage before reporting (I-060). |
 | **5 — Lakebase + CDF** | ✅ **DONE** | 11 tables, all `REPLICA IDENTITY FULL`; **all 11 CDF history tables exist with exact names, no `_1` suffixes** (I-044 — CDF replicates DDL, correcting an earlier wrong claim). Reference data loaded: depot 60, vehicle 20,000, campaigns 592. **Capture latency measured: 7.1–15.6 s** (I-046). **Exposure loaded** — `EXACT` scope, 263,686 rows deduplicated to **118,323** distinct (vin, campaign) pairs. |
 | **6 — OAuth wiring** | ✅ **DONE — with a login** | Auth seam (E-13) tested on both surfaces, 401 on failure, never an SP fallback. **U2M retired (E-14)** — needs an account-admin OAuth registration we do not have, and OBO on Databricks Apps is stronger with less setup. **Render now has a working sign-in (2026-09-02): GitHub OAuth, `app-login` mode, two-tier authorization (read for anyone signed in; approve only for `FLEETGUARD_APPROVERS`).** Verified end to end in a browser. |
 | **7 — Agent tools + write path** | ✅ **DONE** | Write path end to end: `POST /campaigns/{id}/service-campaign` → 1 service campaign + N work orders + audit row in **one transaction** → CDF → UC. Agent: `ResponsesAgent`, **4 tools** (complaint search · fleet exposure · **emerging signals** · propose campaign), MLflow tracing, smoke tests pass against live index + warehouse. **The agent proposes, never launches** — asserted in the build, so a change that lets it self-launch fails. **Logged, validated, registered and DEPLOYED** 2026-09-02: endpoint `agents_bootcamp_students-fleetguard-fleetguard_agent`, inference tables on (`fleetguard_agent_payload`). Console chat panel wired (`POST /api/chat`, caller's token, non-streaming). **The first deployed version answered a 25-vehicle recall with "no vehicles affected" (I-050)** — undeclared table resource plus an unchecked statement status. **Fixed in version 2, verified live:** returns 25 vehicles / 22 depots / EXACT with the tier stated, and a nonexistent campaign returns a distinguishable "the lookup ran and found zero". |
@@ -200,11 +200,12 @@ failed during the build or exists because something adjacent to it failed silent
    demo has to sell *rigour* — a control arm, a falsified hypothesis, a published negative —
    rather than a big number. That is a stronger story than an unfalsifiable 10×, but it has
    to be told deliberately.
-3. ~~**Scope vs schedule.**~~ **Retired 2026-09-02 — the demo chain is built.** Phases
-   6/7/8 all shipped: auth seam + GitHub login (6), agent with 4 tools + evaluation gates (7),
-   console live on Render with themes and a signed-in operator surface (8). What is left is
-   the Databricks App migration (~20 Sept, an afternoon per the seam) and Phase 4 (Model B) —
-   the last genuine capability gap, everything else on the list is polish. Cut list unchanged
+3. ~~**Scope vs schedule.**~~ **Retired 2026-09-02 — the demo chain is built, and so is the
+   last capability gap.** Phases 4/6/7/8 all shipped: Model B with a real, leak-checked
+   precision/recall (4), auth seam + GitHub login (6), agent with 4 tools + evaluation gates
+   (7), console live on Render with themes and a signed-in operator surface (8). What is left
+   is the Databricks App migration (~20 Sept, an afternoon per the seam) and Phase 10
+   governance — both polish on a system that already works end to end. Cut list unchanged
    and still agreed: Feature Store online serving, Genie Agent, Unity AI Gateway, governance
    reduced to a visible slice.
 4. **A pattern worth naming: the tooling lies about success.** Three distinct variants in
@@ -472,8 +473,13 @@ edge, not an oracle."* v2 dropped after verification (I-052); one entity billing
      (**this one is what the public console serves** — refreshing it needs a commit and a
      Render deploy, so it is not a same-day-of-demo task)
    Decide the refresh order and do it the day *before*, not the morning of.
-5. **Phase 4 Model B** — scores the `MODEL_VARIANT` residual (3:1 over exact, I-030). The
-   largest remaining *capability* gap; everything else on this list is polish.
+5. ~~**Phase 4 Model B.**~~ **Done 2026-09-02 — precision 83.7%, recall 96.3%, ROC-AUC
+   0.925, published on the evidence page.** Golden set is 765 pairs derived from NHTSA's own
+   recall text (real, not synthetic — E-08). **Caught its own leakage before reporting
+   (I-060):** first run scored an implausible precision=1.000, traced to a feature that was
+   tautologically tied to the golden set's negative-label rule rather than learned; fixed and
+   retrained. This was the largest remaining *capability* gap — closing it, everything left
+   on this list is polish or the App migration.
 6. **Phase 10 governance** — a visible slice (Postgres RLS on depot scoping, making §5.1
    literally true), not the full matrix.
 
