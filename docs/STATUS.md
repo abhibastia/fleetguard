@@ -25,7 +25,7 @@ next-actions list in priority order.** Design lives in `FleetGuard_Proposal.md`,
 | **4 — Model B + golden set** | ⬜ Not started | Scope now measured: variant matches outnumber exact 3:1 (I-030). |
 | **5 — Lakebase + CDF** | ✅ **DONE** | 11 tables, all `REPLICA IDENTITY FULL`; **all 11 CDF history tables exist with exact names, no `_1` suffixes** (I-044 — CDF replicates DDL, correcting an earlier wrong claim). Reference data loaded: depot 60, vehicle 20,000, campaigns 592. **Capture latency measured: 7.1–15.6 s** (I-046). **Exposure loaded** — `EXACT` scope, 263,686 rows deduplicated to **118,323** distinct (vin, campaign) pairs. |
 | **6 — OAuth wiring** | ✅ **Done (scope reduced)** | Auth seam (E-13) tested on both surfaces, 401 on failure, never an SP fallback. **U2M retired (E-14)** — needs an account-admin OAuth registration we do not have, and OBO on Databricks Apps is stronger with less setup. Render serves the public evidence page with no auth. |
-| **7 — Agent tools + write path** | ✅ **DONE** | Write path end to end: `POST /campaigns/{id}/service-campaign` → 1 service campaign + N work orders + audit row in **one transaction** → CDF → UC. Agent: `ResponsesAgent`, 3 tools, MLflow tracing, smoke tests pass against live index + warehouse. **The agent proposes, never launches** — asserted in the build, so a change that lets it self-launch fails. **Logged, validated, registered and DEPLOYED** 2026-09-02: endpoint `agents_bootcamp_students-fleetguard-fleetguard_agent`, inference tables on (`fleetguard_agent_payload`). Console chat panel wired (`POST /api/chat`, caller's token, non-streaming). **The first deployed version answered a 25-vehicle recall with "no vehicles affected" (I-050)** — undeclared table resource plus an unchecked statement status. **Fixed in version 2, verified live:** returns 25 vehicles / 22 depots / EXACT with the tier stated, and a nonexistent campaign returns a distinguishable "the lookup ran and found zero". |
+| **7 — Agent tools + write path** | ✅ **DONE** | Write path end to end: `POST /campaigns/{id}/service-campaign` → 1 service campaign + N work orders + audit row in **one transaction** → CDF → UC. Agent: `ResponsesAgent`, **4 tools** (complaint search · fleet exposure · **emerging signals** · propose campaign), MLflow tracing, smoke tests pass against live index + warehouse. **The agent proposes, never launches** — asserted in the build, so a change that lets it self-launch fails. **Logged, validated, registered and DEPLOYED** 2026-09-02: endpoint `agents_bootcamp_students-fleetguard-fleetguard_agent`, inference tables on (`fleetguard_agent_payload`). Console chat panel wired (`POST /api/chat`, caller's token, non-streaming). **The first deployed version answered a 25-vehicle recall with "no vehicles affected" (I-050)** — undeclared table resource plus an unchecked statement status. **Fixed in version 2, verified live:** returns 25 vehicles / 22 depots / EXACT with the tier stated, and a nonexistent campaign returns a distinguishable "the lookup ran and found zero". |
 | **8 — App + external surface** | 🟡 **Public surface live** | FastAPI serves `/api/*` **and** the built React console from one service — no CORS, SPA deep-link fallback. Four views: queue (+ assistant panel), campaign approval, **Emerging signals**, evidence. Verified end to end against live Lakebase. **Deployed to Render 2026-09-02** — https://fleetguard-console-abhi.onrender.com, chat panel included. Every `/api` route there returns 401 by design (no sign-in; U2M retired), so the panel renders an explanation rather than an error. **Outstanding:** the Databricks App (~20 Sept), where OBO supplies the identity that makes queue + chat live. |
 | **9 — Model A + backtest** | ✅ **DONE — result is negative** | **The semantic hypothesis is falsified (I-049).** Subdivision *lowered* detection 13.3% → 11.2%, left lift flat (1.24× → 1.26×), and gave **0.0 days** extra lead on shared detections. Published result stays the volume-anomaly measurement: **16.0% vs 11.1%, 1.44×, p≈0.009**. Done-when explicitly required publishing a possibly-negative number as-is; met. |
 | **10 — Governance** | ⬜ Not started | Recommend a visible slice, not the full matrix. |
@@ -408,12 +408,13 @@ have been on the list).
 
 ### Next, in priority order
 
-1. **Give the agent a signals tool.** It has three tools — complaint search, fleet exposure,
-   propose campaign — and knows nothing about `gold_emerging_signal`. Asked "what's emerging
-   for our fleet?" it cannot answer, which is the project's headline question. A fourth tool
-   over `fleetguard_defect_signal` is ~20 lines and reuses the deployed endpoint; needs a
-   re-log, register, and redeploy (and **check `served_entities` afterwards** — the old
-   version stays provisioned).
+1. ~~**Give the agent a signals tool.**~~ **Done 2026-09-02 — version 3 deployed and
+   verified.** `lookup_emerging_signals` reads `gold_emerging_signal` and returns the counts
+   with the rows, so "2 affecting your fleet" cannot be read as "2 recalls". The system prompt
+   now carries the **three-state distinction** — signal / investigation / recall — and the
+   live endpoint leads with it unprompted: *"these are emerging signals … not recalls, not
+   open investigations, not confirmed defects … a modest edge, not an oracle."* v2 dropped
+   after verification, per I-052.
 2. **Databricks App (~20 Sept).** Still the one thing that makes queue, assistant and
    Emerging live for a real user, via OBO. The auth seam means it is an afternoon. Keep it
    `STOPPED` between sessions — `apps create` provisions billing compute on *create*.
