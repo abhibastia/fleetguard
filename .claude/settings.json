@@ -12,9 +12,15 @@
           },
           {
             "type": "command",
-            "command": "jq -r '.tool_response.filePath // .tool_input.file_path' | { read -r f; case \"$f\" in *.py) cd \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\" && uvx ruff format --config pyproject.toml \"$f\" 2>&1 && uvx ruff check --config pyproject.toml --fix --quiet \"$f\" 2>&1 ;; esac; } || true",
+            "command": "jq -r '.tool_response.filePath // .tool_input.file_path' | { read -r f; case \"$f\" in *.py) cd \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\" || exit 0; uvx ruff format --config pyproject.toml \"$f\" >/dev/null 2>&1; uvx ruff check --config pyproject.toml --fix --quiet \"$f\" >/dev/null 2>&1; remaining=\"$(uvx ruff check --config pyproject.toml \"$f\" 2>&1)\"; rc=$?; if [ $rc -ne 0 ]; then echo \"$remaining\" >&2; exit 2; fi ;; esac; }",
             "timeout": 30,
-            "statusMessage": "Formatting with ruff..."
+            "statusMessage": "Linting with ruff..."
+          },
+          {
+            "type": "command",
+            "command": "jq -r '.tool_response.filePath // .tool_input.file_path' | { read -r f; case \"$f\" in *.ts|*.tsx) root=\"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\"; [ -d \"$root/app/frontend/node_modules\" ] || exit 0; out=\"$(cd \"$root/app/frontend\" && npx tsc --noEmit 2>&1)\"; if [ $? -ne 0 ]; then echo \"$out\" >&2; exit 2; fi ;; esac; }",
+            "timeout": 30,
+            "statusMessage": "Type-checking with tsc..."
           }
         ]
       }
@@ -29,6 +35,18 @@
             "command": "git diff --cached 2>/dev/null | grep -qE 'BEGIN (RSA|OPENSSH|EC) PRIVATE KEY|DATABRICKS_CLIENT_SECRET *=|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{20,}|dapi[0-9a-f]{32}' && echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Secret-shaped content detected in staged diff (private key / AKIA / ghp_ / dapi token pattern). Review before committing.\"}}' || exit 0",
             "timeout": 15,
             "statusMessage": "Scanning staged diff for secret-shaped content..."
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "ROOT=\"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\"; cd \"$ROOT\" || exit 0; PYTEST=\".venv/bin/pytest\"; [ -x \"$PYTEST\" ] || PYTEST=\"python3 -m pytest\"; backend_out=\"$($PYTEST -q 2>&1)\"; backend_rc=$?; frontend_out=\"\"; frontend_rc=0; if [ -d app/frontend/node_modules ]; then frontend_out=\"$(npm --prefix app/frontend run -s test 2>&1)\"; frontend_rc=$?; fi; if [ $backend_rc -ne 0 ] || [ $frontend_rc -ne 0 ]; then msg=\"Tests are failing — fix them, or explain to the user why not, before ending the turn.\"; if [ $backend_rc -ne 0 ]; then msg=\"$(printf '%s\\n\\npytest (exit %s):\\n%s' \"$msg\" \"$backend_rc\" \"$(printf '%s' \"$backend_out\" | tail -c 3000)\")\"; fi; if [ $frontend_rc -ne 0 ]; then msg=\"$(printf '%s\\n\\nnpm test (exit %s):\\n%s' \"$msg\" \"$frontend_rc\" \"$(printf '%s' \"$frontend_out\" | tail -c 3000)\")\"; fi; jq -n --arg msg \"$msg\" '{hookSpecificOutput:{hookEventName:\"Stop\",continueConversation:true,systemMessage:$msg}}'; fi; exit 0",
+            "timeout": 90,
+            "statusMessage": "Running the test suite before ending the turn..."
           }
         ]
       }
