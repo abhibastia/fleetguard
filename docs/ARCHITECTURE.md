@@ -297,6 +297,17 @@ ingress performs the login for free. **Do not substitute a PAT or service princi
 Render** — the URL is public and the API has a write path, so a single shared identity there
 would let anyone approve service campaigns.
 
+**The agent chat panel ships to Render but is gated there.** `POST /api/chat` invokes the
+serving endpoint with the *caller's* token, so on a surface with no sign-in every call
+returns 401 and the panel renders an explanation rather than an error. That is the seam
+behaving correctly, not a defect: the panel is functional the moment it runs somewhere that
+supplies an identity, which is verified locally (`static-dev`) and is what Databricks Apps
+supplies via OBO. Giving Render a service-principal identity so the public panel "works"
+would be an **amendment to the decision above, not an exception to it** — the stated reason
+there is the write path, and the chat route has none, but it would still expose
+workspace-billed LLM inference and complaint-narrative retrieval to anyone with the URL.
+Decide it explicitly if it comes up.
+
 **The auth seam.** The two environments differ in exactly one way — how the user's token
 arrives. Everything downstream (SQL, Lakebase, agent invocation, ABAC) is identical.
 Therefore the backend resolves the caller's token through **a single swappable provider**
