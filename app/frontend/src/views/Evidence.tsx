@@ -26,55 +26,91 @@ export function Evidence() {
   // Never render zeros on failure — a blank result table would read as "the method found
   // nothing" rather than "the numbers failed to load".
   if (error) return <div className="error">Evidence unavailable: {error}</div>;
-  if (!data) return <p className="muted">Loading measured results…</p>;
+  if (!data)
+    return (
+      <>
+        <div className="stats">
+          {[0, 1, 2].map((i) => (
+            <div className="stat" key={i}>
+              <div className="skeleton tall" style={{ marginBottom: 0 }} />
+            </div>
+          ))}
+        </div>
+        <div className="skeleton wide tall" />
+        <div className="skeleton half" />
+      </>
+    );
 
   const { real, placebo } = data;
 
   return (
     <>
-      <h2 style={{ marginTop: 0 }}>Does early warning actually work?</h2>
-      <p className="muted">
-        Measured against every ODI investigation opened since 2010, with a volume-matched
-        control arm. The gap between the arms is the evidence — the real arm alone is not.
-      </p>
+      <div className="page-head">
+        <h2>Does early warning actually work?</h2>
+        <p>
+          Measured against every ODI investigation opened since 2010, with a volume-matched control
+          arm. The gap between the arms is the evidence — the real arm alone is not.
+        </p>
+      </div>
 
-      <table style={{ maxWidth: 720 }}>
-        <thead>
-          <tr>
-            <th>Arm</th>
-            <th className="num">Investigations</th>
-            <th className="num">Detected</th>
-            <th className="num">Rate</th>
-            <th className="num">Median lead</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>
-              <strong>Real</strong> <span className="muted">— investigated series</span>
-            </td>
-            <td className="num">{real.n}</td>
-            <td className="num">{real.detected}</td>
-            <td className="num">
-              <strong>{real.rate_pct}%</strong>
-            </td>
-            <td className="num">
-              <strong>{real.median_lead_days} days</strong>
-            </td>
-          </tr>
-          <tr>
-            <td>
-              Placebo <span className="muted">— volume-matched control</span>
-            </td>
-            <td className="num">{placebo.n}</td>
-            <td className="num">{placebo.detected}</td>
-            <td className="num">{placebo.rate_pct}%</td>
-            <td className="num">{placebo.median_lead_days} days</td>
-          </tr>
-        </tbody>
-      </table>
+      <div className="stats">
+        <div className="stat is-ok">
+          <div className="v">{real.rate_pct.toFixed(1)}%</div>
+          <div className="k">Detected · real arm</div>
+        </div>
+        <div className="stat">
+          <div className="v">{placebo.rate_pct.toFixed(1)}%</div>
+          <div className="k">Detected · placebo</div>
+        </div>
+        <div className="stat">
+          <div className="v">{data.lift}×</div>
+          <div className="k">Lift</div>
+        </div>
+        <div className="stat">
+          <div className="v">{real.median_lead_days}d</div>
+          <div className="k">Median lead</div>
+        </div>
+      </div>
 
-      <div className="panel" style={{ marginTop: 20, maxWidth: 720 }}>
+      <div className="wrap">
+        <table style={{ maxWidth: 760 }}>
+          <thead>
+            <tr>
+              <th>Arm</th>
+              <th className="num">Investigations</th>
+              <th className="num">Detected</th>
+              <th className="num">Rate</th>
+              <th className="num">Median lead</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <strong>Real</strong> <span className="muted">— investigated series</span>
+              </td>
+              <td className="num">{real.n}</td>
+              <td className="num">{real.detected}</td>
+              <td className="num">
+                <strong>{real.rate_pct.toFixed(1)}%</strong>
+              </td>
+              <td className="num">
+                <strong>{real.median_lead_days} days</strong>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                Placebo <span className="muted">— volume-matched control</span>
+              </td>
+              <td className="num">{placebo.n}</td>
+              <td className="num">{placebo.detected}</td>
+              <td className="num">{placebo.rate_pct.toFixed(1)}%</td>
+              <td className="num">{placebo.median_lead_days} days</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div className="panel" style={{ marginTop: 20, maxWidth: 760 }}>
         <p style={{ marginTop: 0 }}>
           <strong>{data.lift}× lift</strong>, two-proportion z ≈ {data.z},{" "}
           <strong>p ≈ {data.p_value}</strong>. Statistically real, practically modest.
@@ -93,8 +129,8 @@ export function Evidence() {
           It misses roughly five of every six investigations — {real.detected} of {real.n}.
         </li>
         <li>
-          The control fires at {placebo.rate_pct}%, so most detections would have occurred on a busy
-          series with no defect. This is an edge, not an oracle.
+          The control fires at {placebo.rate_pct.toFixed(1)}%, so most detections would have
+          occurred on a busy series with no defect. This is an edge, not an oracle.
         </li>
         <li>
           It predicts that an <strong>investigation will open</strong> — not that a recall will be
@@ -108,7 +144,7 @@ export function Evidence() {
 
       {/* Provenance, not decoration: a claimed measurement that cannot be traced to a query
           is indistinguishable from a claimed measurement that was typed in. */}
-      <p className="muted" style={{ fontSize: 12, maxWidth: 720 }}>
+      <p className="footnote">
         Source: <code>{data.source_table}</code> · lift and z recomputed from the arm counts ·
         snapshot generated {data.generated_at}
       </p>

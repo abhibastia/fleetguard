@@ -31,7 +31,13 @@ export function Campaign({ id, onBack }: { id: string; onBack: () => void }) {
     setBusy(true);
     setError(null);
     try {
-      setResult(await api.approve(id, { title, rationale, due_in_days: c?.park_it ? 7 : 30 }));
+      setResult(
+        await api.approve(id, {
+          title,
+          rationale,
+          due_in_days: c?.park_it ? 7 : 30,
+        }),
+      );
     } catch (e) {
       setError((e as ApiError).message);
     } finally {
@@ -40,7 +46,14 @@ export function Campaign({ id, onBack }: { id: string; onBack: () => void }) {
   }
 
   if (error && !c) return <div className="error">{error}</div>;
-  if (!c) return <p className="muted">Loading campaign…</p>;
+  if (!c)
+    return (
+      <>
+        <div className="skeleton half tall" />
+        <div className="skeleton wide" />
+        <div className="skeleton wide tall" />
+      </>
+    );
 
   const depots = Object.entries(c.by_depot).sort((a, b) => b[1] - a[1]);
 
@@ -52,12 +65,12 @@ export function Campaign({ id, onBack }: { id: string; onBack: () => void }) {
 
       <div className="row">
         <div className="grow">
-          <h2 style={{ margin: "0 0 6px" }}>
-            {c.campaign_id} {c.park_it && <span className="tag parkit">PARK IT</span>}
-          </h2>
-          <p className="muted" style={{ marginTop: 0 }}>
-            {c.component ?? "—"}
-          </p>
+          <div className="page-head">
+            <h2>
+              {c.campaign_id} {c.park_it && <span className="tag parkit">PARK IT</span>}
+            </h2>
+            <p>{c.component ?? "—"}</p>
+          </div>
 
           {c.consequence && (
             <div className={c.park_it ? "error" : "panel"} style={{ marginBottom: 16 }}>
@@ -73,29 +86,29 @@ export function Campaign({ id, onBack }: { id: string; onBack: () => void }) {
           <h3>
             Exposure — {c.vehicles_exposed.toLocaleString()} vehicles across {depots.length} depots
           </h3>
-          <table>
-            <thead>
-              <tr>
-                <th>Depot</th>
-                <th className="num">Vehicles</th>
-              </tr>
-            </thead>
-            <tbody>
-              {depots.slice(0, 12).map(([d, n]) => (
-                <tr key={d}>
-                  <td>{d}</td>
-                  <td className="num">{n}</td>
+          <div className="wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Depot</th>
+                  <th className="num">Vehicles</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-          {depots.length > 12 && (
-            <p className="muted">+ {depots.length - 12} further depots</p>
-          )}
+              </thead>
+              <tbody>
+                {depots.slice(0, 12).map(([d, n]) => (
+                  <tr key={d}>
+                    <td>{d}</td>
+                    <td className="num">{n}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {depots.length > 12 && <p className="muted">+ {depots.length - 12} further depots</p>}
         </div>
 
-        <div className="panel" style={{ width: 340, flexShrink: 0 }}>
-          <h3 style={{ marginTop: 0 }}>Launch service campaign</h3>
+        <div className="panel" style={{ width: 350, flexShrink: 0 }}>
+          <h3>Launch service campaign</h3>
 
           {result ? (
             <div className="success">
@@ -136,7 +149,9 @@ export function Campaign({ id, onBack }: { id: string; onBack: () => void }) {
                 disabled={busy || rationale.trim().length < 3 || title.trim().length < 3}
                 onClick={approve}
               >
-                {busy ? "Launching…" : `Approve — ${c.vehicles_exposed.toLocaleString()} work orders`}
+                {busy
+                  ? "Launching…"
+                  : `Approve — ${c.vehicles_exposed.toLocaleString()} work orders`}
               </button>
             </>
           )}

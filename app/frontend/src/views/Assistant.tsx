@@ -53,19 +53,19 @@ export function Assistant() {
 
   return (
     <div className="panel assistant">
-      <h3 style={{ marginTop: 0 }}>Assistant</h3>
-      <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>
-        Searches 1.75M complaint narratives and fleet exposure. It can <em>propose</em> a
-        service campaign; only you can approve one.
+      <h3>Assistant</h3>
+      <p className="muted" style={{ marginTop: 0, fontSize: 12.5 }}>
+        Searches 1.75M complaint narratives and fleet exposure. It can <em>propose</em> a service
+        campaign; only you can approve one.
       </p>
 
       {gated && (
         <div className="panel" style={{ marginBottom: 12 }}>
           <p className="muted" style={{ margin: 0, fontSize: 13 }}>
-            The assistant answers under <em>your</em> Databricks identity — it never queries as
-            the application — so it needs an authenticated session. This public deployment has
-            no sign-in, so it is read-only. The <strong>Evidence</strong> tab needs no session
-            and carries the measured result.
+            The assistant answers under <em>your</em> Databricks identity — it never queries as the
+            application — so it needs an authenticated session. This public deployment has no
+            sign-in, so it is read-only. The <strong>Evidence</strong> tab needs no session and
+            carries the measured result.
           </p>
         </div>
       )}
@@ -81,7 +81,14 @@ export function Assistant() {
             {t.content}
           </div>
         ))}
-        {busy && <p className="muted">Thinking — the agent runs its tools before answering…</p>}
+        {busy && (
+          <p className="thinking">
+            <i />
+            <i />
+            <i />
+            running tools
+          </p>
+        )}
       </div>
 
       {error && <div className="error">{error}</div>}
