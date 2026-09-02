@@ -420,18 +420,23 @@ edge, not an oracle."* v2 dropped after verification (I-052); one entity billing
 1. **Databricks App (~20 Sept).** Still the one thing that makes queue, assistant and
    Emerging live for a real user, via OBO. The auth seam means it is an afternoon. Keep it
    `STOPPED` between sessions — `apps create` provisions billing compute on *create*.
-2. **E-05 evaluation scorers, now with three concrete targets.** `Guidelines` scorers for:
+2. **Re-run the evaluation with the corrected scorers.** E-05 is built and has already
+   earned its keep — but the first run's failures were all in the *measuring apparatus*
+   (I-058), so the agent's real score is unknown beyond the six scorers that were clean.
+   Budget ~90 min: 10 cases × (agent tool rounds + LLM judges) is slow and the task timeout
+   is set accordingly. Then read it with `17_inspect_eval`, never from the state message.
+3. **E-05 evaluation scorers, now with three concrete targets.** `Guidelines` scorers for:
    never call an investigation a recall; always state the match tier; **never report a tool
    failure as a business answer** (I-050). The third only exists as a scorer idea because the
    failure actually happened.
-3. **Refresh discipline for the two snapshots.** `gold_emerging_signal` and
+4. **Refresh discipline for the two snapshots.** `gold_emerging_signal` and
    `evidence.json` are both point-in-time and both regenerate by hand
    (`fleetguard-emerging-signals` + `fleetguard-load-signals`; `scripts/export_evidence.py`).
    Decide before the demo whether to refresh them on the day — the signals table is dated
    `as_of 2026-08` and a reviewer will notice.
-4. **Phase 4 Model B** — scores the `MODEL_VARIANT` residual (3:1 over exact, I-030). The
+5. **Phase 4 Model B** — scores the `MODEL_VARIANT` residual (3:1 over exact, I-030). The
    largest remaining *capability* gap; everything else on this list is polish.
-5. **Phase 10 governance** — a visible slice (Postgres RLS on depot scoping, making §5.1
+6. **Phase 10 governance** — a visible slice (Postgres RLS on depot scoping, making §5.1
    literally true), not the full matrix.
 
 ### The public deployment, as it now stands
@@ -460,13 +465,16 @@ Three env vars live only in the Render dashboard, never committed: `GITHUB_CLIEN
   old version stays provisioned and billing while routing looks perfectly correct. Build the
   `update-config` payload by reading the surviving entity's live config **programmatically**;
   hand-copying is how `MLFLOW_EXPERIMENT_ID` gets dropped.
+- **An evaluation harness needs its own tests** (I-058) — it is code that judges code, and a
+  naive substring check punished the agent for *promising not to* invent a recall. Six of
+  eight scorers were perfect; every failure was in the measurement.
 - **A login page on a fresh `*.onrender.com` subdomain trips Google Safe Browsing** (I-057) —
   verify integrity by byte-comparing the served bundle before assuming a false positive, then
   remove the signature by landing anonymous visitors on content rather than a form.
 - **`StatementParameterListItem` binds values as STRING** (I-056) — fine for `= :id`, rejected
   for `LIMIT :n`. Coerce to a bounded int and interpolate; after `int()` it cannot carry SQL.
 
-### Verification discipline — earned eight times (I-021, I-043, I-050, I-051, I-054, I-055, I-056, I-057)
+### Verification discipline — earned nine times (I-021, I-043, I-050, I-051, I-054, I-055, I-056, I-057, I-058)
 
 Never infer success from an exit code. Never infer correctness from the absence of an
 exception. **Assert a number.** And for documents: a living spec accumulates *intentions that

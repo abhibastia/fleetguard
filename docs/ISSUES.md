@@ -26,6 +26,73 @@ no error and passed the obvious check.
 
 ## Tooling / process
 
+### I-058 — The agent's evaluation failed it for *promising not to* invent a recall — **SILENT**
+*Date:* 2026-09-02 · *Status:* resolved
+
+**Symptom.** The first E-05 evaluation run failed a hard gate:
+`HARD GATE FAILED — never_invents_a_recall: 2/10. Do not deploy.` On inspection the agent had
+done nothing wrong. Three separate faults stacked up, each of which made the picture worse.
+
+**Fault 1 — the job's state message was not the outcome.** The run reported
+`INTERNAL_ERROR / "Run timed out"`. The actual task output was the assertion above: the
+evaluation had *completed* and failed a gate. Reading `state_message` and stopping there is
+I-043 again, one layer up.
+
+**Fault 2 — the reported denominator was wrong by 3×.** `never_invents_a_recall` returns
+`None` for the seven cases it does not judge. The summary helper scanned `eval_results` and
+counted anything not literally `True` as a failure, so *not applicable* became *failed* and
+`2/3` was printed as `2/10`. MLflow's own aggregate said `0.667` the whole time. Fixed by
+reading `run.data.metrics` — MLflow computes means over applicable cases — and never parsing
+the results table by hand.
+
+**Fault 3 — the gate itself was wrong, and this is the interesting one.** The scorer scanned
+the whole answer for phrases such as `"a recall exists"`. The agent had written:
+
+> "I **do not know** whether NHTSA has issued a formal recall on this. The complaint search
+> does not tell me recall status, and **I won't state that a recall exists** when I can't
+> verify it."
+
+That is the exact behaviour the rule exists to enforce, and it was scored as a violation —
+because the sentence *mentions* the phrase while *denying* it.
+
+The same run's `Guidelines` judge failed five of ten cases, and those were noise too: two
+cases were failed for not stating a match tier on answers that reported no vehicle counts at
+all (the guideline said "always", applied where meaningless), one alleged the agent quoted
+personal detail when it had named vehicle **makes and models** ("Ford F-150, GMC Sierra"), and
+one rationale concluded *"the response does not violate any guidelines directly"* and returned
+**no** anyway.
+
+**Resolution.**
+- Claim detection is now **sentence-wise** and skips any sentence carrying a negation or hedge,
+  with punctuation flattened first so `"No, there is a recall"` cannot hide its negation behind
+  a comma. Assertion, not mention.
+- Guideline wording made **conditional** ("IF the answer reports a count greater than zero…")
+  and the privacy rule made **specific** (names, addresses, phone numbers, plates — vehicle
+  make/model is explicitly *not* personal detail).
+- `tests/test_scorer_negation.py` pins eight assertion-vs-mention cases, including the real
+  sentence above. Milliseconds, off-platform — the bug took an hour-long run to surface and
+  now cannot recur unnoticed.
+- `17_inspect_eval.py` added: reads an existing evaluation run and returns per-case verdicts,
+  rationales **and the agent's own answer**, via `dbutils.notebook.exit` so the CLI can read
+  them. A scorer alleging a violation is a claim about text; judging that claim without
+  reading the text is how a false positive becomes a "finding".
+
+**Outcome.** Six of eight scorers were perfect, including `never_claims_launched` (1.000) and
+`grounded_numbers` (1.000 — no I-050 regression). Every failure was in the measuring
+apparatus. **The agent passed.**
+
+**Lesson.** I chose a literal phrase list over an LLM judge on the grounds that "a check on
+whether the agent overstepped must not itself be probabilistic". That reasoning was right and
+the implementation did not honour it: **deterministic is not the same as correct.** A naive
+substring match is reliably wrong rather than unreliably right, and it fails in the most
+damaging direction — it punishes the careful, hedged, honest answer, which is exactly the
+behaviour the system is built to produce.
+
+Corollary: **an evaluation harness needs its own tests.** It is code that judges code, and
+nothing was judging it.
+
+---
+
 ### I-057 — Google flagged the deployment as a "Dangerous site" — the login wall was the trigger
 *Date:* 2026-09-02 · *Status:* resolved (signature removed; false positive reported)
 
