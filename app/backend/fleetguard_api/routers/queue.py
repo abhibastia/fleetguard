@@ -126,7 +126,7 @@ def get_campaign(
                 FROM {PG_SCHEMA}.fleetguard_vehicle_exposure e
                 JOIN {PG_SCHEMA}.fleetguard_vehicle v ON v.vin = e.vin
                 WHERE e.campaign_id = %(cid)s
-                  {"AND " + scope.predicate if scope.predicate else ""}
+                  {scope.where("AND")}
                 GROUP BY v.depot_id ORDER BY n DESC""",
             {"cid": campaign_id, **scope.params},
         )
@@ -137,7 +137,7 @@ def get_campaign(
                 FROM {PG_SCHEMA}.fleetguard_vehicle_exposure e
                 JOIN {PG_SCHEMA}.fleetguard_vehicle v ON v.vin = e.vin
                 WHERE e.campaign_id = %(cid)s
-                  {"AND " + scope.predicate if scope.predicate else ""}
+                  {scope.where("AND")}
                 ORDER BY v.depot_id, e.vin LIMIT %(sample)s""",
             {"cid": campaign_id, "sample": sample, **scope.params},
         )
