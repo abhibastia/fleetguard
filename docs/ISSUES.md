@@ -26,6 +26,127 @@ no error and passed the obvious check.
 
 ## Tooling / process
 
+### I-055 — A file that was never written is indistinguishable from one that fails to import
+*Date:* 2026-09-02 · *Status:* resolved
+
+**Symptom.** `uvicorn` refused to start:
+`ImportError: cannot import name 'signals' from 'fleetguard_api.routers'`. The obvious
+readings — a syntax error, a circular import, a bad `__init__.py` — were all wrong.
+`routers/signals.py` **did not exist**. The command that would have created it had been
+rejected mid-flight by a tool-permission failure, and the failure notice arrived interleaved
+with an unrelated background-job notification, so it read as noise.
+
+**Root cause.** Nothing verified the write. Subsequent steps — wiring the import into
+`main.py`, adding the frontend client, building the console — all succeeded, because none of
+them touch the missing file. The error surfaced two steps later at *process start*, pointing
+at the importer rather than at the absent file.
+
+**Resolution.** File recreated; server starts; `/api/signals` verified against live Lakebase.
+
+**Lesson.** Same shape as I-050 and I-043 at a different layer: **a failed operation that
+produces no output is silent, and later steps that do not depend on it will happily pass.**
+When a write is the thing that matters, confirm the artefact exists (`ls`, or an import) at
+the point of writing — not at the point where something else happens to need it. An
+`ImportError` naming a *package* is evidence about the package's contents, not about the
+module's code.
+
+---
+
+### I-054 — Render serves a cached `/`, so the console page is not a deploy signal
+*Date:* 2026-09-02 · *Status:* resolved (verification method changed)
+
+**Symptom.** After pushing the signals build, `curl https://…/` returned the **previous**
+bundle (`index-Bxx1SfyE.js`) for several minutes and a polling watcher reported "still
+serving old". The natural conclusion — the deploy had not happened, or had failed — was
+wrong. It had already succeeded.
+
+**Root cause.** `/` is cacheable and was being served stale. The hashed asset itself
+(`/assets/index-CRjJ01hl.js`) was already `200`, and `/?cb=<random>` returned the new bundle
+immediately.
+
+**The tell, and the generalisable part.** `GET /api/signals` returned **401**. That is only
+possible if the route exists: `main.py` mounts an SPA catch-all, so an *unknown* path returns
+**200 with HTML**, never 404 and never 401. A gated route answering 401 is therefore positive
+proof that the new backend is live.
+
+**Resolution.** Verify deploys by probing an API route, not the console page. Cache-bust `/`
+when its content genuinely matters.
+
+**Lesson.** Choosing the right probe matters more than polling harder. A watcher that polls a
+*cacheable* endpoint reports a false negative indefinitely and looks exactly like a slow
+deploy — and on a mounted-SPA app, HTTP status codes carry more information than they
+normally would, because 404 has been taken off the table.
+
+---
+
+### I-053 — Lakebase notebooks need the `fgenv` serverless environment, not `%pip`
+*Date:* 2026-09-02 · *Status:* resolved
+
+**Symptom.** `fleetguard-load-signals` failed at cell 1 with
+`ModuleNotFoundError: No module named 'psycopg'` — while `fleetguard-load-exposure`, running
+near-identical code, had always worked.
+
+**Root cause.** The working job declares dependencies in a **serverless environment spec**
+attached to the task:
+
+```json
+"environments": [{"environment_key": "fgenv",
+  "spec": {"client": "3", "dependencies": ["psycopg[binary]", "databricks-sdk>=0.89.0"]}}]
+```
+
+with `"environment_key": "fgenv"` on the task. The new job was created without it. The
+notebook body carries no `%pip` cell precisely *because* the environment supplies the
+dependency — so copying the notebook pattern without copying the job spec produces code that
+looks complete and cannot run.
+
+**Resolution.** `databricks jobs reset` with the environment block added; load succeeded, 48
+signals reconciled against source.
+
+**Lesson.** For serverless jobs, the dependency list lives in the **job**, not the notebook.
+When cloning a working pipeline, clone `jobs get <id>` too — the half of the configuration
+that is invisible from the source file is exactly the half that will be forgotten.
+
+---
+
+### I-052 — `agents.deploy()` leaves the previous version provisioned and billing
+*Date:* 2026-09-02 · *Status:* resolved (and now a standing post-deploy check)
+
+**Symptom.** After deploying agent version 2 over version 1, the endpoint showed **two**
+served entities, both `DEPLOYMENT_READY`:
+
+```
+..._agent_1  version 1  Small CPU  scale_to_0: False  ← 0% traffic, still provisioned
+..._agent_2  version 2  Small CPU  scale_to_0: False  ← 100% traffic
+```
+
+`traffic_config` was perfectly correct — 100/0 — so nothing looked wrong. Two containers were
+running to serve one agent.
+
+**Compounding factor.** `agents.deploy()` created both with **`scale_to_zero_enabled: False`**,
+so idle containers bill continuously rather than only under load. The zero-traffic entity was
+pure waste.
+
+**Resolution.** `databricks serving-endpoints update-config` with only the surviving entity.
+
+> **`update-config` REPLACES `served_entities`; it does not merge.** Copy the surviving
+> entity's config verbatim from `serving-endpoints get` first — an `agents.deploy()` endpoint
+> carries `ENABLE_MLFLOW_TRACING`, `MLFLOW_EXPERIMENT_ID`, `ENABLE_LANGCHAIN_STREAMING`,
+> `RETURN_REQUEST_ID_IN_RESPONSE`. Dropping `MLFLOW_EXPERIMENT_ID` would leave the endpoint
+> working while tracing silently wrote to the wrong place.
+
+Endpoint re-verified after the change (25 vehicles / 22 depots / EXACT).
+
+**Also worth recording:** cost could not be self-served. `system.billing` requires
+`USE SCHEMA`, which a non-admin on a shared metastore does not have, and the public pricing
+pages publish **GPU** serving DBU rates only — there is no CPU workload-size table. So "how
+much is this costing?" is not answerable from inside this workspace.
+
+**Lesson.** **Check `served_entities` after every redeploy, not `traffic_config`.** Routing is
+the thing that looks wrong when something is wrong; provisioning is the thing that costs
+money. They are reported separately and only one of them was being read.
+
+---
+
 ### I-051 — `ARCHITECTURE.md` credited Model A with harm weighting it does not have — **SILENT**
 *Date:* 2026-09-02 · *Status:* resolved (docs corrected to match the code)
 

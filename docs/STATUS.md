@@ -436,12 +436,15 @@ have been on the list).
 - **The endpoint bills continuously** (`scale_to_zero_enabled: False`). Kept up by decision
   2026-09-02. Retire with `fleetguard-deploy-agent` + version 2 to bring it back.
 - **`/` on Render is cached** — it served a stale `index.html` for minutes after a successful
-  deploy. Probe an API route to confirm a deploy, not the console page. A 401 from a gated
-  route proves it exists; an unknown path returns **200 HTML** via the SPA catch-all.
-- **Lakebase notebooks need the `fgenv` serverless environment**, not `%pip` — a missing
-  dependency there fails as `ModuleNotFoundError` at cell 1.
+  deploy (I-054). Probe an API route to confirm a deploy, not the console page. A 401 from a
+  gated route proves it exists; an unknown path returns **200 HTML** via the SPA catch-all.
+- **Lakebase notebooks need the `fgenv` serverless environment**, not `%pip` (I-053) — the
+  dependency list lives in the *job*, not the notebook, so cloning a working notebook without
+  its job spec produces code that cannot run.
+- **After every agent redeploy, read `served_entities`, not `traffic_config`** (I-052) — the
+  old version stays provisioned and billing while routing looks perfectly correct.
 
-### Verification discipline — earned four times (I-021, I-043, I-050, I-051)
+### Verification discipline — earned six times (I-021, I-043, I-050, I-051, I-054, I-055)
 
 Never infer success from an exit code. Never infer correctness from the absence of an
 exception. **Assert a number.** And for documents: a living spec accumulates *intentions that
