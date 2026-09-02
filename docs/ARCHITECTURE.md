@@ -45,7 +45,7 @@ against 11.1% on a volume-matched placebo** (1.44×, z ≈ 2.62, p ≈ 0.009).
 
 | Phase | State |
 |---|---|
-| 1 Ingestion + medallion | 🟡 ~90% — `gold_emerging_cluster` descoped by §6 findings |
+| 1 Ingestion + medallion | ✅ Done — `gold_emerging_cluster` **descoped** (cluster-grained, and there is no clustering); replaced by `gold_emerging_signal` |
 | 2 Fleet registry | ✅ Done |
 | 3 Chunking + AI Search | ✅ Done — verified at full corpus |
 | 4 Model B + golden set | ⬜ Not started |
@@ -167,19 +167,29 @@ CDF replicates to `bootcamp_students.bootcamp_cdc` as `lb_fleetguard_<entity>_hi
 
 ## 5. Models
 
-**Model A — emerging defect detector.** Volume anomaly against each series' own trailing
-history, plus harm weighting. A detection is a **sustained run** of ≥2 consecutive firing
-months, dated at the run *nearest* the investigation open date.
+**Model A — emerging defect detector.** **Volume anomaly only**, against each series' own
+trailing 12-month history, at the grain `(make, model, comp_top)`. The firing rule is
+`n >= 5 AND base_months >= 6 AND base_sd > 0 AND z >= 3.0`, and a detection is a **sustained
+run** of ≥2 consecutive firing months, dated at the run *nearest* the investigation open date.
 
 > Taking the *earliest* run in the window instead produced a 409-day median that was pure
 > artefact — as many detections at the window edge as near the open date. The nearest-run
 > rule is load-bearing, not a detail.
 
-Harm is a **smoothed severity multiplier with shrinkage toward the component base rate**,
-never a raw sum: 96.0% of complaints report zero injuries, so an unsmoothed weight
-degenerates into a fatality lookup.
+**Harm weighting was designed but never built (I-051).** This section previously described a
+smoothed severity multiplier with shrinkage toward the component base rate. No such term
+exists in the code, and the measured 16.0% / 11.1% result comes from pure volume anomaly.
+The rationale for the design still holds — 96.0% of complaints report zero injuries, so an
+unsmoothed weight would degenerate into a fatality lookup — and if it is built it belongs as
+a *ranking* multiplier on an already-fired run, after which the backtest must be re-run
+before the headline can be re-quoted.
 
 **Model A does not use clustering.** See §6.
+
+**Live signals.** `gold_emerging_signal` applies the same rule, with the same thresholds, to
+the current corpus and keeps runs still firing at the corpus edge. It is what
+`gold_emerging_cluster` was for, at the grain the detector actually uses. `harm_share` on that
+table is **descriptive triage only** and is not an input to firing.
 
 **Model B — recall-to-fleet matcher (planned).** Scores the `MODEL_VARIANT` residual that
 exact matching misses. Not built.

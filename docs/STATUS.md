@@ -19,7 +19,7 @@ next-actions list in priority order.** Design lives in `FleetGuard_Proposal.md`,
 
 | Phase | Status | Detail |
 |---|---|---|
-| **1 — Ingestion + bronze/silver/gold** | 🟡 **~90%** | Ingest job, bronze (4), silver (9) built and validated. Chunking done — `silver_complaint_chunk_indexed`, 1,746,601 chunks. **Outstanding:** `gold_emerging_cluster` + the scope tables that follow it, both blocked on Phase 9's semantic arm. Ingest is **deliberately manual** — no schedule, to avoid consuming shared-workspace compute before it's needed. |
+| **1 — Ingestion + bronze/silver/gold** | ✅ **DONE** | Ingest job, bronze (4), silver (9) built and validated. Chunking done — `silver_complaint_chunk_indexed`, 1,746,601 chunks. **`gold_emerging_cluster` is descoped, not outstanding** (checked 2026-09-02): it was cluster-grained and there is no clustering — HDBSCAN abandoned (I-048), semantic subdivision falsified (I-049), and the shipping detector keys on `make|model|comp_top`. Replaced by **`gold_emerging_signal`**, the same rule applied to the current corpus. Ingest is **deliberately manual** — no schedule, to avoid consuming shared-workspace compute before it's needed. |
 | **2 — Fleet registry** | ✅ **Done** | 20,000 vehicles / 60 depots / ~989k exposure rows. 400 VINs independently vPIC-verified, 400/400 exact. |
 | **3 — Chunking + AI Search** | ✅ **DONE** | Index complete: **1,746,601 chunks, `ready: true`**, matching source exactly. Done-when **re-verified at full corpus** — hybrid differs from ANN on 2 of 3 queries, harm filter 10/10, near-duplicates 10/10 distinct. The earlier check ran at 42% and was repeated before being quoted. |
 | **4 — Model B + golden set** | ⬜ Not started | Scope now measured: variant matches outnumber exact 3:1 (I-030). |
@@ -92,7 +92,7 @@ Everything here is measured against live data, not estimated. Full derivations i
 ### Lead-time backtest — the differentiator
 
 The claim is *complaint accumulation → ODI investigation opens*. Volume-anomaly detector
-with harm weighting — **this is the final Model A**, not an interim half.
+**with no harm weighting** — **this is the final Model A**, not an interim half. (The harm term was designed and documented but never built; corrected 2026-09-02, I-051. The measured result is unaffected — it was always produced by pure volume anomaly.)
 
 | Arm | n | Detected | Rate | Median lead |
 |---|---:|---:|---:|---:|

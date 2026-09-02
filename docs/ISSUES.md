@@ -26,6 +26,52 @@ no error and passed the obvious check.
 
 ## Tooling / process
 
+### I-051 — `ARCHITECTURE.md` credited Model A with harm weighting it does not have — **SILENT**
+*Date:* 2026-09-02 · *Status:* resolved (docs corrected to match the code)
+
+**Symptom.** §5 of the living spec described Model A as *"volume anomaly against each series'
+own trailing history, **plus harm weighting**"*, with a paragraph on smoothed severity
+multipliers and shrinkage toward the component base rate. `STATUS.md` repeated it: *"volume-anomaly
+detector with harm weighting — this is the final Model A"*.
+
+**Root cause.** There is no harm term in the detector. The firing rule, identical across
+`03_lead_time_backtest_v2` and `09_lead_time_backtest_v3`, is:
+
+```
+n >= 5  AND base_months >= 6  AND base_sd > 0  AND (n - base_mean)/base_sd >= 3.0
+```
+
+sustained over ≥2 consecutive months. A case-insensitive search of `src/` finds *no*
+reference to harm outside `silver_complaint.sql` (typing the fields), `silver_complaint_chunk.sql`
+(the `any_harm` retrieval flag) and the search/agent tooling. The harm-weighting design was
+written in the proposal, described in the architecture, and **never implemented**.
+
+The measured headline — **16.0% vs 11.1%, 1.44×, p ≈ 0.009** — is therefore produced by
+*pure volume anomaly*. The number is unaffected and remains correct. What was wrong is the
+description of what produced it.
+
+**Why it survived.** It is a claim about *absence*, and absence has no failing test. Every
+check this project runs asks "does the thing that exists behave correctly?" Nothing asks
+"does the thing the document describes exist at all?" The harm paragraph was plausible,
+internally consistent, and adjacent to real measured facts about harm-field population — all
+of which are true, and none of which are about the detector.
+
+**Resolution.**
+- §5 now states the detector is volume anomaly only, and records harm weighting as
+  *designed but not built*, with a pointer to where it would go.
+- `STATUS.md` corrected in both places it repeated the claim.
+- `gold_emerging_signal` (the live detector, built the same day) carries `harm_share` as an
+  explicitly **descriptive** column with a table comment saying it is not an input to
+  detection — so the next person to read it cannot make the same inference.
+
+**Lesson.** A living spec drifts in a direction unit tests cannot see: it accumulates
+*intentions* that read as *descriptions*. When a doc says the system does X, the check is
+`grep` for X in the code, not "does that sound right". This is the third documentation claim
+in this project falsified by looking (see the proposal's own contradiction table) and the
+first found in the document that was supposed to be the corrective.
+
+---
+
 ### I-050 — The deployed agent reported "no vehicles affected" for a 25-vehicle recall — **SILENT**
 *Date:* 2026-09-02 · *Status:* **resolved and verified on the live endpoint**
 
