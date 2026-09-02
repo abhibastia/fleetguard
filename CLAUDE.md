@@ -301,6 +301,16 @@ need this, platform handles it):**
 
 ## Working conventions for this project
 
+- **Record every Databricks platform change as a runbook — both the CLI/code path AND the
+  UI path.** This project is a learning exercise as much as a build. Whenever something is
+  created, configured, or changed in the workspace (a job, an endpoint, a serving
+  deployment, a CDF config, a permission), capture: the exact command run, the equivalent
+  click-path in the UI, what the output looked like, and anything that surprised you.
+  File it in the Obsidian vault via the **`obsidian-notetaker`** agent. Some things are
+  UI-only (Lakebase CDF config), some are CLI-only in practice — say which, because that
+  asymmetry is itself worth knowing.
+
+
 - **Never write a specific URL, API endpoint, or product/feature name into
   `docs/FleetGuard_Proposal.md` without verifying it against a live system or
   current docs first.** This project has already shipped two rounds of confidently
