@@ -391,9 +391,15 @@ In priority order:
    live read would need a Databricks credential on a public host, which §8a forbids. The
    route is deliberately unauthenticated and three tests lock that asymmetry in both
    directions — `/evidence` public, `/queue` and `/chat` still 401.
-3. **Correct the proposal against measured reality** — unchanged from yesterday, still owed:
-   §3/§6 the falsified semantic-clustering claim (I-049); §8.3 the CDF figure is measured at
-   **7.1–15.6 s**; §4.3 keep the hybrid-retrieval claim.
+3. ~~**Correct the proposal against measured reality.**~~ **Already discharged — and it was
+   never an edit to make.** The proposal is FROZEN; correcting its body would destroy the
+   record of what was believed at the outset, which is the point of freezing it. All three
+   items are recorded in its header contradiction table instead: the falsified semantic
+   claim (§1/3/4.3, I-049), the measured CDF latency (§8.3, 7.1–15.6 s), and HDBSCAN's 85%
+   noise (§4.3, I-048) — plus the CDF-replicates-DDL correction (§4.4, I-044). The
+   hybrid-retrieval claim needed no action; it is verified and stands. **This item sat on
+   the list for two days asking for a change the freeze policy forbids** — verify a
+   next-action against `CLAUDE.md` before acting on it.
 4. **Databricks App (~20 Sept).** The one thing that makes the queue and chat live for a
    real user, via OBO. Keep it `STOPPED` between sessions — `apps create` provisions billing
    compute on *create*, not on deploy.
