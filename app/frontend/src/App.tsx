@@ -181,7 +181,9 @@ export function App() {
     <>
       <header>
         <h1 className="brand">
-          <Mark />
+          <span className="brand-mark-chip">
+            <Mark />
+          </span>
           FleetGuard
         </h1>
 

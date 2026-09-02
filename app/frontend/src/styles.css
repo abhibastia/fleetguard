@@ -7,6 +7,10 @@
  * is coloured is a dashboard where nothing is urgent.
  *
  * Dark by default because this is a monitoring surface, often on a wall display.
+ *
+ * 2026-09 pass: same rules, more craft. Depth comes from graduated shadows and a faint
+ * ambient wash rather than new colour; motion is short and purposeful (hover/press feedback,
+ * never idle animation) so it reads as quality, not decoration.
  */
 
 :root {
@@ -37,17 +41,24 @@
   --accent-line: #2a3757;
 
   /* Derived colours that used to be hardcoded. They live here so a theme can move them. */
-  --header-bg: rgba(20, 23, 31, 0.92);
+  --header-bg: rgba(20, 23, 31, 0.78);
   --on-accent: #08111f;
   --accent-hover: #8fb2ff;
   --on-danger: #2b0d10;
   --danger-hover: #ff8080;
 
-  --r-sm: 6px;
-  --r: 10px;
-  --r-lg: 14px;
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px -12px rgba(0, 0, 0, 0.6);
+  --r-sm: 7px;
+  --r: 11px;
+  --r-lg: 16px;
+
+  /* Two-layer shadows throughout: a tight contact shadow plus a soft ambient one. Reads as
+     a real surface catching light rather than a flat box with a blur filter on it. */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 28px -14px rgba(0, 0, 0, 0.65);
+  --shadow-lg: 0 4px 10px rgba(0, 0, 0, 0.35), 0 24px 48px -20px rgba(0, 0, 0, 0.7);
+  --ring: 0 0 0 3px var(--accent-bg), 0 0 0 4.5px var(--accent-line);
   --header-h: 56px;
+  --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
 
   /* Tells the browser to render native controls — checkboxes, scrollbars, the caret — in
      the matching scheme. Without it the checkbox stays light-mode white on a dark page. */
@@ -89,13 +100,16 @@
   --accent-bg: #eef3fd;
   --accent-line: #c6d6f7;
 
-  --header-bg: rgba(255, 255, 255, 0.9);
+  --header-bg: rgba(255, 255, 255, 0.78);
   --on-accent: #ffffff;
   --accent-hover: #244fbb;
   --on-danger: #ffffff;
   --danger-hover: #a81f1f;
 
-  --shadow: 0 1px 2px rgba(16, 24, 40, 0.05), 0 8px 24px -14px rgba(16, 24, 40, 0.18);
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.04);
+  --shadow: 0 1px 2px rgba(16, 24, 40, 0.05), 0 10px 28px -16px rgba(16, 24, 40, 0.2);
+  --shadow-lg: 0 4px 10px rgba(16, 24, 40, 0.06), 0 24px 48px -20px rgba(16, 24, 40, 0.24);
+  --ring: 0 0 0 3px var(--accent-bg), 0 0 0 4.5px var(--accent-line);
 
   color-scheme: light;
 }
@@ -104,9 +118,22 @@
   box-sizing: border-box;
 }
 
+html {
+  /* A faint fixed-position wash behind everything — visible only as a change in how the
+     background falls off toward the edges, never as a colour anyone could name. Fixed to the
+     viewport (not `body`) so it doesn't scroll or repeat awkwardly on tall pages. */
+  background: var(--bg);
+  background-image: radial-gradient(
+    1100px 620px at 14% -8%,
+    color-mix(in srgb, var(--accent) 7%, transparent),
+    transparent 60%
+  );
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+}
+
 body {
   margin: 0;
-  background: var(--bg);
   color: var(--text);
   font:
     14px/1.55 -apple-system,
@@ -115,11 +142,42 @@ body {
     Inter,
     Roboto,
     sans-serif;
+  font-feature-settings: "tnum" 1, "cv11" 1;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 a {
   color: var(--accent);
+}
+
+::selection {
+  background: var(--accent-line);
+  color: var(--text);
+}
+
+/* Themed scrollbars — a thin, unobtrusive track that matches the surface it sits on instead
+   of the browser's default chrome, which reads as unfinished on a dark UI. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--faint);
+  background-clip: padding-box;
 }
 
 /* Keyboard focus must always be visible. An operator console is exactly the kind of tool
@@ -143,13 +201,14 @@ header {
   padding: 0 24px;
   border-bottom: 1px solid var(--line);
   background: var(--header-bg);
-  backdrop-filter: blur(8px);
+  backdrop-filter: blur(10px) saturate(1.4);
+  -webkit-backdrop-filter: blur(10px) saturate(1.4);
 }
 
 .brand {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 10px;
   font-size: 15px;
   font-weight: 650;
   letter-spacing: -0.01em;
@@ -157,16 +216,30 @@ header {
   white-space: nowrap;
 }
 
-/* A mark rather than a logo file: one less asset, and it tints with the palette. */
+/* A mark rather than a logo file: one less asset, and it tints with the palette. Sits in a
+   faint accent-tinted chip so it reads as a mark rather than a stray icon in the type line. */
+.brand-mark-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: var(--r-sm);
+  background: var(--accent-bg);
+  border: 1px solid var(--accent-line);
+}
+
 .brand-mark {
-  width: 22px;
-  height: 22px;
+  width: 17px;
+  height: 17px;
   flex-shrink: 0;
   color: var(--accent);
 }
 
 nav.tabs {
   display: flex;
+  align-items: center;
   gap: 2px;
   height: 100%;
 }
@@ -174,32 +247,37 @@ nav.tabs {
 nav.tabs button {
   position: relative;
   background: none;
-  border: none;
+  border: 1px solid transparent;
   color: var(--muted);
-  padding: 0 13px;
-  height: 100%;
+  padding: 6px 13px;
+  height: auto;
   font-size: 13px;
   font-weight: 500;
-  border-radius: 0;
+  border-radius: var(--r-sm);
   cursor: pointer;
+  transition:
+    color 0.15s var(--ease),
+    background 0.15s var(--ease);
 }
 
 nav.tabs button:hover {
   color: var(--text);
+  background: var(--surface-2);
 }
 
 /* The active tab is marked with `aria-current`, so the styling and the accessibility
    information come from the same attribute and cannot drift apart. */
 nav.tabs button[aria-current="page"] {
   color: var(--text);
+  background: var(--surface-2);
 }
 
 nav.tabs button[aria-current="page"]::after {
   content: "";
   position: absolute;
-  left: 10px;
-  right: 10px;
-  bottom: -1px;
+  left: 12px;
+  right: 12px;
+  bottom: -9px;
   height: 2px;
   background: var(--accent);
   border-radius: 2px 2px 0 0;
@@ -220,17 +298,20 @@ header .who {
   height: 6px;
   border-radius: 50%;
   background: var(--ok);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 20%, transparent);
   flex-shrink: 0;
 }
 
 .who .dot.off {
   background: var(--faint);
+  box-shadow: none;
 }
 
 main {
   padding: 26px 24px 64px;
   max-width: 1240px;
   margin: 0 auto;
+  animation: rise 0.25s var(--ease) both;
 }
 
 /* ── page furniture ─────────────────────────────────────────────────────────────────── */
@@ -241,9 +322,9 @@ main {
 
 .page-head h2 {
   margin: 0 0 5px;
-  font-size: 21px;
-  font-weight: 650;
-  letter-spacing: -0.015em;
+  font-size: 22px;
+  font-weight: 680;
+  letter-spacing: -0.02em;
 }
 
 .page-head p {
@@ -260,7 +341,8 @@ h3 {
 }
 
 /* Stat strip — the "what am I looking at" line. Numbers are large because they are the
-   answer; labels are small because they are only there to disambiguate. */
+   answer; labels are small because they are only there to disambiguate. A thin accent bar
+   on the left edge gives each card a spine without adding any new colour to the palette. */
 .stats {
   display: flex;
   flex-wrap: wrap;
@@ -272,13 +354,23 @@ h3 {
   flex: 1 1 150px;
   background: var(--surface);
   border: 1px solid var(--line);
+  border-left: 3px solid var(--line-strong);
   border-radius: var(--r);
-  padding: 13px 15px;
+  padding: 13px 16px;
+  transition:
+    border-color 0.15s var(--ease),
+    transform 0.15s var(--ease),
+    box-shadow 0.15s var(--ease);
+}
+
+.stat:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
 }
 
 .stat .v {
-  font-size: 25px;
-  font-weight: 600;
+  font-size: 26px;
+  font-weight: 650;
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
   line-height: 1.15;
@@ -294,6 +386,7 @@ h3 {
 
 .stat.is-danger {
   border-color: var(--danger-line);
+  border-left-color: var(--danger);
   background: var(--danger-bg);
 }
 .stat.is-danger .v {
@@ -301,6 +394,7 @@ h3 {
 }
 .stat.is-ok {
   border-color: var(--ok-line);
+  border-left-color: var(--ok);
   background: var(--ok-bg);
 }
 .stat.is-ok .v {
@@ -317,14 +411,22 @@ button {
   border: 1px solid var(--line-strong);
   background: var(--surface-2);
   color: var(--text);
+  box-shadow: var(--shadow-sm);
   transition:
-    background 0.12s ease,
-    border-color 0.12s ease;
+    background 0.12s var(--ease),
+    border-color 0.12s var(--ease),
+    transform 0.12s var(--ease),
+    box-shadow 0.12s var(--ease);
 }
 
 button:hover:not(:disabled) {
   background: var(--surface-3);
   border-color: var(--faint);
+  transform: translateY(-1px);
+}
+
+button:active:not(:disabled) {
+  transform: translateY(0);
 }
 
 button.primary {
@@ -332,6 +434,7 @@ button.primary {
   border-color: var(--accent);
   color: var(--on-accent);
   font-weight: 650;
+  box-shadow: var(--shadow-sm), 0 6px 16px -8px color-mix(in srgb, var(--accent) 65%, transparent);
 }
 button.primary:hover:not(:disabled) {
   background: var(--accent-hover);
@@ -343,6 +446,7 @@ button.danger {
   border-color: var(--danger);
   color: var(--on-danger);
   font-weight: 650;
+  box-shadow: var(--shadow-sm), 0 6px 16px -8px color-mix(in srgb, var(--danger) 65%, transparent);
 }
 button.danger:hover:not(:disabled) {
   background: var(--danger-hover);
@@ -352,11 +456,13 @@ button.danger:hover:not(:disabled) {
 button:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+  box-shadow: none;
 }
 
 .crumb {
   background: none;
   border: none;
+  box-shadow: none;
   color: var(--muted);
   padding: 4px 0;
   margin-bottom: 14px;
@@ -366,6 +472,7 @@ button:disabled {
   background: none;
   border-color: transparent;
   color: var(--text);
+  transform: none;
 }
 
 label {
@@ -385,6 +492,9 @@ textarea {
   border: 1px solid var(--line-strong);
   background: var(--bg);
   color: var(--text);
+  transition:
+    border-color 0.12s var(--ease),
+    box-shadow 0.12s var(--ease);
 }
 
 input::placeholder,
@@ -396,6 +506,7 @@ input:focus,
 textarea:focus {
   outline: none;
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-bg);
 }
 
 .check {
@@ -426,7 +537,7 @@ table {
 th,
 td {
   text-align: left;
-  padding: 10px 14px;
+  padding: 11px 14px;
   border-bottom: 1px solid var(--line);
 }
 
@@ -444,15 +555,23 @@ tbody tr:last-child td {
   border-bottom: none;
 }
 
+tbody tr {
+  transition: background 0.1s var(--ease);
+}
+
 tbody tr:hover {
   background: var(--surface-2);
 }
 
-/* Only tables whose rows navigate somewhere get the pointer. Previously every table
-   claimed to be clickable, including evidence and signals, which promises an interaction
-   that does not exist. */
+/* Only tables whose rows navigate somewhere get the pointer, and the accent rail that says
+   so. Previously every table claimed to be clickable, including evidence and signals, which
+   promises an interaction that does not exist — so the rail is scoped to `.rows` too. */
 table.rows tbody tr {
   cursor: pointer;
+  box-shadow: inset 3px 0 0 transparent;
+}
+table.rows tbody tr:hover {
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 
 .num {
@@ -462,19 +581,31 @@ table.rows tbody tr {
 
 .wrap {
   overflow-x: auto;
+  border-radius: var(--r);
 }
 
 /* ── badges ─────────────────────────────────────────────────────────────────────────── */
 
 .tag {
-  display: inline-block;
-  padding: 2px 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2.5px 9px;
   border-radius: 999px;
   font-size: 10.5px;
   font-weight: 700;
   letter-spacing: 0.05em;
   white-space: nowrap;
   vertical-align: middle;
+}
+
+.tag::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
 }
 
 .tag.parkit {
@@ -497,13 +628,16 @@ table.rows tbody tr {
   color: var(--faint);
   border: 1px solid var(--line);
 }
+.tag.quiet::before {
+  display: none;
+}
 
 /* ── panels and messages ────────────────────────────────────────────────────────────── */
 
 .panel {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: var(--r);
+  border-radius: var(--r-lg);
   padding: 18px;
   box-shadow: var(--shadow);
 }
@@ -521,22 +655,27 @@ table.rows tbody tr {
 .note {
   padding: 12px 14px;
   border-radius: var(--r-sm);
+  border-left-width: 3px;
+  border-left-style: solid;
   font-size: 13px;
 }
 
 .error {
   background: var(--danger-bg);
   border: 1px solid var(--danger-line);
+  border-left-color: var(--danger);
   color: var(--danger);
 }
 .success {
   background: var(--ok-bg);
   border: 1px solid var(--ok-line);
+  border-left-color: var(--ok);
   color: var(--ok);
 }
 .note {
   background: var(--accent-bg);
   border: 1px solid var(--accent-line);
+  border-left-color: var(--accent);
   color: var(--muted);
 }
 
@@ -597,8 +736,22 @@ table.rows tbody tr {
   }
 }
 
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .skeleton {
+    animation: none;
+  }
+  main {
     animation: none;
   }
   * {
@@ -648,17 +801,20 @@ table.rows tbody tr {
   line-height: 1.55;
   white-space: pre-wrap;
   max-width: 92%;
+  box-shadow: var(--shadow-sm);
 }
 
 .turn.user {
   background: var(--accent-bg);
   border: 1px solid var(--accent-line);
+  border-bottom-right-radius: 3px;
   margin-left: auto;
 }
 
 .turn.agent {
   background: var(--surface-2);
   border: 1px solid var(--line);
+  border-bottom-left-radius: 3px;
 }
 
 .ask {
@@ -724,6 +880,7 @@ table.rows tbody tr {
   color: var(--muted);
   background: transparent;
   border: 1px solid transparent;
+  box-shadow: none;
   flex-shrink: 0;
 }
 
@@ -731,6 +888,7 @@ table.rows tbody tr {
   color: var(--text);
   background: var(--surface-2);
   border-color: var(--line);
+  transform: rotate(-14deg);
 }
 
 .theme-toggle svg {
@@ -747,9 +905,28 @@ table.rows tbody tr {
 }
 
 .signin-card {
+  position: relative;
   width: 100%;
   max-width: 430px;
   padding: 28px;
+  overflow: hidden;
+}
+
+/* A faint accent glow anchored behind the heading — the one place in the console where an
+   ambient wash is allowed, because this page carries no data whose severity it could dilute. */
+.signin-card::before {
+  content: "";
+  position: absolute;
+  top: -60px;
+  left: -40px;
+  width: 220px;
+  height: 220px;
+  background: radial-gradient(circle, color-mix(in srgb, var(--accent) 16%, transparent), transparent 70%);
+  pointer-events: none;
+}
+
+.signin-card > * {
+  position: relative;
 }
 
 .signin-card h2 {
@@ -771,10 +948,15 @@ table.rows tbody tr {
   color: var(--on-accent);
   font-weight: 620;
   text-decoration: none;
+  box-shadow: var(--shadow-sm), 0 6px 16px -8px color-mix(in srgb, var(--accent) 65%, transparent);
+  transition:
+    background 0.12s var(--ease),
+    transform 0.12s var(--ease);
 }
 
 .signin-btn:hover {
   background: var(--accent-hover);
+  transform: translateY(-1px);
 }
 
 /* Snapshot notice — the console says what it is serving rather than implying live data. */
@@ -787,6 +969,7 @@ table.rows tbody tr {
   border-radius: var(--r-sm);
   background: var(--warn-bg);
   border: 1px solid var(--warn-line);
+  border-left: 3px solid var(--warn);
   color: var(--muted);
   font-size: 12.5px;
 }
@@ -807,6 +990,7 @@ table.rows tbody tr {
   border-radius: var(--r-sm);
   background: var(--accent-bg);
   white-space: nowrap;
+  transition: background 0.12s var(--ease);
 }
 
 .signin-link:hover {
