@@ -62,6 +62,15 @@ exact names, no collision suffixes.
 **Compute:** 1 pipeline (`fleetguard-bronze-silver`, IDLE) · **19 jobs, all manual** (+`fleetguard-deploy-agent`, `-emerging-signals`, `-load-signals`) ·
 1 serverless SQL warehouse · 1 AI Search endpoint.
 
+**AI/BI Dashboard & metric view (added 2026-09-03):** `FleetGuard — Fleet & Recall Overview`
+(`dashboard_id 01f1a7257e801a2ebb71bdc18fc2113a`, published), 4 pages — Overview, Emerging
+Signals, Evidence, Trust — 9 datasets, all against `bootcamp_students.fleetguard` on the
+existing `Serverless Starter Warehouse` (`b15d3d6f837ba428`). No new compute, no scheduled
+auto-refresh (queries run only on view). `bootcamp_students.fleetguard.evidence_metrics` — a
+UC Metric View governing `Detection Rate %` / `Lift` / `Median Lead Days` once, sourced from
+`gold_lead_time_summary`; the dashboard's Evidence page now reads it via `MEASURE(...)`
+instead of carrying its own copy of the rate/lift SQL. See I-064/I-065.
+
 **APIs integrated:** vPIC (`DecodeVINValuesBatch`, authoritative for make/model/year) ·
 recalls (`recallsByVehicle`, 200/200 combos, 100 s sweep) · `static.nhtsa.gov` flat files
 (`If-Modified-Since`, verified 304).
@@ -300,6 +309,55 @@ local snapshot-mode screenshot stands in for them, since it is the same built bu
 Commits: `719d9b1` / `75f7688` / `50b7577` (the review), `043e747` (three frontend bugfixes),
 `604d01e` (docs), `8f79d26` (the redesign). Pushed to `main`; Render auto-redeployed and was
 confirmed serving the new build.
+
+**Later the same day: verification hooks, an AI/BI dashboard, and a metric view — none of it
+new capability, all of it making existing claims harder to get wrong.**
+
+**1. Verification hooks** (`.claude/settings.json`, commit `7be634d`). A **Stop hook** now runs
+the full off-platform suite (`.venv/bin/pytest`, `npm test` if `node_modules` exists) on every
+turn-end attempt and blocks via the documented `continueConversation: true` +
+`systemMessage` JSON on failure, carrying the real failure output. A **PostToolUse hook**
+extends the existing ruff format/fix step with a real `ruff check` (remaining errors surface
+via exit 2 + stderr) and adds `tsc --noEmit` on edited `.ts`/`.tsx` files. Both verified by
+extracting the actual command and running it directly against deliberately broken input before
+trusting the config — caught a real bug doing this: `ruff check` prints "All checks passed!"
+even on success, so gating on non-empty output (the first draft) would have false-blocked on
+every clean edit; fixed to gate on the actual exit code.
+
+**2. AI/BI Dashboard** (`dashboards/fleetguard_overview.json`, commit `a056c77`). Four pages —
+Overview, Emerging Signals, Evidence, Trust — built from schemas and aggregate queries checked
+live against `bootcamp_students.fleetguard` before being embedded, not written from memory.
+Reuses the existing `Serverless Starter Warehouse`; no new compute, no auto-refresh configured
+(the main driver of unexpected AI/BI cost). Two real bugs caught pre-deploy: an `ORDER BY`
+that self-shadowed an aggregate alias against its own source column name, and a reconciliation
+false-positive — naively comparing full `bronze_complaints` (all product types) against
+silver+quarantine reports a mismatch, because out-of-scope product types are filtered *before*
+that split, not part of it; fixed to the documented V+T scope, now reconciles exactly for all
+three entities. The **Trust** page is new: it proves `bronze = silver + quarantine` per entity
+from the live quarantine tables rather than asserting it, shows quarantine reasons by entity,
+and shows fleet-match confidence (EXACT vs MODEL_VARIANT) with the caveat that the
+deterministic guarantee only holds for EXACT.
+
+**3. `evidence_metrics` metric view** (`dashboards/metric_views/evidence_metrics.sql`, commits
+`1bdfae6` / `0788d45`) — prompted by noticing the dashboard's Evidence page was the *third*
+independent recomputation of the same lift/rate arithmetic (`gold_lead_time_summary` →
+`export_evidence.py` → the dashboard's own SQL). A UC Metric View now defines `Detection Rate
+%`, `Lift`, and `Median Lead Days` once, both per-arm and as unconditional single-value
+measures for KPI tiles; the dashboard's Evidence page was rewired to read all six of its
+widgets via `MEASURE(...)` instead of carrying its own copy. Two real findings while building
+it, both logged in full in `ISSUES.md`: **I-064**, almost sourcing it from `gold_lead_time_v3`
+— the newest-*sounding* table, but whose `detected_v3` reproduces 11.2%, the already-published
+*abandoned* semantic-clustering result, not the shipped 16.0%/11.1%; caught by checking three
+candidate columns against `STATUS.md`'s own published figures before writing any YAML. And
+**I-065**, the experimental `aitools tools statement submit --file` CLI silently mangling the
+YAML (almost certainly on literal `%` characters in measure names / `LIKE` patterns) with a
+misleading parse error, even though the identical content validated clean locally via PyYAML —
+switched to the stable Statement Execution REST API, which deployed clean.
+
+Also discussed and deliberately deferred: a Genie Agent (would duplicate the existing chat
+agent's job for the operator persona; better fit is linking one to this dashboard later if an
+open-ended-analyst need actually shows up) and Genie's cost model (a real, if usually small for
+light use, per-user LLM billing component since 2026-07-08, on top of warehouse compute).
 
 ---
 

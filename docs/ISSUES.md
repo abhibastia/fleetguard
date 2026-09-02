@@ -27,6 +27,73 @@ no error and passed the obvious check.
 
 ## Tooling / process
 
+### I-065 — `aitools tools statement submit --file` silently mangled YAML containing literal `%` characters
+*Date:* 2026-09-03 · *Status:* resolved (switched tool), root cause not confirmed
+
+**Symptom.** Deploying `evidence_metrics` (a UC Metric View, `CREATE OR REPLACE VIEW ... WITH
+METRICS LANGUAGE YAML`) via `databricks experimental aitools tools statement submit --file
+evidence_metrics.sql` failed twice with `[METRIC_VIEW_INVALID_VIEW_DEFINITION] ... Failed to
+parse YAML: ... expected <block end>, but found '-'`, at a reported line/column that did not
+correspond to anything wrong in the file — the same content parsed clean locally via PyYAML
+(`yaml.safe_load`) both times. Shortening the offending comment string changed the *reported*
+column but not the failure, ruling out a simple line-length theory.
+
+**Diagnosis.** The YAML's measure names and `expr` values contain literal `%` characters —
+`Detection Rate %`, `LIKE 'REAL%'`, `LIKE 'PLACEBO%'` — the one thing unusual about this file
+compared to prior successful DDL submitted the same way. Not root-caused to a specific line in
+the CLI's source (out of scope to dig into), but the pattern — content that parses correctly
+everywhere except through this one code path, specifically containing `%` — is consistent with
+printf-style `%`-interpolation somewhere in the experimental command's file-read/submit path
+silently corrupting the payload before it reaches the warehouse.
+
+**Resolution.** Switched to the skill's own documented fallback — the stable Statement
+Execution REST API (`databricks api post /api/2.0/sql/statements --json @payload.json`,
+payload built with Python's `json.dumps` for correct escaping) — which deployed the identical
+file content successfully on the first attempt.
+
+**Lesson.** `databricks experimental aitools tools` commands are explicitly unstable (the
+skill says so), and this is a concrete case of that instability, not just a version-skew risk.
+Any DDL containing literal `%` — metric view measure names, `LIKE` patterns, format strings —
+should go through the stable REST API path by default rather than the experimental file-submit
+command, at least until this is root-caused or fixed upstream.
+
+---
+
+### I-064 — Metric view almost built on `gold_lead_time_v3`, the newer-sounding but wrong table
+*Date:* 2026-09-03 · *Status:* resolved (caught before deploying)
+
+**Symptom.** None visible — this is a near-miss, not a production bug. While building
+`evidence_metrics` (the governed metric view for the Evidence page's backtest numbers), the
+natural first candidate source was `gold_lead_time_v3`: it's the most recent-sounding of three
+lead-time tables (`gold_lead_time_backtest`, `_control`, `_v3`), it's already unioned across
+both arms at investigation grain (1,383 rows = 777 real + 606 placebo, matching the published
+population exactly), and it has an explicit `detected_v3`/`lead_days_v3` pair that reads as
+"the current detector."
+
+**What it actually was.** Querying `gold_lead_time_v3.detected_v3` reproduces **11.2%** for the
+real arm — the exact figure `docs/STATUS.md` already documents as the **abandoned, negative**
+semantic-clustering result ("Adding semantic clustering was tested and made detection worse
+(11.2%, with zero extra lead time)"). `detected_v2` gives 13.3% — an earlier, also-superseded
+intermediate value. Neither matches the shipped 16.0%/11.1%. The actual published numbers only
+live in `gold_lead_time_backtest.detected` (real arm, verified 124/777 = 16.0%, median lead
+197d, exact) and `gold_lead_time_summary` (both arms, pre-aggregated). The "v3" suffix tracks a
+column-naming history of experiments run on the same table, not "the latest, most-correct arm."
+
+**Resolution.** Ran the aggregation against all three candidate columns
+(`gold_lead_time_backtest.detected`, `gold_lead_time_v3.detected_v2`, `.detected_v3`) before
+writing any YAML, matched the results against `docs/STATUS.md`'s already-published figures, and
+built `evidence_metrics` on `gold_lead_time_summary` instead — the same table
+`scripts/export_evidence.py` already reads for the live `/api/evidence` snapshot.
+
+**Lesson.** A table name suffix implying recency (`_v2`, `_v3`) is not evidence of which
+experiment shipped — only a documented, already-published number is. Same failure class as
+I-051 (the living spec describing harm weighting that doesn't exist): a plausible-sounding
+technical artifact that is not what was actually decided. The check that caught it is the one
+`CLAUDE.md` already prescribes for this project — verify against a live system or current docs
+before writing a claim down, not against training data, intuition, or a table's name.
+
+---
+
 ### I-062 — Session cookies had no server-side expiry — the `max_age` was a client-side courtesy only
 *Date:* 2026-09-02 · *Status:* resolved
 
