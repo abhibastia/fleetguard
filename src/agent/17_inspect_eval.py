@@ -105,7 +105,15 @@ print(f"\n{fails} failing assessments")
 
 import json
 
-report = {"run_id": RUN_ID, "metrics": run.data.metrics, "failures": []}
+# The case count is part of the report, not an inference. A green evaluation over an empty
+# or truncated dataset is the failure this project keeps re-learning, and "how many cases
+# actually ran?" should never require solving N = failures / (1 - mean) after the fact.
+report = {
+    "run_id": RUN_ID,
+    "cases_evaluated": len(traces),
+    "metrics": run.data.metrics,
+    "failures": [],
+}
 
 for t in traces:
     for a in t.info.assessments or []:
