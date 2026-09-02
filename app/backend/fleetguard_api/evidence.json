@@ -16,5 +16,17 @@
   "p_value": 0.0087,
   "source_table": "bootcamp_students.fleetguard.gold_lead_time_summary",
   "statement": "SELECT arm, n, detected, detect_rate_pct, median_lead_days FROM bootcamp_students.fleetguard.gold_lead_time_summary",
-  "generated_at": "2026-09-02T11:57:40+00:00"
+  "model_b": {
+    "model_version": 2,
+    "run_id": "e52d752d1121411b914afa1292f30f31",
+    "golden_set_size": 765,
+    "golden_set_positive": 621,
+    "features": "['ratio', 'partial_ratio', 'token_sort_ratio', 'token_set_ratio', 'len_diff', 'word_count_diff', 'token_jaccard', 'first_word_matches']",
+    "threshold": 0.406,
+    "precision": 0.837,
+    "recall": 0.963,
+    "roc_auc": 0.925,
+    "test_set_size": 230
+  },
+  "generated_at": "2026-09-02T18:16:23+00:00"
 }

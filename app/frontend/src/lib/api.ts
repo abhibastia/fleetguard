@@ -120,9 +120,21 @@ export interface EvidenceArm {
   median_lead_days: number;
 }
 
+export interface ModelB {
+  model_version: number;
+  golden_set_size: number;
+  golden_set_positive: number;
+  threshold: number;
+  precision: number;
+  recall: number;
+  roc_auc: number;
+  test_set_size: number;
+}
+
 export interface Evidence {
   real: EvidenceArm;
   placebo: EvidenceArm;
+  model_b: ModelB;
   lift: number;
   z: number;
   p_value: number;

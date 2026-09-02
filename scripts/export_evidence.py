@@ -26,9 +26,49 @@ from databricks.sdk.service.sql import StatementState
 
 SOURCE_TABLE = "bootcamp_students.fleetguard.gold_lead_time_summary"
 WAREHOUSE_ID = "b15d3d6f837ba428"
+MODEL_B_NAME = "bootcamp_students.fleetguard.fleetguard_model_b"
 OUT = Path(__file__).resolve().parents[1] / "app/backend/fleetguard_api/evidence.json"
 
 STATEMENT = f"SELECT arm, n, detected, detect_rate_pct, median_lead_days FROM {SOURCE_TABLE}"
+
+
+def fetch_model_b(w: WorkspaceClient) -> dict:
+    """Model B's measured precision/recall — the proposal's own requirement (§6):
+    "Precision and recall published on the application's own page." Pulled from the
+    registered model's MLflow run, never hand-typed.
+
+    Reads the LATEST version deliberately — Model B v1 had training-feature leakage from its
+    own golden-set label rule (I-060: one boolean feature was 0/1 by construction of the
+    label, not learned) and scored an implausible precision=1.000. v2 is the corrected run.
+    If a future version regresses to a suspiciously perfect number, that is worth stopping on
+    before publishing it, not a reason to prefer the newest version blindly.
+    """
+    versions = sorted(w.model_versions.list(full_name=MODEL_B_NAME), key=lambda v: int(v.version))
+    if not versions:
+        raise SystemExit(f"no registered versions for {MODEL_B_NAME}")
+    latest = versions[-1]
+    run = w.experiments.get_run(run_id=latest.run_id).run
+
+    metrics = {m.key: m.value for m in (run.data.metrics or [])}
+    params = {p.key: p.value for p in (run.data.params or [])}
+
+    required = ("precision_at_threshold", "recall_at_threshold", "roc_auc", "threshold")
+    missing = [k for k in required if k not in metrics]
+    if missing:
+        raise SystemExit(f"model B run {latest.run_id} missing metrics: {missing}")
+
+    return {
+        "model_version": latest.version,
+        "run_id": latest.run_id,
+        "golden_set_size": int(params.get("golden_set_size", 0)),
+        "golden_set_positive": int(params.get("golden_set_positive", 0)),
+        "features": params.get("features", ""),
+        "threshold": round(metrics["threshold"], 3),
+        "precision": round(metrics["precision_at_threshold"], 3),
+        "recall": round(metrics["recall_at_threshold"], 3),
+        "roc_auc": round(metrics["roc_auc"], 3),
+        "test_set_size": int(metrics.get("test_set_size", 0)),
+    }
 
 
 def two_proportion_z(d1: int, n1: int, d2: int, n2: int) -> tuple[float, float]:
@@ -77,6 +117,8 @@ def main() -> None:
 
     z, p = two_proportion_z(real["detected"], real["n"], placebo["detected"], placebo["n"])
 
+    model_b = fetch_model_b(w)
+
     snapshot = {
         "real": real,
         "placebo": placebo,
@@ -85,6 +127,7 @@ def main() -> None:
         "p_value": round(p, 4),
         "source_table": SOURCE_TABLE,
         "statement": STATEMENT,
+        "model_b": model_b,
         "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
     }
 

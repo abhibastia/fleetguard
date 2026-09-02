@@ -148,6 +148,60 @@ export function Evidence() {
         Source: <code>{data.source_table}</code> · lift and z recomputed from the arm counts ·
         snapshot generated {data.generated_at}
       </p>
+
+      <hr style={{ border: "none", borderTop: "1px solid var(--line)", margin: "32px 0" }} />
+
+      <div className="page-head">
+        <h2>Model B — how confident is a fuzzy match?</h2>
+        <p>
+          Exact make/model/year matching resolves only 91 of 163 fleet combinations. The rest —
+          nearly 3 in 4 exposure rows — are <strong>variant</strong> matches, where NHTSA's model
+          string differs from vPIC's (<code>F-250</code> vs <code>F-250 SD</code>). Model B scores
+          how likely a variant really is the same vehicle; it ranks ambiguity, it does not decide
+          it.
+        </p>
+      </div>
+
+      <div className="stats">
+        <div className="stat">
+          <div className="v">{(data.model_b.precision * 100).toFixed(1)}%</div>
+          <div className="k">Precision</div>
+        </div>
+        <div className="stat">
+          <div className="v">{(data.model_b.recall * 100).toFixed(1)}%</div>
+          <div className="k">Recall</div>
+        </div>
+        <div className="stat">
+          <div className="v">{data.model_b.roc_auc.toFixed(2)}</div>
+          <div className="k">ROC-AUC</div>
+        </div>
+        <div className="stat">
+          <div className="v">{data.model_b.golden_set_size}</div>
+          <div className="k">Golden-set pairs</div>
+        </div>
+      </div>
+
+      <h3>Stated limits</h3>
+      <ul className="muted" style={{ maxWidth: 720 }}>
+        <li>
+          Threshold {data.model_b.threshold.toFixed(2)} is tuned for{" "}
+          <strong>recall over precision</strong>: a fleet manager missing a genuine match leaves a
+          vehicle exposed to a real defect; a false positive costs one wasted inspection. The two
+          errors are not symmetric.
+        </li>
+        <li>
+          The golden set (<strong>{data.model_b.golden_set_size} pairs</strong>,{" "}
+          {data.model_b.golden_set_positive} positive) is derived from NHTSA's own recall
+          description text — real regulatory language, not human-adjudicated and not synthetic —
+          and evaluated on a {data.model_b.test_set_size}-row held-out split.
+        </li>
+        <li>
+          A first training pass scored a suspicious precision of 100% — traced to a feature that
+          was tautologically tied to how the training labels themselves were built, not to
+          anything learned. It was found, removed, and retrained; the numbers above are from the
+          corrected run (model version {data.model_b.model_version}).
+        </li>
+      </ul>
     </>
   );
 }

@@ -30,6 +30,17 @@ class Arm(BaseModel):
     median_lead_days: float
 
 
+class ModelB(BaseModel):
+    model_version: int
+    golden_set_size: int
+    golden_set_positive: int
+    threshold: float
+    precision: float
+    recall: float
+    roc_auc: float
+    test_set_size: int
+
+
 class EvidenceOut(BaseModel):
     real: Arm
     placebo: Arm
@@ -38,6 +49,7 @@ class EvidenceOut(BaseModel):
     p_value: float
     source_table: str
     statement: str
+    model_b: ModelB
     generated_at: str
 
 

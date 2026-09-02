@@ -39,6 +39,13 @@ def test_evidence_is_public(client: TestClient) -> None:
     # Provenance is part of the contract, not decoration.
     assert body["source_table"].endswith("gold_lead_time_summary")
     assert body["generated_at"]
+    # Model B ships on the same page (proposal §6: "published on the application's own
+    # page"). Precision must be < 1.0 here specifically — a perfect score on this route is
+    # the I-060 leakage signature, not a result to be proud of.
+    mb = body["model_b"]
+    assert 0 < mb["precision"] < 1.0
+    assert 0 < mb["recall"] <= 1.0
+    assert mb["golden_set_size"] >= 150
 
 
 def test_queue_stays_gated(client: TestClient) -> None:
