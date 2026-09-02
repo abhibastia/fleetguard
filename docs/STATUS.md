@@ -23,7 +23,7 @@ One page answering "where are we". Design lives in `FleetGuard_Proposal.md`, seq
 | **4 — Model B + golden set** | ⬜ Not started | Scope now measured: variant matches outnumber exact 3:1 (I-030). |
 | **5 — Lakebase + CDF** | ✅ **DONE** | 11 tables, all `REPLICA IDENTITY FULL`; **all 11 CDF history tables exist with exact names, no `_1` suffixes** (I-044 — CDF replicates DDL, correcting an earlier wrong claim). Reference data loaded: depot 60, vehicle 20,000, campaigns 592. **Capture latency measured: 7.1–15.6 s** (I-046). **Exposure loaded** — `EXACT` scope, 263,686 rows deduplicated to **118,323** distinct (vin, campaign) pairs. |
 | **6 — OAuth wiring** | ✅ **Done (scope reduced)** | Auth seam (E-13) tested on both surfaces, 401 on failure, never an SP fallback. **U2M retired (E-14)** — needs an account-admin OAuth registration we do not have, and OBO on Databricks Apps is stronger with less setup. Render serves the public evidence page with no auth. |
-| **7 — Agent tools + write path** | 🟡 **Both built** | Write path end to end: `POST /campaigns/{id}/service-campaign` → 1 service campaign + N work orders + audit row in **one transaction** → CDF → UC. Agent: `ResponsesAgent`, 3 tools, MLflow tracing, smoke tests pass against live index + warehouse. **The agent proposes, never launches** — asserted in the build, so a change that lets it self-launch fails. **Outstanding:** log/register/`agents.deploy()`. |
+| **7 — Agent tools + write path** | 🟡 **Both built** | Write path end to end: `POST /campaigns/{id}/service-campaign` → 1 service campaign + N work orders + audit row in **one transaction** → CDF → UC. Agent: `ResponsesAgent`, 3 tools, MLflow tracing, smoke tests pass against live index + warehouse. **The agent proposes, never launches** — asserted in the build, so a change that lets it self-launch fails. **Logged, validated, registered and DEPLOYED** 2026-09-02: endpoint `agents_bootcamp_students-fleetguard-fleetguard_agent`, inference tables on (`fleetguard_agent_payload`). Console chat panel wired (`POST /api/chat`, caller's token, non-streaming). **The first deployed version answered a 25-vehicle recall with "no vehicles affected" (I-050)** — undeclared table resource plus an unchecked statement status. Fixed and being redeployed. |
 | **8 — App + external surface** | 🟡 **Console working locally** | FastAPI serves `/api/*` **and** the built React console from one service — no CORS, SPA deep-link fallback. Three views: queue, campaign approval, evidence. Verified end to end against live Lakebase. **Outstanding:** U2M code exchange and the Render deploy. |
 | **9 — Model A + backtest** | ✅ **DONE — result is negative** | **The semantic hypothesis is falsified (I-049).** Subdivision *lowered* detection 13.3% → 11.2%, left lift flat (1.24× → 1.26×), and gave **0.0 days** extra lead on shared detections. Published result stays the volume-anomaly measurement: **16.0% vs 11.1%, 1.44×, p≈0.009**. Done-when explicitly required publishing a possibly-negative number as-is; met. |
 | **10 — Governance** | ⬜ Not started | Recommend a visible slice, not the full matrix. |
@@ -60,8 +60,15 @@ exact names, no collision suffixes.
 recalls (`recallsByVehicle`, 200/200 combos, 100 s sweep) · `static.nhtsa.gov` flat files
 (`If-Modified-Since`, verified 304).
 
-⚠️ **Now billing:** AI Search endpoint `fleetguard-vs` (STANDARD, 1 unit) — **~$6.72/day**,
-started 2026-08-31. Nothing else recurs: no Lakebase tables, no schedules.
+⚠️ **Now billing — two things:**
+1. AI Search endpoint `fleetguard-vs` (STANDARD, 1 unit) — **~$6.72/day**, started 2026-08-31.
+2. Model Serving endpoint `agents_bootcamp_students-fleetguard-fleetguard_agent` (Small CPU),
+   started 2026-09-02. **`scale_to_zero_enabled` is `False`** — `agents.deploy()` did not
+   enable it — so this bills continuously, not per query. Rate not yet measured; check
+   `system.billing.usage` once records appear rather than quoting an estimate. Enabling
+   scale-to-zero trades idle cost for a cold start on the first demo question.
+
+Nothing else recurs: no Lakebase tables, no schedules.
 Stop it with `databricks vector-search-indexes delete-index bootcamp_students.fleetguard.complaint_chunk_idx`
 then `databricks vector-search-endpoints delete-endpoint fleetguard-vs` — billing ends 24h
 after the last index is deleted.

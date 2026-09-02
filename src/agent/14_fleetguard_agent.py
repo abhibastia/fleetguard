@@ -62,11 +62,12 @@ print(f"model : {MODEL_NAME}\nllm   : {LLM_ENDPOINT}\nindex : {INDEX}")
 # MAGIC """FleetGuard agent — ResponsesAgent over Databricks-hosted tools."""
 # MAGIC
 # MAGIC import json
+# MAGIC import time
 # MAGIC from typing import Any, Generator
 # MAGIC
 # MAGIC import mlflow
 # MAGIC from databricks.sdk import WorkspaceClient
-# MAGIC from databricks.sdk.service.sql import StatementParameterListItem
+# MAGIC from databricks.sdk.service.sql import StatementParameterListItem, StatementState
 # MAGIC from mlflow.entities import SpanType
 # MAGIC from mlflow.models import ModelConfig, set_model
 # MAGIC from mlflow.pyfunc import ResponsesAgent
@@ -105,6 +106,39 @@ print(f"model : {MODEL_NAME}\nllm   : {LLM_ENDPOINT}\nindex : {INDEX}")
 # MAGIC """
 # MAGIC
 # MAGIC
+# MAGIC def _run_sql(statement: str, params: list) -> list:
+# MAGIC     """Run a warehouse query and REFUSE to return rows unless it actually succeeded.
+# MAGIC
+# MAGIC     The previous version passed `wait_timeout="30s"` and then read
+# MAGIC     `stmt.result.data_array or []`. When the warehouse was cold the statement was still
+# MAGIC     PENDING at 30 s, `result` was None, and the tool returned zero rows — which the model
+# MAGIC     faithfully reported as "no fleet vehicles are affected" for a campaign with 25
+# MAGIC     exposed vehicles across 22 depots (I-050). A recall assistant that turns an
+# MAGIC     infrastructure timeout into an all-clear is worse than one that is simply down.
+# MAGIC
+# MAGIC     So: poll to a terminal state, and raise on anything that is not SUCCEEDED. The tool
+# MAGIC     loop turns the exception into an error the model can see and report honestly.
+# MAGIC     """
+# MAGIC     stmt = w.statement_execution.execute_statement(
+# MAGIC         warehouse_id=_cfg.get("warehouse_id"),
+# MAGIC         statement=statement,
+# MAGIC         parameters=params,
+# MAGIC         wait_timeout="50s",  # API maximum for the synchronous wait
+# MAGIC     )
+# MAGIC     deadline = time.monotonic() + 120
+# MAGIC     while stmt.status and stmt.status.state in (StatementState.PENDING, StatementState.RUNNING):
+# MAGIC         if time.monotonic() > deadline:
+# MAGIC             raise TimeoutError(f"warehouse query still {stmt.status.state} after 170s")
+# MAGIC         time.sleep(2)
+# MAGIC         stmt = w.statement_execution.get_statement(stmt.statement_id)
+# MAGIC
+# MAGIC     state = stmt.status.state if stmt.status else None
+# MAGIC     if state != StatementState.SUCCEEDED:
+# MAGIC         err = stmt.status.error.message if (stmt.status and stmt.status.error) else ""
+# MAGIC         raise RuntimeError(f"warehouse query {state}: {err}")
+# MAGIC     return (stmt.result.data_array or []) if stmt.result else []
+# MAGIC
+# MAGIC
 # MAGIC @mlflow.trace(span_type=SpanType.RETRIEVER)
 # MAGIC def search_complaints(query: str, limit: int = 5) -> list[dict]:
 # MAGIC     """Hybrid search over 1.75M complaint-narrative chunks."""
@@ -135,9 +169,8 @@ print(f"model : {MODEL_NAME}\nllm   : {LLM_ENDPOINT}\nindex : {INDEX}")
 # MAGIC     The tier is returned as a first-class field, not a footnote, because §7's
 # MAGIC     deterministic guarantee applies to EXACT only.
 # MAGIC     """
-# MAGIC     stmt = w.statement_execution.execute_statement(
-# MAGIC         warehouse_id=_cfg.get("warehouse_id"),
-# MAGIC         statement=f"""
+# MAGIC     rows = _run_sql(
+# MAGIC         f"""
 # MAGIC             SELECT match_basis, COUNT(DISTINCT vin) AS vehicles,
 # MAGIC                    COUNT(DISTINCT depot_id) AS depots
 # MAGIC             FROM {CATALOG}.{SCHEMA}.gold_fleet_exposure
@@ -146,14 +179,15 @@ print(f"model : {MODEL_NAME}\nllm   : {LLM_ENDPOINT}\nindex : {INDEX}")
 # MAGIC         # Typed parameter objects, not dicts: the SDK calls .as_dict() on these and a
 # MAGIC         # plain dict raises AttributeError. Parameterised, never interpolated —
 # MAGIC         # campaign_id reaches this tool from model output.
-# MAGIC         parameters=[StatementParameterListItem(name="cid", value=campaign_id)],
-# MAGIC         wait_timeout="30s",
+# MAGIC         [StatementParameterListItem(name="cid", value=campaign_id)],
 # MAGIC     )
-# MAGIC     rows = (stmt.result.data_array or []) if stmt.result else []
 # MAGIC     tiers = {r[0]: {"vehicles": int(r[1]), "depots": int(r[2])} for r in rows}
 # MAGIC     return {
 # MAGIC         "campaign_id": campaign_id,
 # MAGIC         "by_match_tier": tiers,
+# MAGIC         # Only meaningful because _run_sql raises rather than returning [] on failure:
+# MAGIC         # an empty result here is a measured absence, not an unnoticed error.
+# MAGIC         "no_vehicles_matched": not tiers,
 # MAGIC         "exact_is_deterministic": True,
 # MAGIC         "note": "MODEL_VARIANT matches are probabilistic and require confirmation.",
 # MAGIC     }
@@ -332,9 +366,18 @@ for h in hits:
 exp = fga.lookup_fleet_exposure("17V629000")
 print(f"\nlookup_fleet_exposure -> {exp['by_match_tier']}")
 
+# Ground truth, verified directly against gold_fleet_exposure on 2026-09-02: campaign
+# 17V629000 is EXACT-matched to 25 vehicles across 22 depots. Asserting the number — not
+# merely that the call returned — is what would have caught I-050 before it reached a
+# served endpoint, where a silent empty result read as "no vehicles are affected".
+_exact = exp["by_match_tier"].get("EXACT", {})
+assert _exact.get("vehicles") == 25, f"expected 25 EXACT vehicles, got {exp['by_match_tier']}"
+assert _exact.get("depots") == 22, f"expected 22 depots, got {exp['by_match_tier']}"
+
 prop = fga.propose_service_campaign("17V629000", "Park It steering defect")
 print(f"\npropose_service_campaign -> {prop['status']}  exact={prop['exact_vehicles']}")
 assert prop["status"] == "PROPOSED_AWAITING_HUMAN_APPROVAL", "agent must not self-launch"
+assert prop["exact_vehicles"] == 25, "proposal lost the exposure count"
 print("\nsmoke tests passed")
 
 # COMMAND ----------
@@ -361,16 +404,18 @@ from mlflow.models import resources as _res
 print("Databricks resource classes available in mlflow", mlflow.__version__, ":")
 print("  " + ", ".join(sorted(n for n in dir(_res) if n.startswith("Databricks"))))
 
+# Every resource the agent touches must be declared. Automatic authentication passthrough
+# grants the endpoint's credential exactly what is listed here and nothing else — and a
+# missing grant does NOT surface as a crash. It surfaces as a FAILED statement whose result
+# is None, which the first version of the exposure tool read as "zero vehicles affected"
+# (I-050). Declaring the warehouse is not enough: the warehouse is the *engine*, the table
+# is the *data*, and they are separate grants.
 resources = [
     _res.DatabricksServingEndpoint(endpoint_name=LLM_ENDPOINT),
     _res.DatabricksVectorSearchIndex(index_name=INDEX),
+    _res.DatabricksSQLWarehouse(warehouse_id=WAREHOUSE_ID),
+    _res.DatabricksTable(table_name=f"{CATALOG}.{SCHEMA}.gold_fleet_exposure"),
 ]
-
-# Added only if this MLflow version actually has the class — see note above.
-if hasattr(_res, "DatabricksSQLWarehouse"):
-    resources.append(_res.DatabricksSQLWarehouse(warehouse_id=WAREHOUSE_ID))
-else:
-    print("!! DatabricksSQLWarehouse not present — grant the warehouse to the endpoint by hand")
 
 for r in resources:
     print("resource:", r)

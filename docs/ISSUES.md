@@ -26,6 +26,68 @@ no error and passed the obvious check.
 
 ## Tooling / process
 
+### I-050 — The deployed agent reported "no vehicles affected" for a 25-vehicle recall — **SILENT**
+*Date:* 2026-09-02 · *Status:* fix applied, awaiting redeploy verification
+
+**Symptom.** The freshly deployed agent endpoint was asked *"Which fleet vehicles does recall
+17V629000 affect?"* and answered, confidently and in well-formed prose, that **no fleet
+vehicles matched in either tier**. The ground truth, verified directly against
+`gold_fleet_exposure` the same minute, is **25 vehicles across 22 depots, all EXACT**.
+
+This is the worst output this system can produce. A recall assistant that says "you are not
+affected" when you are is more dangerous than one that is simply offline, because the
+operator acts on it and stops looking.
+
+**How it was caught.** Not by the build. The notebook smoke test asserted only that
+`propose_service_campaign` returned `PROPOSED_AWAITING_HUMAN_APPROVAL`, never that the count
+was non-zero, so the whole log → validate → register → deploy chain passed green. It was
+caught by querying the live endpoint by hand afterwards and disbelieving the answer.
+
+**First hypothesis, falsified.** Cold-warehouse timeout: `wait_timeout="30s"` expires, the
+statement is still `PENDING`, `stmt.result` is `None`, the tool returns `[]`. Testable — so
+it was tested. The warehouse was warmed by a direct query and the endpoint was asked again:
+**same empty answer**. Not a timeout.
+
+**Root cause.** Two independent faults, and it took both:
+
+1. **Undeclared resource.** `mlflow.pyfunc.log_model(resources=[...])` declared the LLM
+   endpoint, the vector index and the SQL **warehouse** — but not the **table**. Automatic
+   authentication passthrough grants the endpoint's credential exactly what is declared. The
+   warehouse is the engine; `gold_fleet_exposure` is the data; they are *separate grants*.
+   The agent could start a query it was not allowed to read.
+2. **A status nobody checked.** `w.statement_execution.execute_statement()` **does not raise
+   on failure.** It returns a response whose `status.state` is `FAILED` and whose `result` is
+   `None`. The tool read `(stmt.result.data_array or []) if stmt.result else []` — turning a
+   permission denial into an empty list, and an empty list into "no vehicles are affected".
+
+Asked to reproduce the raw tool payload verbatim, the agent returned
+`{"campaign_id": "17V629000", "by_match_tier": {}, ...}` with **no error field** — confirming
+the failure never reached the model at all. The model was not hallucinating; it was
+faithfully reporting a lie it had been handed.
+
+**Resolution.**
+- `_run_sql()` polls to a terminal state and **raises** on anything other than `SUCCEEDED`,
+  carrying the warehouse's own error message. The tool loop turns that into an error the
+  model can see and report honestly.
+- `DatabricksTable(table_name=...)` added to `resources`.
+- The smoke test now asserts the **ground-truth numbers** — 25 vehicles, 22 depots — not
+  merely that the call returned. An assertion that only checks for absence of exception
+  cannot catch a wrong answer.
+- `by_match_tier == {}` now carries an explicit `no_vehicles_matched` flag, which is only
+  meaningful *because* failure raises: an empty result is now a measured absence rather than
+  an unnoticed error.
+
+**Lesson.** This is the same shape as I-043 (a watcher exiting `0` while reporting
+`ready=False`) and I-021 (`_rescued_data` of 0 not proving a clean parse): **an SDK call that
+returns instead of raising will convert an infrastructure failure into a plausible business
+answer.** Any tool an LLM can call must distinguish "I looked and found nothing" from "I
+could not look" — the model has no way to tell them apart, and prose will paper over the
+difference perfectly.
+
+Corollary for the demo: every agent assertion must pin a number. "It ran" is not a test.
+
+---
+
 ### I-049 — **NEGATIVE RESULT.** Semantic subdivision does not improve lead-time detection
 *Date:* 2026-09-01 · *Status:* resolved (hypothesis falsified, result published as-is)
 
