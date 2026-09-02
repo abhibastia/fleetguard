@@ -20,11 +20,47 @@ no error and passed the obvious check.
 | I-016 | Platform | Table properties (retention, `VACUUM`) on Lakebase CDF sync-managed destination tables are undocumented — may not be settable. Fallback is a downstream Delta copy under our own retention. Confirm during Phase 5. | **open** |
 | I-015 | Platform | Unity AI Gateway **output** guardrails (incl. PII detection on responses) do not apply to streaming responses. If the console streams agent output, the §4.5 PII second layer silently does not exist. Decide: no streaming, or drop the claim. | **open** |
 | I-014 | Demo | `DO_NOT_DRIVE` (Park It) covers only 211 of 15,211 campaigns and is **zero for 2010–2011** — field added May 2025, backfilled unevenly. Seed demo data from 2015+ or the Park It path demos empty. | **watch** |
+| I-063 | Approval | No idempotency check on `POST /campaigns/{id}/service-campaign`. Nothing stops the same campaign being approved twice — two concurrent or sequential approvals would create two `fleetguard_service_campaign` rows and a full duplicate set of work orders. Found in the 2026-09-02 repo review, deliberately **not** silently fixed: whether a second approval should be blocked, return the existing campaign, or something else is a product decision, not a code-review call. | **open** |
 | I-013 | Docs | Diagrams drift from prose. Happened twice. Diagrams are now HTML (`docs/fleetguard_*.html`) specifically so they diff in review rather than being opaque binaries. | **watch** |
 
 ---
 
 ## Tooling / process
+
+### I-062 — Session cookies had no server-side expiry — the `max_age` was a client-side courtesy only
+*Date:* 2026-09-02 · *Status:* resolved
+
+**Symptom.** During an end-to-end repo review — not triggered by an incident — `deps.py` →
+`auth/tokens.py`'s `SessionTokenProvider` and `AppLoginTokenProvider` (the provider Render
+actually runs) each checked only whether a session **existed** in the store, never how old
+it was. The cookie sets `max_age=SESSION_TTL_S` (8 hours), but that only controls when the
+*browser* stops sending the cookie — a session value captured or replayed by any other means
+(saved before expiry, logged, proxied) was honoured by the server **forever**.
+
+**Compounding factor.** `SESSIONS` (`deps.py`) is an in-process dict with no pruning except
+explicit logout. A session nobody explicitly logs out of — the common case, since most users
+just close the tab — stays in memory permanently, so this was also an unbounded-growth issue
+on a long-running Render process, not only an access-control gap.
+
+**Resolution.** Both providers now take `session_ttl_s` and an injectable `now_fn` (kept
+mockable rather than depending on wall-clock time in tests, matching the module's existing
+dependency-injection style) and reject a session whose `created` timestamp is missing or
+older than the TTL. **Fails closed on a missing `created` field** — a session without one did
+not come from this codebase's own login flow (`routers/auth_routes.py::callback` always
+stamps it), and treating unknown age as valid would be exactly the "fall back to a broader
+principal" this module's own rules forbid. 16 new tests in `tests/test_auth_seam.py`,
+including the TTL boundary (`> ttl`, not `>= ttl` — valid through the last second, not
+evicted one tick early) and — separately — full coverage for `AppLoginTokenProvider` and the
+`app-login` mode's `FLEETGUARD_DATA_MODE=snapshot` invariant, both of which had **zero**
+tests before this review despite being what Render actually runs.
+
+**Lesson.** A cookie's `max_age` is a UI convenience for when the browser stops offering the
+credential, not an access-control decision — the server has to independently decide a
+session's lifetime is over, and nothing here did. It hid for as long as it did because the
+provider Render actually runs, `AppLoginTokenProvider`, had zero tests before this review —
+a gap in coverage and a gap in security enforcement, in the same module, found together.
+
+---
 
 ### I-061 — No `CREATEROLE` on the shared Lakebase instance; `FORCE ROW LEVEL SECURITY` was the fix, not a workaround
 *Date:* 2026-09-02 · *Status:* resolved, and the redesign is a better result than the original plan

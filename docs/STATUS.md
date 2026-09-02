@@ -150,9 +150,35 @@ Three layers, doing different jobs. Full rationale in `src/pipelines/expectation
 
 | Layer | What | Run |
 |---|---|---|
-| **Unit** (`tests/test_vin.py`, `test_chunking.py`, `test_naming.py`) | Pure logic, no Databricks. **91 tests.** | `pytest` |
+| **Unit — backend** (`tests/*.py`, 10 files) | Pure logic, no Databricks: VIN/chunking/naming, the auth seam, scoping, db helpers, the evaluation scorer's negation logic. **161 tests.** | `pytest` |
+| **Unit — frontend** (`app/frontend/src/lib/*.test.ts`) | `api.ts`'s error handling, `theme.ts`. Zero frontend tests existed before 2026-09-02. **13 tests.** | `npm --prefix app/frontend run test` |
 | **LDP expectations** (`src/pipelines/**/*.sql`) | Row-level, in-pipeline. Post-routing invariants + explicit `_dq_failures` quarantine split. | runs with the pipeline |
 | **Data quality** (`tests/test_data_quality.py`) | Cross-table invariants against live tables. **21 tests, 73 s.** | `pytest -m integration --run-integration` |
+
+**End-to-end repo review, 2026-09-02.** Read every backend router, the auth seam, `db.py`,
+`scoping.py`, and every stateful frontend view, adversarially — not just "does it run" but
+"what happens on the second transition through this effect, the second concurrent request,
+the reachable-but-untested branch." Found and fixed **8 real bugs**, none previously known:
+
+- **I-062** — session cookies had no server-side expiry; a captured/replayed session was
+  honoured forever, and the provider Render actually runs (`AppLoginTokenProvider`) had
+  **zero** tests before this review. The two facts are connected, not coincidental.
+- `chat.py` returned a confusing 502 instead of the frontend's dedicated 503 "offline" state
+  for any signed-in Render user — live and reachable, not theoretical.
+- **App.tsx**: the anonymous-visitor auto-redirect had no one-shot guard — after firing once,
+  clicking "Recall queue" again silently bounced back to Evidence. Found by tracing a
+  *second* transition through the effect, not just confirming the first one worked.
+- **Campaign.tsx**: two bugs in one effect — stale approval-success state could show over a
+  different campaign's data on an id change, and a slow response for a stale id could
+  overwrite a newer one. **Signals.tsx** had the identical race on its filter checkbox.
+- A misplaced docstring (dead statement after a `return`, silently dropped from FastAPI's
+  generated docs) and a `zip()` without `strict=` in Model B's feature engineering.
+- **I-063** (logged, not fixed): no idempotency check on campaign approval — a product
+  decision, not a code-review call, so it's recorded rather than silently resolved.
+
+49 new tests came out of this pass: `test_auth_seam.py` 22→38 (+16), `test_scoping.py` new
+at 16, `test_db_helpers.py` new at 4, frontend 0→13. Full detail in `ISSUES.md` and the
+review's commits.
 
 Logic that has already been wrong once is extracted into `src/fleetguard/` so it is
 testable off platform, and the bugs are encoded as **regressions**:
