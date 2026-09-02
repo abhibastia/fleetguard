@@ -1,0 +1,20 @@
+{
+  "real": {
+    "n": 777,
+    "detected": 124,
+    "rate_pct": 16.0,
+    "median_lead_days": 197.0
+  },
+  "placebo": {
+    "n": 606,
+    "detected": 67,
+    "rate_pct": 11.1,
+    "median_lead_days": 343.0
+  },
+  "lift": 1.44,
+  "z": 2.62,
+  "p_value": 0.0087,
+  "source_table": "bootcamp_students.fleetguard.gold_lead_time_summary",
+  "statement": "SELECT arm, n, detected, detect_rate_pct, median_lead_days FROM bootcamp_students.fleetguard.gold_lead_time_summary",
+  "generated_at": "2026-09-02T11:57:40+00:00"
+}

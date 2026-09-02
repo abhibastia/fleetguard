@@ -88,6 +88,24 @@ export interface ChatReply {
   endpoint: string;
 }
 
+export interface EvidenceArm {
+  n: number;
+  detected: number;
+  rate_pct: number;
+  median_lead_days: number;
+}
+
+export interface Evidence {
+  real: EvidenceArm;
+  placebo: EvidenceArm;
+  lift: number;
+  z: number;
+  p_value: number;
+  source_table: string;
+  statement: string;
+  generated_at: string;
+}
+
 export interface Me {
   user_name: string | null;
   token_source: string;
@@ -104,5 +122,6 @@ export const api = {
     }),
   chat: (messages: ChatTurn[]) =>
     request<ChatReply>("/chat", { method: "POST", body: JSON.stringify({ messages }) }),
+  evidence: () => request<Evidence>("/evidence"),
   serviceCampaigns: () => request<Record<string, unknown>[]>("/service-campaigns"),
 };

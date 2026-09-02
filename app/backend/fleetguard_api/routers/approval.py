@@ -87,7 +87,7 @@ def approve_campaign(
                         FROM {PG_SCHEMA}.fleetguard_vehicle_exposure e
                         JOIN {PG_SCHEMA}.fleetguard_vehicle v ON v.vin = e.vin
                         WHERE e.campaign_id = %(cid)s
-                          {'AND ' + scope.predicate if scope.predicate else ''}""",
+                          {"AND " + scope.predicate if scope.predicate else ""}""",
                     {"cid": campaign_id, **scope.params},
                 )
                 exposed = rows_to_dicts(cur)
