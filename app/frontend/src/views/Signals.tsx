@@ -18,10 +18,23 @@ export function Signals() {
   const [fleetOnly, setFleetOnly] = useState(false);
 
   useEffect(() => {
+    // Same guard as views/Campaign.tsx's fetch, same reason: toggling the checkbox twice
+    // quickly can let the first (now-stale) response resolve after the second, silently
+    // replacing the correctly-filtered view with the wrong one.
+    let stale = false;
     api
       .signals(fleetOnly)
-      .then(setData)
-      .catch((e: ApiError) => (e.status === 401 ? setGated(true) : setError(e.message)));
+      .then((d) => {
+        if (!stale) setData(d);
+      })
+      .catch((e: ApiError) => {
+        if (stale) return;
+        if (e.status === 401) setGated(true);
+        else setError(e.message);
+      });
+    return () => {
+      stale = true;
+    };
   }, [fleetOnly]);
 
   if (gated)

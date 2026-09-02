@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, type AuthStatus, type Health, type Me } from "./lib/api";
 import { applyTheme, currentTheme, type Theme } from "./lib/theme";
 import { Assistant } from "./views/Assistant";
@@ -162,8 +162,19 @@ export function App() {
   // is a "Continue with GitHub" prompt is a textbook phishing signature. (2) It was the wrong
   // front door anyway — this URL exists to show the measured result to people who will never
   // sign in, and the first thing they met was a form.
+  // Fires at most once. `landed` never changes after mount, so without this guard the
+  // effect fires again on every later transition back to "queue" — including a user
+  // deliberately clicking the Recall queue tab after being redirected — and silently
+  // bounces them back to Evidence, making the tab look broken. Found in the 2026-09-02
+  // repo review by tracing the interaction past the first render, not just checking that
+  // the initial redirect worked.
+  const autoRedirected = useRef(false);
   useEffect(() => {
-    if (gateClosed && !landed && view.name === "queue") setView({ name: "evidence" });
+    if (autoRedirected.current) return;
+    if (gateClosed && !landed && view.name === "queue") {
+      autoRedirected.current = true;
+      setView({ name: "evidence" });
+    }
   }, [gateClosed, landed, view.name]);
 
   return (

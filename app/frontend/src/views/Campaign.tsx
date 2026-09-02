@@ -18,13 +18,37 @@ export function Campaign({ id, onBack }: { id: string; onBack: () => void }) {
   const [result, setResult] = useState<ApprovalResult | null>(null);
 
   useEffect(() => {
+    // Reset every piece of per-campaign state before the new fetch, not just `c`. This
+    // component stays mounted across an id change — reachable via browser back/forward, or
+    // a pasted link, while already viewing a campaign — and without this reset, approving
+    // campaign A and then navigating directly to campaign B would show B's fresh exposure
+    // data underneath A's stale "approved" success panel. Found in the 2026-09-02 review by
+    // tracing what happens on a *second* id, not just verifying the first one worked.
+    setC(null);
+    setError(null);
+    setResult(null);
+    setBusy(false);
+    setRationale("");
+
+    // Guards against the sibling race: if this fetch resolves AFTER the id has changed
+    // again (slow network, rapid navigation), the response is for a campaign that is no
+    // longer showing — applying it would silently overwrite whatever loaded in the
+    // meantime. `api.campaign` takes no AbortSignal, so this is the standard cheap
+    // alternative: check relevance before committing the result to state.
+    let stale = false;
     api
       .campaign(id)
       .then((d) => {
+        if (stale) return;
         setC(d);
         setTitle(`${d.park_it ? "Park It — " : ""}${d.component ?? id} remediation`);
       })
-      .catch((e: ApiError) => setError(e.message));
+      .catch((e: ApiError) => {
+        if (!stale) setError(e.message);
+      });
+    return () => {
+      stale = true;
+    };
   }, [id]);
 
   async function approve() {
