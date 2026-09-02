@@ -106,6 +106,9 @@ function ThemeToggle() {
 
 export function App() {
   const [view, setView] = useState<View>(viewFromHash);
+  // Whether the visitor arrived with an explicit destination. Only a *default* landing is
+  // ours to change; a shared link must go where it says.
+  const [landed] = useState(() => window.location.hash !== "");
   const [me, setMe] = useState<Me | null>(null);
   const [auth, setAuth] = useState<AuthStatus | null>(null);
   const [health, setHealth] = useState<Health | null>(null);
@@ -152,6 +155,17 @@ export function App() {
   // deployment has no sign-in at all, showing a gate nobody can pass would strand them.
   const gateClosed = Boolean(auth?.enabled && !auth.signed_in);
 
+  // An anonymous visitor with no destination lands on Evidence, not on a login wall.
+  //
+  // Two reasons, and the second is the important one. (1) Google Safe Browsing flagged this
+  // host as "Dangerous site": a zero-reputation shared subdomain whose entire public surface
+  // is a "Continue with GitHub" prompt is a textbook phishing signature. (2) It was the wrong
+  // front door anyway — this URL exists to show the measured result to people who will never
+  // sign in, and the first thing they met was a form.
+  useEffect(() => {
+    if (gateClosed && !landed && view.name === "queue") setView({ name: "evidence" });
+  }, [gateClosed, landed, view.name]);
+
   return (
     <>
       <header>
@@ -195,6 +209,11 @@ export function App() {
                 Sign out
               </button>
             </form>
+          )}
+          {gateClosed && (
+            <a className="signin-link" href="/api/auth/login">
+              Sign in
+            </a>
           )}
         </span>
 

@@ -794,3 +794,21 @@ table.rows tbody tr {
 .snapshot-note strong {
   color: var(--warn);
 }
+
+/* Sign-in as a header action rather than a wall — see App.tsx for why the landing page
+   changed. */
+.signin-link {
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 11px;
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-sm);
+  background: var(--accent-bg);
+  white-space: nowrap;
+}
+
+.signin-link:hover {
+  background: var(--surface-3);
+}
