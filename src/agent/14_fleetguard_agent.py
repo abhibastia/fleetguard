@@ -214,6 +214,11 @@ print(f"model : {MODEL_NAME}\nllm   : {LLM_ENDPOINT}\nindex : {INDEX}")
 # MAGIC     confidence or a severity score.
 # MAGIC     """
 # MAGIC     where = "WHERE fleet_vehicles > 0" if fleet_only else ""
+# MAGIC     # LIMIT cannot be bound as a parameter here: StatementParameterListItem sends the
+# MAGIC     # value as a STRING, and Spark rejects it -- INVALID_LIMIT_LIKE_EXPRESSION.DATA_TYPE.
+# MAGIC     # Coerced to a bounded int instead. This is safe where string interpolation would
+# MAGIC     # not be: after int() the value cannot carry SQL, whatever the model passed.
+# MAGIC     lim = max(1, min(int(limit), 50))
 # MAGIC     rows = _run_sql(
 # MAGIC         f"""
 # MAGIC             SELECT series_key, make, model, comp_top, run_end, max_z,
@@ -221,9 +226,9 @@ print(f"model : {MODEL_NAME}\nllm   : {LLM_ENDPOINT}\nindex : {INDEX}")
 # MAGIC             FROM {CATALOG}.{SCHEMA}.gold_emerging_signal
 # MAGIC             {where}
 # MAGIC             ORDER BY fleet_vehicles DESC, run_end DESC, max_z DESC
-# MAGIC             LIMIT :lim
+# MAGIC             LIMIT {lim}
 # MAGIC         """,
-# MAGIC         [StatementParameterListItem(name="lim", value=str(limit))],
+# MAGIC         [],
 # MAGIC     )
 # MAGIC     counts = _run_sql(
 # MAGIC         f"""
