@@ -57,6 +57,8 @@ Per-user identity verified: 25 Databricks identities exist as Postgres login rol
 resolves to the caller, and `row_security` is `on`. **CDF** (`bootcamp_students.bootcamp_cdc`): 11 `lb_fleetguard_*_history` tables,
 exact names, no collision suffixes.
 
+**Models:** `bootcamp_students.fleetguard.fleetguard_agent` — **3 registered versions**, v3 serving (v1 superseded by I-050's fix, v2 by the signals tool).
+
 **Compute:** 1 pipeline (`fleetguard-bronze-silver`, IDLE) · **19 jobs, all manual** (+`fleetguard-deploy-agent`, `-emerging-signals`, `-load-signals`) ·
 1 serverless SQL warehouse · 1 AI Search endpoint.
 
@@ -406,36 +408,37 @@ Every item on yesterday's list is closed: the endpoint decision (keep), `/eviden
 and the proposal corrections (already discharged by the freeze header — the item should never
 have been on the list).
 
+**Also closed today:** the agent's signals tool. Version 3 is deployed and verified —
+`lookup_emerging_signals` returns the counts alongside the rows, so "2 affecting your fleet"
+cannot be read as "2 recalls", and the prompt carries the **three-state distinction**
+(signal / investigation / recall). The live endpoint leads with it unprompted: *"these are
+emerging signals … not recalls, not open investigations, not confirmed defects … a modest
+edge, not an oracle."* v2 dropped after verification (I-052); one entity billing, not two.
+
 ### Next, in priority order
 
-1. ~~**Give the agent a signals tool.**~~ **Done 2026-09-02 — version 3 deployed and
-   verified.** `lookup_emerging_signals` reads `gold_emerging_signal` and returns the counts
-   with the rows, so "2 affecting your fleet" cannot be read as "2 recalls". The system prompt
-   now carries the **three-state distinction** — signal / investigation / recall — and the
-   live endpoint leads with it unprompted: *"these are emerging signals … not recalls, not
-   open investigations, not confirmed defects … a modest edge, not an oracle."* v2 dropped
-   after verification, per I-052.
-2. **Databricks App (~20 Sept).** Still the one thing that makes queue, assistant and
+1. **Databricks App (~20 Sept).** Still the one thing that makes queue, assistant and
    Emerging live for a real user, via OBO. The auth seam means it is an afternoon. Keep it
    `STOPPED` between sessions — `apps create` provisions billing compute on *create*.
-3. **E-05 evaluation scorers, now with three concrete targets.** `Guidelines` scorers for:
+2. **E-05 evaluation scorers, now with three concrete targets.** `Guidelines` scorers for:
    never call an investigation a recall; always state the match tier; **never report a tool
    failure as a business answer** (I-050). The third only exists as a scorer idea because the
    failure actually happened.
-4. **Refresh discipline for the two snapshots.** `gold_emerging_signal` and
+3. **Refresh discipline for the two snapshots.** `gold_emerging_signal` and
    `evidence.json` are both point-in-time and both regenerate by hand
    (`fleetguard-emerging-signals` + `fleetguard-load-signals`; `scripts/export_evidence.py`).
    Decide before the demo whether to refresh them on the day — the signals table is dated
    `as_of 2026-08` and a reviewer will notice.
-5. **Phase 4 Model B** — scores the `MODEL_VARIANT` residual (3:1 over exact, I-030). The
+4. **Phase 4 Model B** — scores the `MODEL_VARIANT` residual (3:1 over exact, I-030). The
    largest remaining *capability* gap; everything else on this list is polish.
-6. **Phase 10 governance** — a visible slice (Postgres RLS on depot scoping, making §5.1
+5. **Phase 10 governance** — a visible slice (Postgres RLS on depot scoping, making §5.1
    literally true), not the full matrix.
 
 ### Things that are true and easy to forget
 
-- **The endpoint bills continuously** (`scale_to_zero_enabled: False`). Kept up by decision
-  2026-09-02. Retire with `fleetguard-deploy-agent` + version 2 to bring it back.
+- **The endpoint bills continuously** (`scale_to_zero_enabled: False`), serving **version 3**,
+  one entity. Kept up by decision 2026-09-02. To retire it: delete the endpoint; to bring it
+  back, `fleetguard-deploy-agent` (job `602170435434673`) with `model_version=3`.
 - **`/` on Render is cached** — it served a stale `index.html` for minutes after a successful
   deploy (I-054). Probe an API route to confirm a deploy, not the console page. A 401 from a
   gated route proves it exists; an unknown path returns **200 HTML** via the SPA catch-all.
@@ -443,9 +446,13 @@ have been on the list).
   dependency list lives in the *job*, not the notebook, so cloning a working notebook without
   its job spec produces code that cannot run.
 - **After every agent redeploy, read `served_entities`, not `traffic_config`** (I-052) — the
-  old version stays provisioned and billing while routing looks perfectly correct.
+  old version stays provisioned and billing while routing looks perfectly correct. Build the
+  `update-config` payload by reading the surviving entity's live config **programmatically**;
+  hand-copying is how `MLFLOW_EXPERIMENT_ID` gets dropped.
+- **`StatementParameterListItem` binds values as STRING** (I-056) — fine for `= :id`, rejected
+  for `LIMIT :n`. Coerce to a bounded int and interpolate; after `int()` it cannot carry SQL.
 
-### Verification discipline — earned six times (I-021, I-043, I-050, I-051, I-054, I-055)
+### Verification discipline — earned seven times (I-021, I-043, I-050, I-051, I-054, I-055, I-056)
 
 Never infer success from an exit code. Never infer correctness from the absence of an
 exception. **Assert a number.** And for documents: a living spec accumulates *intentions that
@@ -454,6 +461,13 @@ whether it sounds right.
 
 Corollary, now enforced in the agent: **any tool an LLM can call must distinguish "I looked
 and found nothing" from "I could not look."**
+
+That guard paid for itself within hours. The signals tool's first build **failed** on a
+string-vs-int `LIMIT` bug (I-056) — nothing to do with permissions. Under the old code it
+would have returned an empty list and had the agent report *"no emerging defects affect your
+fleet"*: the same false all-clear as I-050, in the newest tool, the same day the fix landed.
+**A rule that turns silent failures loud catches classes of bug you did not anticipate** —
+which is the argument for adding them even after the specific known failure is fixed.
 
 **Do not** rebuild the AI Search index inside the demo window — it is most of a working day.
 And don't add `-o json` to `vector-search-indexes get-index`; it breaks output that is
