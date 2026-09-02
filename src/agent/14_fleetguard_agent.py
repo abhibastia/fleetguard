@@ -99,6 +99,12 @@ print(f"model : {MODEL_NAME}\nllm   : {LLM_ENDPOINT}\nindex : {INDEX}")
 # MAGIC    probabilistic and must be described as needing confirmation.
 # MAGIC 3. Never say a recall exists when only an investigation is open. An NHTSA
 # MAGIC    investigation opening is not a recall; they are different events, months apart.
+# MAGIC    There is a THIRD state below both: an *emerging signal* is a statistical anomaly
+# MAGIC    this system detected in complaint volume. NHTSA has not acted on it at all. Never
+# MAGIC    describe a signal as a recall, as an investigation, or as a confirmed defect. Say
+# MAGIC    "we detected" — not "there is". The detector finds roughly one investigation in six
+# MAGIC    ahead of NHTSA against 11.1% on a matched control: an edge, not an oracle, and
+# MAGIC    saying so is required, not optional.
 # MAGIC 4. You may PROPOSE a service campaign. You cannot launch one — a human approves it.
 # MAGIC    Say so plainly when you propose.
 # MAGIC 5. Complaint narratives are consumer-written and contain personal detail. Summarise
@@ -194,6 +200,63 @@ print(f"model : {MODEL_NAME}\nllm   : {LLM_ENDPOINT}\nindex : {INDEX}")
 # MAGIC
 # MAGIC
 # MAGIC @mlflow.trace(span_type=SpanType.TOOL)
+# MAGIC def lookup_emerging_signals(fleet_only: bool = True, limit: int = 10) -> dict:
+# MAGIC     """Defect ramps this system DETECTED that NHTSA has not acted on.
+# MAGIC
+# MAGIC     This is the proactive half — the project's actual claim. It is also the tool most
+# MAGIC     likely to be over-read, so it returns the counts alongside the rows: "N detected
+# MAGIC     across NHTSA, M touching this fleet" is a different statement from either number
+# MAGIC     alone, and a bare list invites the model to imply the fleet is affected when it is
+# MAGIC     not.
+# MAGIC
+# MAGIC     `harm_share` is descriptive triage. It plays NO part in whether a signal fires --
+# MAGIC     the detector is pure volume anomaly (I-051) -- so it must never be reported as a
+# MAGIC     confidence or a severity score.
+# MAGIC     """
+# MAGIC     where = "WHERE fleet_vehicles > 0" if fleet_only else ""
+# MAGIC     rows = _run_sql(
+# MAGIC         f"""
+# MAGIC             SELECT series_key, make, model, comp_top, run_end, max_z,
+# MAGIC                    complaints_in_run, harm_share, fleet_vehicles, is_live
+# MAGIC             FROM {CATALOG}.{SCHEMA}.gold_emerging_signal
+# MAGIC             {where}
+# MAGIC             ORDER BY fleet_vehicles DESC, run_end DESC, max_z DESC
+# MAGIC             LIMIT :lim
+# MAGIC         """,
+# MAGIC         [StatementParameterListItem(name="lim", value=str(limit))],
+# MAGIC     )
+# MAGIC     counts = _run_sql(
+# MAGIC         f"""
+# MAGIC             SELECT COUNT(*), SUM(CASE WHEN is_live THEN 1 ELSE 0 END),
+# MAGIC                    SUM(CASE WHEN fleet_vehicles > 0 THEN 1 ELSE 0 END),
+# MAGIC                    MAX(as_of_month)
+# MAGIC             FROM {CATALOG}.{SCHEMA}.gold_emerging_signal
+# MAGIC         """,
+# MAGIC         [],
+# MAGIC     )
+# MAGIC     c = counts[0] if counts else [0, 0, 0, None]
+# MAGIC     return {
+# MAGIC         "detected_total": int(c[0]),
+# MAGIC         "still_firing": int(c[1] or 0),
+# MAGIC         "affecting_this_fleet": int(c[2] or 0),
+# MAGIC         "data_through": c[3],
+# MAGIC         "signals": [
+# MAGIC             {
+# MAGIC                 "series": r[0], "make": r[1], "model": r[2], "component": r[3],
+# MAGIC                 "last_fired": r[4], "peak_z": float(r[5]) if r[5] is not None else None,
+# MAGIC                 "complaints_in_run": int(r[6]), "harm_share": r[7],
+# MAGIC                 "fleet_vehicles": int(r[8]), "still_firing": r[9],
+# MAGIC             }
+# MAGIC             for r in rows
+# MAGIC         ],
+# MAGIC         "what_this_is": "Statistical anomalies detected by FleetGuard. NOT recalls, NOT "
+# MAGIC                         "NHTSA investigations, NOT confirmed defects. Detection rate is "
+# MAGIC                         "16.0% vs 11.1% on a matched control.",
+# MAGIC         "harm_share_note": "Descriptive only. Not an input to detection, not a confidence.",
+# MAGIC     }
+# MAGIC
+# MAGIC
+# MAGIC @mlflow.trace(span_type=SpanType.TOOL)
 # MAGIC def propose_service_campaign(campaign_id: str, rationale: str) -> dict:
 # MAGIC     """PROPOSE a campaign for human approval. Does NOT launch anything.
 # MAGIC
@@ -217,6 +280,7 @@ print(f"model : {MODEL_NAME}\nllm   : {LLM_ENDPOINT}\nindex : {INDEX}")
 # MAGIC TOOLS = {
 # MAGIC     "search_complaints": search_complaints,
 # MAGIC     "lookup_fleet_exposure": lookup_fleet_exposure,
+# MAGIC     "lookup_emerging_signals": lookup_emerging_signals,
 # MAGIC     "propose_service_campaign": propose_service_campaign,
 # MAGIC }
 # MAGIC
@@ -245,6 +309,25 @@ print(f"model : {MODEL_NAME}\nllm   : {LLM_ENDPOINT}\nindex : {INDEX}")
 # MAGIC                 "type": "object",
 # MAGIC                 "properties": {"campaign_id": {"type": "string"}},
 # MAGIC                 "required": ["campaign_id"],
+# MAGIC             },
+# MAGIC         },
+# MAGIC     },
+# MAGIC     {
+# MAGIC         "type": "function",
+# MAGIC         "function": {
+# MAGIC             "name": "lookup_emerging_signals",
+# MAGIC             "description": (
+# MAGIC                 "Defect ramps FleetGuard detected before NHTSA acted. These are NOT "
+# MAGIC                 "recalls and NOT investigations. Use for 'what is emerging', 'anything "
+# MAGIC                 "new', 'early warning' questions."
+# MAGIC             ),
+# MAGIC             "parameters": {
+# MAGIC                 "type": "object",
+# MAGIC                 "properties": {
+# MAGIC                     "fleet_only": {"type": "boolean", "default": True},
+# MAGIC                     "limit": {"type": "integer", "default": 10},
+# MAGIC                 },
+# MAGIC                 "required": [],
 # MAGIC             },
 # MAGIC         },
 # MAGIC     },
@@ -374,6 +457,26 @@ _exact = exp["by_match_tier"].get("EXACT", {})
 assert _exact.get("vehicles") == 25, f"expected 25 EXACT vehicles, got {exp['by_match_tier']}"
 assert _exact.get("depots") == 22, f"expected 22 depots, got {exp['by_match_tier']}"
 
+sig = fga.lookup_emerging_signals(fleet_only=True, limit=5)
+print(
+    f"\nlookup_emerging_signals -> detected={sig['detected_total']} "
+    f"live={sig['still_firing']} fleet={sig['affecting_this_fleet']} through={sig['data_through']}"
+)
+for x in sig["signals"]:
+    print(
+        f"    {x['make']} {x['model']} | {x['component']} | z={x['peak_z']} | fleet={x['fleet_vehicles']}"
+    )
+
+# Pinned to the values measured 2026-09-02 against gold_emerging_signal. Asserting the
+# NUMBERS, not merely that the call returned — the whole point of I-050. If the signals
+# table is rebuilt these will move, and that should force a deliberate edit here.
+assert sig["detected_total"] == 48, f"expected 48 signals, got {sig['detected_total']}"
+assert sig["affecting_this_fleet"] == 2, (
+    f"expected 2 fleet-relevant, got {sig['affecting_this_fleet']}"
+)
+assert sig["signals"], "fleet_only returned nothing — the proactive demo would be empty"
+assert sig["signals"][0]["fleet_vehicles"] == 1256, "expected RAM 2500 (1,256 vehicles) first"
+
 prop = fga.propose_service_campaign("17V629000", "Park It steering defect")
 print(f"\npropose_service_campaign -> {prop['status']}  exact={prop['exact_vehicles']}")
 assert prop["status"] == "PROPOSED_AWAITING_HUMAN_APPROVAL", "agent must not self-launch"
@@ -415,6 +518,8 @@ resources = [
     _res.DatabricksVectorSearchIndex(index_name=INDEX),
     _res.DatabricksSQLWarehouse(warehouse_id=WAREHOUSE_ID),
     _res.DatabricksTable(table_name=f"{CATALOG}.{SCHEMA}.gold_fleet_exposure"),
+    # Every table the agent reads must be declared, or the query FAILS SILENTLY (I-050).
+    _res.DatabricksTable(table_name=f"{CATALOG}.{SCHEMA}.gold_emerging_signal"),
 ]
 
 for r in resources:
