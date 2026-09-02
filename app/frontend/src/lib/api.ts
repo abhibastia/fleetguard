@@ -78,6 +78,16 @@ export interface ApprovalResult {
   due_date: string;
 }
 
+export interface ChatTurn {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface ChatReply {
+  reply: string;
+  endpoint: string;
+}
+
 export interface Me {
   user_name: string | null;
   token_source: string;
@@ -92,5 +102,7 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  chat: (messages: ChatTurn[]) =>
+    request<ChatReply>("/chat", { method: "POST", body: JSON.stringify({ messages }) }),
   serviceCampaigns: () => request<Record<string, unknown>[]>("/service-campaigns"),
 };

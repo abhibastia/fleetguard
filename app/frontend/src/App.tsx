@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type Me } from "./lib/api";
+import { Assistant } from "./views/Assistant";
 import { Campaign } from "./views/Campaign";
 import { Evidence } from "./views/Evidence";
 import { Queue } from "./views/Queue";
@@ -33,7 +34,12 @@ export function App() {
       </header>
       <main>
         {view.name === "queue" && (
-          <Queue onOpen={(id) => setView({ name: "campaign", id })} />
+          <div className="split">
+            <div>
+              <Queue onOpen={(id) => setView({ name: "campaign", id })} />
+            </div>
+            <Assistant />
+          </div>
         )}
         {view.name === "campaign" && (
           <Campaign id={view.id} onBack={() => setView({ name: "queue" })} />

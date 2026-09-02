@@ -20,7 +20,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from .deps import CurrentPrincipal
-from .routers import approval, queue
+from .routers import approval, chat, queue
 
 app = FastAPI(
     title="FleetGuard API",
@@ -71,6 +71,7 @@ def me(principal: CurrentPrincipal) -> Me:
 
 api.include_router(queue.router)
 api.include_router(approval.router)
+api.include_router(chat.router)
 app.include_router(api)
 
 

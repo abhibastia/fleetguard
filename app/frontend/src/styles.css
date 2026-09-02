@@ -60,3 +60,15 @@ input, textarea {
 .row { display: flex; gap: 22px; align-items: flex-start; }
 .grow { flex: 1; min-width: 0; }
 .crumb { background: none; border: none; color: var(--accent); padding: 0; margin-bottom: 14px; }
+
+/* Queue and assistant side by side: the workflow keeps the wider column, because the
+   deterministic path is the product and the assistant is support for it. */
+.split { display: grid; grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr); gap: 22px; align-items: start; }
+@media (max-width: 900px) { .split { grid-template-columns: 1fr; } }
+
+.assistant .turns { max-height: 380px; overflow-y: auto; margin: 12px 0; }
+.turn { padding: 9px 11px; border-radius: 7px; margin-bottom: 8px; font-size: 13px; line-height: 1.5; white-space: pre-wrap; }
+.turn.user { background: #1e2430; }
+.turn.agent { background: #12161d; border: 1px solid var(--line); }
+.ask { display: flex; gap: 8px; }
+.ask input { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 6px; border: 1px solid var(--line); background: #0e1116; color: inherit; font: inherit; }
