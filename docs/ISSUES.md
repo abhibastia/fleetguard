@@ -26,6 +26,43 @@ no error and passed the obvious check.
 
 ## Tooling / process
 
+### I-060 — Model B's first training run had leakage from its own golden-set label rule
+*Date:* 2026-09-02 · *Status:* fixed, retraining
+
+**Symptom.** The first Model B run reported `threshold=1.000, precision=1.000,
+recall=0.989, ROC-AUC=0.995` on a 230-row held-out test split. Too clean to trust — this
+project has caught that exact shape of number before (I-047, I-058) — so it was checked
+before being reported rather than written up as a result.
+
+**Root cause.** `05_build_model_b_golden_set`'s negative rule requires
+`recall_model NOT LIKE '%model%'` — so for every `label = 0` row, the feature
+`model_is_substring_of_recall` is `False` **by definition of the label**, not by anything
+learned. Measured directly: that boolean is `True` for 613/621 (98.7%) positives and
+**0/144 (0%)** negatives. A classifier fed that feature does not need to learn anything —
+it can threshold on a value that is tautologically tied to the label it is predicting.
+
+This is the same *category* of mistake as I-058 (an evaluation artefact mistaken for a real
+result) but a different mechanism: I-058 was a broken scorer; this is training-feature
+leakage from the label-construction rule itself. I had already excluded `defect_description`
+text from the features for exactly this reason and missed that the negative rule also used
+`recall_model`, which I had left in the feature set.
+
+**Resolution.** `model_is_substring_of_recall` and `recall_is_substring_of_model` dropped
+from the feature set. The continuous fuzzy-match scores (`ratio`, `partial_ratio`,
+`token_sort_ratio`, `token_set_ratio`, `token_jaccard`) are kept — they correlate with the
+same real naming convention (trim suffixes land on the *recall* side, e.g. `F-250` →
+`F-250 SD`; distinguishing suffixes land on the *vehicle* side, e.g. `PROMASTER` →
+`PROMASTER CITY`) without being a hard 0/1 identical to the label rule — but are flagged in
+the notebook as still optimistic, since the golden set was not built independently of every
+feature that scores it.
+
+**Lesson.** Excluding the *field a label was textually derived from* is not sufficient;
+every field referenced **anywhere** in the label-construction logic — including the negative
+branch, which is easy to write last and check least — has to be excluded from features too.
+"I checked for leakage" needs a specific claim attached: leakage from what, checked how.
+
+---
+
 ### I-059 — `gold_fleet_exposure` has no source file in the repo
 *Date:* 2026-09-02 · *Status:* open, non-blocking
 

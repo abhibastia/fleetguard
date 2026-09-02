@@ -11,15 +11,23 @@
 # MAGIC
 # MAGIC `gold_model_b_golden_set` (`05_build_model_b_golden_set`) derives its **labels** from
 # MAGIC whether the vehicle's model string appears in the recall's `defect_description` text.
-# MAGIC That signal must NOT also be a **feature** here — a model trained on "does the model
-# MAGIC string appear in the recall text" as both label and feature would memorize the label
-# MAGIC rule instead of learning something that generalizes. It would also be useless in
-# MAGIC production: a brand-new recall may have a defect description that doesn't parse cleanly,
-# MAGIC and Model B has to score matches before anyone reads the text closely.
+# MAGIC That signal must NOT also be a **feature** here, and every feature below is built from
+# MAGIC the structured `model`/`recall_model` fields, never from `defect_description` text.
 # MAGIC
-# MAGIC So every feature below comes from the **structured** fields alone — the same
-# MAGIC information available for scoring an unseen recall the day it lands, before any
-# MAGIC free-text review happens.
+# MAGIC **A second, less obvious leak was found and fixed (I-060).** The golden set's negative
+# MAGIC rule additionally requires `recall_model NOT LIKE '%model%'` — so for every `label = 0`
+# MAGIC row, the boolean `model_is_substring_of_recall` is `False` **by construction**, not by
+# MAGIC anything learned. Measured on the live table: that one feature is `True` for 613/621
+# MAGIC (98.7%) positives and **0/144 (0%) negatives** — a first training run scored
+# MAGIC precision 1.000 / recall 0.989 at threshold 1.000, which is the signature of exactly
+# MAGIC this, not of a strong model. `model_is_substring_of_recall` and
+# MAGIC `recall_is_substring_of_model` are excluded below for that reason. The continuous fuzzy
+# MAGIC scores are kept — they correlate with the same real naming pattern (trim suffixes like
+# MAGIC `F-250` → `F-250 SD` land on the *recall* side; distinguishing suffixes like
+# MAGIC `PROMASTER` → `PROMASTER CITY` land on the *vehicle* side) without being a hard 0/1 tied
+# MAGIC to the exact label rule, but the resulting numbers below should still be read as
+# MAGIC optimistic — this golden set was not built independently of every feature that scores
+# MAGIC it.
 # MAGIC
 # MAGIC ## Threshold tuned for recall, not F1
 # MAGIC
@@ -66,8 +74,9 @@ def featurize(df: pd.DataFrame) -> pd.DataFrame:
     out["token_sort_ratio"] = [fuzz.token_sort_ratio(a, b) for a, b in zip(m, r)]
     out["token_set_ratio"] = [fuzz.token_set_ratio(a, b) for a, b in zip(m, r)]
 
-    out["model_is_substring_of_recall"] = [a in b for a, b in zip(m, r)]
-    out["recall_is_substring_of_model"] = [b in a for a, b in zip(m, r)]
+    # model_is_substring_of_recall / recall_is_substring_of_model deliberately OMITTED —
+    # see I-060 above. Do not re-add without re-deriving the golden set's negative rule
+    # independently of them.
     out["len_diff"] = (r.str.len() - m.str.len()).abs()
     out["word_count_diff"] = (r.str.split().str.len() - m.str.split().str.len()).abs()
 
@@ -180,6 +189,10 @@ with mlflow.start_run(run_name="fleetguard-model-b-v1") as run:
     mlflow.log_param("target_recall", TARGET_RECALL)
     mlflow.log_param("features", list(X.columns))
     mlflow.log_param("derivation_method", "defect_description_text_match_v1 (I-059)")
+    mlflow.log_param(
+        "excluded_features_reason",
+        "model/recall substring booleans drop label-construction leakage (I-060)",
+    )
 
     mlflow.log_metric("threshold", CHOSEN_THRESHOLD)
     mlflow.log_metric("precision_at_threshold", achieved_precision)
@@ -190,8 +203,17 @@ with mlflow.start_run(run_name="fleetguard-model-b-v1") as run:
     mlflow.log_metric("test_set_positive", int(y_test.sum()))
 
     signature = infer_signature(X_train, clf.predict_proba(X_train))
+    # MLflow's default sklearn serialization (skops) security-gates internal types it does
+    # not recognise. CalibratedClassifierCV produces sklearn.calibration._CalibratedClassifier
+    # internally, which trips that gate. Trusting it here is correct, not a bypass: this is a
+    # model we just trained in-process, not one loaded from an external or untrusted source —
+    # the gate exists for the latter case.
     model_info = mlflow.sklearn.log_model(
-        clf, name="model", signature=signature, input_example=X_train.head(3)
+        clf,
+        name="model",
+        signature=signature,
+        input_example=X_train.head(3),
+        skops_trusted_types=["sklearn.calibration._CalibratedClassifier"],
     )
     print(f"run_id: {run.info.run_id}")
 
