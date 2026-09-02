@@ -1,0 +1,4248 @@
+{
+  "queue": [
+    {
+      "campaign_id": "21V407000",
+      "component": "STEERING:RACK AND PINION",
+      "park_it": true,
+      "do_not_drive": true,
+      "vehicles_exposed": 384,
+      "depots_affected": 60,
+      "consequence": "Loss of steering control can increase the risk of a crash."
+    },
+    {
+      "campaign_id": "21V037000",
+      "component": "SERVICE BRAKES, HYDRAULIC:FOUNDATION COMPONENTS:MASTER CYLINDER",
+      "park_it": true,
+      "do_not_drive": true,
+      "vehicles_exposed": 205,
+      "depots_affected": 58,
+      "consequence": "A separated brake pedal can result in the driver being unable to apply the service brakes, increasing the risk of a crash. "
+    },
+    {
+      "campaign_id": "17V629000",
+      "component": "STEERING",
+      "park_it": true,
+      "do_not_drive": true,
+      "vehicles_exposed": 25,
+      "depots_affected": 22,
+      "consequence": "A loss of steering control increases the risk of a crash."
+    },
+    {
+      "campaign_id": "21V631000",
+      "component": "PARKING BRAKE:CONVENTIONAL:MECHANICAL:LINKAGE AND CABLE",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 1801,
+      "depots_affected": 60,
+      "consequence": "Parking brake failure can result in unintended vehicle movement, increasing the risk of a crash."
+    },
+    {
+      "campaign_id": "25V010000",
+      "component": "AIR BAGS:SIDE/WINDOW:CURTAIN:INFLATOR",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 1681,
+      "depots_affected": 60,
+      "consequence": "An inflator rupture may result in sharp metal fragments striking occupants, resulting in injury."
+    },
+    {
+      "campaign_id": "24V852000",
+      "component": "EQUIPMENT:OTHER:LABELS",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 1659,
+      "depots_affected": 60,
+      "consequence": "Without a label that shows the proper restraint usage guidelines, the occupants may have an increased risk of injury in the event of a crash."
+    },
+    {
+      "campaign_id": "19V278000",
+      "component": "EQUIPMENT:ELECTRICAL",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 1445,
+      "depots_affected": 60,
+      "consequence": "A damaged cable could cause a resistive short, increasing the risk of overheated or melted wiring, increasing the risk of a fire."
+    },
+    {
+      "campaign_id": "18V894000",
+      "component": "ENGINE",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 1445,
+      "depots_affected": 60,
+      "consequence": "When the heater is plugged in, prolonged corrosion could cause a resistive short, increasing the risk of overheated or melted wiring which can increase the risk of a fire."
+    },
+    {
+      "campaign_id": "19V333000",
+      "component": "SEATS",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 1413,
+      "depots_affected": 60,
+      "consequence": "In the event of a crash, if the seat back moves, the seat occupant has an increased risk of injury."
+    },
+    {
+      "campaign_id": "25V315000",
+      "component": "BACK OVER PREVENTION:SOFTWARE",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 1410,
+      "depots_affected": 60,
+      "consequence": "A frozen or missing rearview camera image can reduce the driver's view behind the vehicle, increasing the risk of a crash."
+    },
+    {
+      "campaign_id": "21E027000",
+      "component": "SUSPENSION:FRONT:CONTROL ARM:UPPER BALL JOINT",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 1384,
+      "depots_affected": 60,
+      "consequence": "An incorrectly installed ball joint may cause the ball joint stud to break, which can compromise front wheel control, increasing the risk of a crash."
+    },
+    {
+      "campaign_id": "18V568000",
+      "component": "STRUCTURE:BODY:ROOF AND PILLARS",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 1384,
+      "depots_affected": 60,
+      "consequence": "A vehicle fire could result if materials ignite inside the vehicle."
+    },
+    {
+      "campaign_id": "25V572000",
+      "component": "BACK OVER PREVENTION: SENSING SYSTEM: CAMERA",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 1326,
+      "depots_affected": 60,
+      "consequence": "A rearview camera that displays an inverted, distorted, or blank image can reduce the driver\u00e2\u0080\u0099s view behind the vehicle, increasing the risk of a crash."
+    },
+    {
+      "campaign_id": "18V275000",
+      "component": "ELECTRICAL SYSTEM:WIRING",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 1323,
+      "depots_affected": 60,
+      "consequence": "An electrical short can increase the risk of a fire.  Turn signal, instrument cluster or seatbelt pretensioner problems can increase the risk of a crash."
+    },
+    {
+      "campaign_id": "17V668000",
+      "component": "ELECTRICAL SYSTEM:WIRING",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 1323,
+      "depots_affected": 60,
+      "consequence": "An electrical short can increase the risk of a fire.  Turn signal, instrument cluster or seatbelt pretensioner problems can increase the risk of a crash."
+    },
+    {
+      "campaign_id": "19V183000",
+      "component": "EQUIPMENT ADAPTIVE/MOBILITY",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 1323,
+      "depots_affected": 60,
+      "consequence": "If the wheelchair lift platform stops above the vehicle floor, the wheelchair user can tip inwards toward the vehicle when exiting the lift, increasing their risk of injury."
+    },
+    {
+      "campaign_id": "19V313000",
+      "component": "SEATS",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 1305,
+      "depots_affected": 60,
+      "consequence": "In the event of a crash, if the seat back moves, the seat occupant has an increased risk of injury."
+    },
+    {
+      "campaign_id": "19V767000",
+      "component": "POWER TRAIN:DRIVELINE:DRIVESHAFT",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 1272,
+      "depots_affected": 60,
+      "consequence": "If the coupling fails, the vehicle will not be able to move under its own power and the disconnected driveshaft may impact and damage the brake and fuel lines.  Additionally, the separated driveshaft may allow the vehicle to roll if the vehicle is exited when the transmission is in 'Park' but the parking brake is not applied.  These scenarios may increase the risk of a crash or injury."
+    },
+    {
+      "campaign_id": "18E096000",
+      "component": "STEERING:LINKAGES",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 1256,
+      "depots_affected": 60,
+      "consequence": "The weakened connection may result in a fractured steering drag link, causing a loss of steering and increasing the risk of a crash."
+    },
+    {
+      "campaign_id": "19V021000",
+      "component": "STEERING:LINKAGES:DRAG:LINK:CONNECTION",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 1256,
+      "depots_affected": 60,
+      "consequence": "A drag link separation can cause a loss of steering control, increasing the risk of crash."
+    },
+    {
+      "campaign_id": "24V896000",
+      "component": "SERVICE BRAKES, HYDRAULIC:ANTILOCK/TRACTION CONTROL/ELECTRONIC LIMITED SLIP:CONTROL UNIT/MODULE",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 1256,
+      "depots_affected": 60,
+      "consequence": "A loss of anti-lock brakes, electronic stability control, or traction control can increase the risk of a crash."
+    },
+    {
+      "campaign_id": "22V150000",
+      "component": "SERVICE BRAKES, HYDRAULIC:POWER ASSIST",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 1191,
+      "depots_affected": 60,
+      "consequence": "A loss of brake fluid may result in a change in brake pedal travel, increased pedal effort and reduced front brake function, requiring greater effort and distance to stop the vehicle.  These conditions can increase the risk of a crash."
+    },
+    {
+      "campaign_id": "19V103000",
+      "component": "POWER TRAIN:DRIVELINE:UNIVERSAL JOINT",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 1121,
+      "depots_affected": 60,
+      "consequence": "If the front driveshaft detaches from the vehicle, drive power will be lost, increasing the risk of a crash.  The detached driveshaft may also create a road hazard, increasing the risk of a crash for following traffic."
+    },
+    {
+      "campaign_id": "19V329000",
+      "component": "SEATS",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 1107,
+      "depots_affected": 60,
+      "consequence": "In the event of a crash, if the seat back moves, the seat occupant has an increased risk of injury."
+    },
+    {
+      "campaign_id": "18V332000",
+      "component": "VEHICLE SPEED CONTROL:CRUISE CONTROL",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 1097,
+      "depots_affected": 60,
+      "consequence": "If the vehicle maintains its speed or accelerates despite attempts to deactivate the cruise control, there would be an increased risk of a crash."
+    },
+    {
+      "campaign_id": "19V271000",
+      "component": "EQUIPMENT ADAPTIVE/MOBILITY",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 1085,
+      "depots_affected": 60,
+      "consequence": "If the wheelchair lift platform stops above the vehicle floor, the wheelchair user can tip inwards toward the vehicle when exiting the lift, increasing their risk of injury."
+    },
+    {
+      "campaign_id": "25V442000",
+      "component": "BACK OVER PREVENTION:SOFTWARE",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 1038,
+      "depots_affected": 60,
+      "consequence": "A rearview camera that displays a blank image can reduce the driver's view behind the vehicle. A rearview image that continues to be displayed after the vehicle is shifted out of reverse may distract the driver. Both of these situations can increase the risk of a crash."
+    },
+    {
+      "campaign_id": "25V876000",
+      "component": "EQUIPMENT ADAPTIVE/MOBILITY:WHEELCHAIR RESTRAINTS/SECUREMENT:LATCH/ANCHOR:",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 994,
+      "depots_affected": 60,
+      "consequence": "An unsecured wheelchair can move during transit, increasing the risk of injury."
+    },
+    {
+      "campaign_id": "19V205000",
+      "component": "SEATS",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 986,
+      "depots_affected": 60,
+      "consequence": "In the event of a crash, if the seat back moves, the seat occupant has an increased risk of injury."
+    },
+    {
+      "campaign_id": "19V347000",
+      "component": "LATCHES/LOCKS/LINKAGES:TAILGATE:LATCH",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 969,
+      "depots_affected": 60,
+      "consequence": "If the tailgate opens while the vehicle is being driven, cargo may fall out the vehicle and create a road hazard, increasing the risk of crash."
+    },
+    {
+      "campaign_id": "23V499000",
+      "component": "FUEL SYSTEM, GASOLINE:DELIVERY:HOSES, LINES/PIPING, AND FITTINGS",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 945,
+      "depots_affected": 60,
+      "consequence": "A gasoline leak in the presence of an ignition source may increase the risk of fire. "
+    },
+    {
+      "campaign_id": "17V408000",
+      "component": "POWER TRAIN:DRIVELINE:DRIVESHAFT",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 927,
+      "depots_affected": 60,
+      "consequence": "If the coupling fails, the vehicle will not be able to move under its own power and the disconnected driveshaft may impact and damage the brake and fuel lines.  Additionally, the separated driveshaft may allow the vehicle to roll if the vehicle is exited when the transmission is in 'Park' but the parking brake is not applied.  These scenarios may increase the risk of a crash."
+    },
+    {
+      "campaign_id": "17V824000",
+      "component": "EQUIPMENT",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 917,
+      "depots_affected": 60,
+      "consequence": "If the fire extinguisher does not function properly, it can increase the risk of injury in the event of a fire."
+    },
+    {
+      "campaign_id": "20V214000",
+      "component": "EXTERIOR LIGHTING",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 872,
+      "depots_affected": 60,
+      "consequence": "The vehicle's rearward visibility may be reduced, increasing the risk of a crash. "
+    },
+    {
+      "campaign_id": "22V413000",
+      "component": "POWER TRAIN:SHIFT LINKAGE/CABLE/ROD",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 858,
+      "depots_affected": 60,
+      "consequence": "A damaged or missing bushing may prevent the vehicle from shifting into the intended gear, and cause the vehicle to move in an unexpected direction.  Additionally, the vehicle may roll after the driver selects the 'Park' position.  Either scenario increases the risk of a crash or injury."
+    },
+    {
+      "campaign_id": "21V376000",
+      "component": "POWER TRAIN:SHIFT LINKAGE/CABLE/ROD",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 858,
+      "depots_affected": 60,
+      "consequence": "A damaged or missing bushing may prevent the vehicle from shifting into the intended gear, causing the vehicle to move in an unexpected direction.  Additionally, the vehicle may roll after the driver selects the 'Park' position.  Either scenario increases the risk of a crash or injury."
+    },
+    {
+      "campaign_id": "16V188000",
+      "component": "AIR BAGS:SIDE/WINDOW",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 843,
+      "depots_affected": 60,
+      "consequence": "A side curtain air bag that does not deploy as intended may increase the risk of occupant injury in the event of a crash."
+    },
+    {
+      "campaign_id": "26V104000",
+      "component": "EXTERIOR LIGHTING:TAIL LIGHTS",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 839,
+      "depots_affected": 60,
+      "consequence": "Trailer lights or brakes that do not function can reduce the driver\u00e2\u0080\u0099s ability to control the trailer and decrease the trailers visibility to other road users, increasing the risk of a crash."
+    },
+    {
+      "campaign_id": "20V097000",
+      "component": "EXTERIOR LIGHTING:HEADLIGHTS",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 820,
+      "depots_affected": 60,
+      "consequence": "DRL that cannot dim may reduce the visibility of other drivers, increasing the risk of a crash."
+    },
+    {
+      "campaign_id": "26V373000",
+      "component": "EXTERIOR LIGHTING:HEADLIGHTS",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 820,
+      "depots_affected": 60,
+      "consequence": " Daytime Running Lamps that do not dim may reduce the visibility of other drivers, increasing the risk of a crash."
+    },
+    {
+      "campaign_id": "16V111000",
+      "component": "SEAT BELTS: REAR/OTHER:BUCKLE ASSEMBLY",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 808,
+      "depots_affected": 60,
+      "consequence": "An unlatched seat belt increases the risk of injury to the occupant in the event of a crash."
+    },
+    {
+      "campaign_id": "22V817000",
+      "component": "SERVICE BRAKES, AIR:ANTILOCK:MODULATOR",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 775,
+      "depots_affected": 60,
+      "consequence": "Brakes that pull to one side during an ACC braking event may cause a sudden change in vehicle direction, increasing the risk of a crash."
+    },
+    {
+      "campaign_id": "23V073000",
+      "component": "SERVICE BRAKES, AIR:ANTILOCK:MODULATOR",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 775,
+      "depots_affected": 60,
+      "consequence": "Brakes that pull to one side may cause a sudden change in vehicle direction, increasing the risk of a crash."
+    },
+    {
+      "campaign_id": "26V237000",
+      "component": "POWER TRAIN:AUTOMATIC TRANSMISSION",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 766,
+      "depots_affected": 60,
+      "consequence": "Unexpectedly downshifting into second gear may result in a loss of vehicle control, increasing the risk of a crash. "
+    },
+    {
+      "campaign_id": "20V332000",
+      "component": "SERVICE BRAKES, HYDRAULIC:POWER ASSIST",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 766,
+      "depots_affected": 60,
+      "consequence": "A loss of brake fluid may result in a change in brake pedal travel and feel, increased pedal effort and reduced front brake function, possibly requiring greater effort and distance to stop the vehicle.  These conditions can increase the risk of a crash."
+    },
+    {
+      "campaign_id": "19V229000",
+      "component": "SEATS",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 756,
+      "depots_affected": 60,
+      "consequence": "In the event of a crash, if the seat back moves, the seat occupant has an increased risk of injury."
+    },
+    {
+      "campaign_id": "14V483000",
+      "component": "STRUCTURE:BODY:DOOR",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 735,
+      "depots_affected": 60,
+      "consequence": "A sliding door without the epoxy reinforcement has an increased potential of unlatching in certain side impact crashes.  A door that unlatches may open, allowing for a vehicle occupant to be ejected in a crash, increasing the risk of injury."
+    },
+    {
+      "campaign_id": "17V331000",
+      "component": "STRUCTURE:BODY:DOOR",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 707,
+      "depots_affected": 60,
+      "consequence": "If the doors unlatch and open in a side impact collision, the occupants have an increased risk of injury."
+    },
+    {
+      "campaign_id": "21V357000",
+      "component": "EXTERIOR LIGHTING:HEADLIGHTS:BULBS",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 702,
+      "depots_affected": 60,
+      "consequence": "Melting components can increase the risk of fire."
+    },
+    {
+      "campaign_id": "17V652000",
+      "component": "LATCHES/LOCKS/LINKAGES:DOORS:LATCH",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 662,
+      "depots_affected": 60,
+      "consequence": "A door that opens while driving can increase the risk of injury."
+    },
+    {
+      "campaign_id": "25V298000",
+      "component": "ELECTRICAL SYSTEM:WIRING",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 630,
+      "depots_affected": 60,
+      "consequence": "A driver's side air bag that does not deploy as intended increases the risk of injury in a crash. "
+    },
+    {
+      "campaign_id": "24V653000",
+      "component": "SERVICE BRAKES, HYDRAULIC:ANTILOCK/TRACTION CONTROL/ELECTRONIC LIMITED SLIP:CONTROL UNIT/MODULE",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 630,
+      "depots_affected": 60,
+      "consequence": "Driving with a disabled electronic stability control system can increase the risk of a crash. "
+    },
+    {
+      "campaign_id": "26V495000",
+      "component": "SEAT BELTS:REAR/OTHER:ANCHORAGE",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 630,
+      "depots_affected": 60,
+      "consequence": "An improperly installed seat belt buckle anchor may fail to properly restrain occupants, increasing the risk of injury during a crash."
+    },
+    {
+      "campaign_id": "22V904000",
+      "component": "STRUCTURE:BODY:TAILGATE:HINGE AND ATTACHMENTS",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 630,
+      "depots_affected": 60,
+      "consequence": "An unintended tailgate opening while driving may result in a loss of unsecured cargo, possibly creating a road hazard and increasing the risk of a crash."
+    },
+    {
+      "campaign_id": "20V567000",
+      "component": "EXTERIOR LIGHTING:BRAKE LIGHTS",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 623,
+      "depots_affected": 60,
+      "consequence": "If the brake lights remain illuminated, drivers may be unaware when the truck is actually slowing or stopping, increasing the risk of a crash."
+    },
+    {
+      "campaign_id": "20V390000",
+      "component": "SERVICE BRAKES, AIR:SUPPLY:QUICK RELEASE VALVE",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 623,
+      "depots_affected": 60,
+      "consequence": "Brakes that pull to one side during automatic braking events may cause a sudden change in vehicle direction, increasing the risk of a crash."
+    },
+    {
+      "campaign_id": "21V155000",
+      "component": "TIRES",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 618,
+      "depots_affected": 60,
+      "consequence": "Over cured tires may develop a break in the sidewall, resulting in sudden air loss or belt edge separation which could lead to tread/belt loss.  Either condition can cause a loss of vehicle control, increasing the risk of a crash."
+    },
+    {
+      "campaign_id": "21V983000",
+      "component": "LATCHES/LOCKS/LINKAGES:TAILGATE:LATCH",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 618,
+      "depots_affected": 60,
+      "consequence": "Unexpected tailgate opening may allow unrestrained cargo to fall out of the truck bed and become a road hazard, increasing the risk of a crash."
+    },
+    {
+      "campaign_id": "22V791000",
+      "component": "VISIBILITY:DEFROSTER/DEFOGGER/HVAC SYSTEM",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 606,
+      "depots_affected": 60,
+      "consequence": "Loss of the ability to control the defrost or defog function decreases the driver's visibility under certain driving conditions, increasing the risk of a crash."
+    },
+    {
+      "campaign_id": "25V168000",
+      "component": "VISIBILITY:DEFROSTER/DEFOGGER/HVAC SYSTEM",
+      "park_it": false,
+      "do_not_drive": false,
+      "vehicles_exposed": 606,
+      "depots_affected": 60,
+      "consequence": "Loss of the ability to control the defrost or defog function decreases the driver's visibility under certain driving conditions, increasing the risk of a crash."
+    }
+  ],
+  "campaigns": {
+    "21V407000": {
+      "campaign_id": "21V407000",
+      "component": "STEERING:RACK AND PINION",
+      "park_it": true,
+      "consequence": "Loss of steering control can increase the risk of a crash.",
+      "remedy": "Owners are advised to not drive their vehicles until the repair is complete.  Vehicles will be towed in for service, and dealers will remove and replace the steering gear, free of charge.  Owner notification letters were mailed on June 4, 2021. Owners may contact Ford customer service at 1-866-436-7332.  Ford's number for this recall is 21S28. ",
+      "vehicles_exposed": 384,
+      "by_depot": {
+        "DEP-029": 14,
+        "DEP-038": 12,
+        "DEP-009": 10,
+        "DEP-015": 10,
+        "DEP-032": 9,
+        "DEP-054": 9,
+        "DEP-042": 9,
+        "DEP-056": 9,
+        "DEP-013": 8,
+        "DEP-058": 8,
+        "DEP-020": 8,
+        "DEP-034": 8,
+        "DEP-021": 8,
+        "DEP-053": 8,
+        "DEP-060": 8,
+        "DEP-051": 8,
+        "DEP-010": 8,
+        "DEP-046": 8,
+        "DEP-045": 8,
+        "DEP-001": 7,
+        "DEP-007": 7,
+        "DEP-014": 7,
+        "DEP-018": 7,
+        "DEP-022": 7,
+        "DEP-040": 7,
+        "DEP-043": 7,
+        "DEP-055": 7,
+        "DEP-059": 7,
+        "DEP-024": 6,
+        "DEP-030": 6,
+        "DEP-023": 6,
+        "DEP-033": 6,
+        "DEP-019": 6,
+        "DEP-036": 6,
+        "DEP-037": 6,
+        "DEP-039": 6,
+        "DEP-041": 6,
+        "DEP-047": 6,
+        "DEP-052": 6,
+        "DEP-002": 6,
+        "DEP-004": 6,
+        "DEP-028": 6,
+        "DEP-016": 5,
+        "DEP-011": 5,
+        "DEP-008": 5,
+        "DEP-012": 4,
+        "DEP-003": 4,
+        "DEP-035": 4,
+        "DEP-025": 4,
+        "DEP-006": 4,
+        "DEP-005": 4,
+        "DEP-044": 4,
+        "DEP-048": 4,
+        "DEP-031": 4,
+        "DEP-027": 3,
+        "DEP-017": 3,
+        "DEP-026": 3,
+        "DEP-049": 3,
+        "DEP-057": 3,
+        "DEP-050": 1
+      },
+      "sample_vehicles": [
+        {
+          "vin": "1FTFW1ED0MF170028",
+          "depot_id": "DEP-046",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2021
+        },
+        {
+          "vin": "1FTFW1E85MF142356",
+          "depot_id": "DEP-040",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2021
+        },
+        {
+          "vin": "1FTFW1E87MF183152",
+          "depot_id": "DEP-029",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2021
+        },
+        {
+          "vin": "1FTFW1ED4MF174860",
+          "depot_id": "DEP-018",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2021
+        },
+        {
+          "vin": "1FTFW1ED0MF168117",
+          "depot_id": "DEP-029",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2021
+        },
+        {
+          "vin": "1FTFW1E85MF159979",
+          "depot_id": "DEP-037",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2021
+        },
+        {
+          "vin": "1FTFW1E81MF157890",
+          "depot_id": "DEP-029",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2021
+        },
+        {
+          "vin": "1FTFW1E88MF150323",
+          "depot_id": "DEP-029",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2021
+        },
+        {
+          "vin": "1FTFW1E82MF160040",
+          "depot_id": "DEP-048",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2021
+        },
+        {
+          "vin": "1FTFW1ED4MF149361",
+          "depot_id": "DEP-023",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2021
+        },
+        {
+          "vin": "1FTFW1E86MF149283",
+          "depot_id": "DEP-048",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2021
+        },
+        {
+          "vin": "1FTFW1ED1MF184133",
+          "depot_id": "DEP-019",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2021
+        },
+        {
+          "vin": "1FTFW1E80MF178178",
+          "depot_id": "DEP-014",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2021
+        },
+        {
+          "vin": "1FTFW1ED1MF178137",
+          "depot_id": "DEP-014",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2021
+        },
+        {
+          "vin": "1FTFW1E85MF140610",
+          "depot_id": "DEP-002",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2021
+        },
+        {
+          "vin": "1FTFW1E82MF171829",
+          "depot_id": "DEP-041",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2021
+        },
+        {
+          "vin": "1FTFW1ED7MF161794",
+          "depot_id": "DEP-052",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2021
+        },
+        {
+          "vin": "1FTFW1E84MF185179",
+          "depot_id": "DEP-030",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2021
+        },
+        {
+          "vin": "1FTFW1ED7MF140590",
+          "depot_id": "DEP-001",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2021
+        },
+        {
+          "vin": "1FTFW1ED0MF160843",
+          "depot_id": "DEP-026",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2021
+        },
+        {
+          "vin": "1FTFW1ED1MF160219",
+          "depot_id": "DEP-032",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2021
+        },
+        {
+          "vin": "1FTFW1E84MF159231",
+          "depot_id": "DEP-047",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2021
+        },
+        {
+          "vin": "1FTFW1E81MF149434",
+          "depot_id": "DEP-024",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2021
+        },
+        {
+          "vin": "1FTFW1ED6MF148597",
+          "depot_id": "DEP-055",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2021
+        },
+        {
+          "vin": "1FTFW1E84MF159777",
+          "depot_id": "DEP-011",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2021
+        }
+      ]
+    },
+    "21V037000": {
+      "campaign_id": "21V037000",
+      "component": "SERVICE BRAKES, HYDRAULIC:FOUNDATION COMPONENTS:MASTER CYLINDER",
+      "park_it": true,
+      "consequence": "A separated brake pedal can result in the driver being unable to apply the service brakes, increasing the risk of a crash. ",
+      "remedy": "Owners are advised to not drive their vehicles until they receive instructions on the inspection and repair, as necessary.  FCA US will notify owners, and dealers will inspect and install the push rod clip, free of charge.  The recall began February 9, 2021.  Owners may contact FCA US customer service at 1-800-853-1403.  FCA US number for this recall is Y04.",
+      "vehicles_exposed": 205,
+      "by_depot": {
+        "DEP-029": 9,
+        "DEP-004": 8,
+        "DEP-046": 8,
+        "DEP-033": 6,
+        "DEP-035": 5,
+        "DEP-002": 5,
+        "DEP-054": 5,
+        "DEP-015": 5,
+        "DEP-016": 5,
+        "DEP-019": 5,
+        "DEP-053": 5,
+        "DEP-021": 5,
+        "DEP-022": 5,
+        "DEP-041": 5,
+        "DEP-040": 5,
+        "DEP-052": 5,
+        "DEP-010": 5,
+        "DEP-034": 4,
+        "DEP-007": 4,
+        "DEP-042": 4,
+        "DEP-049": 4,
+        "DEP-017": 4,
+        "DEP-047": 4,
+        "DEP-012": 4,
+        "DEP-038": 4,
+        "DEP-006": 4,
+        "DEP-045": 4,
+        "DEP-031": 3,
+        "DEP-011": 3,
+        "DEP-013": 3,
+        "DEP-014": 3,
+        "DEP-028": 3,
+        "DEP-030": 3,
+        "DEP-043": 3,
+        "DEP-048": 3,
+        "DEP-055": 3,
+        "DEP-057": 3,
+        "DEP-058": 3,
+        "DEP-026": 2,
+        "DEP-025": 2,
+        "DEP-003": 2,
+        "DEP-032": 2,
+        "DEP-036": 2,
+        "DEP-039": 2,
+        "DEP-060": 2,
+        "DEP-044": 2,
+        "DEP-023": 2,
+        "DEP-020": 2,
+        "DEP-018": 2,
+        "DEP-059": 2,
+        "DEP-009": 2,
+        "DEP-051": 2,
+        "DEP-008": 2,
+        "DEP-005": 2,
+        "DEP-024": 1,
+        "DEP-001": 1,
+        "DEP-050": 1,
+        "DEP-037": 1
+      },
+      "sample_vehicles": [
+        {
+          "vin": "1C6SRFFTXMN170613",
+          "depot_id": "DEP-006",
+          "make": "RAM",
+          "model": "1500",
+          "model_year": 2021
+        },
+        {
+          "vin": "1C6SRFFT6MN173122",
+          "depot_id": "DEP-045",
+          "make": "RAM",
+          "model": "1500",
+          "model_year": 2021
+        },
+        {
+          "vin": "1C6SRFFT3MN165320",
+          "depot_id": "DEP-015",
+          "make": "RAM",
+          "model": "1500",
+          "model_year": 2021
+        },
+        {
+          "vin": "1C6SRFFTXMN182552",
+          "depot_id": "DEP-053",
+          "make": "RAM",
+          "model": "1500",
+          "model_year": 2021
+        },
+        {
+          "vin": "1C6SRFFT8MN148917",
+          "depot_id": "DEP-018",
+          "make": "RAM",
+          "model": "1500",
+          "model_year": 2021
+        },
+        {
+          "vin": "1C6SRFFT0MN176453",
+          "depot_id": "DEP-033",
+          "make": "RAM",
+          "model": "1500",
+          "model_year": 2021
+        },
+        {
+          "vin": "1C6SRFFT4MN168811",
+          "depot_id": "DEP-033",
+          "make": "RAM",
+          "model": "1500",
+          "model_year": 2021
+        },
+        {
+          "vin": "1C6SRFFT2MN162148",
+          "depot_id": "DEP-007",
+          "make": "RAM",
+          "model": "1500",
+          "model_year": 2021
+        },
+        {
+          "vin": "1C6SRFFT1MN160147",
+          "depot_id": "DEP-046",
+          "make": "RAM",
+          "model": "1500",
+          "model_year": 2021
+        },
+        {
+          "vin": "1C6SRFFT6MN148172",
+          "depot_id": "DEP-002",
+          "make": "RAM",
+          "model": "1500",
+          "model_year": 2021
+        },
+        {
+          "vin": "1C6SRFFT1MN178292",
+          "depot_id": "DEP-025",
+          "make": "RAM",
+          "model": "1500",
+          "model_year": 2021
+        },
+        {
+          "vin": "1C6SRFFT8MN175597",
+          "depot_id": "DEP-014",
+          "make": "RAM",
+          "model": "1500",
+          "model_year": 2021
+        },
+        {
+          "vin": "1C6SRFFT2MN155278",
+          "depot_id": "DEP-016",
+          "make": "RAM",
+          "model": "1500",
+          "model_year": 2021
+        },
+        {
+          "vin": "1C6SRFFT7MN178314",
+          "depot_id": "DEP-044",
+          "make": "RAM",
+          "model": "1500",
+          "model_year": 2021
+        },
+        {
+          "vin": "1C6SRFFTXMN173012",
+          "depot_id": "DEP-047",
+          "make": "RAM",
+          "model": "1500",
+          "model_year": 2021
+        },
+        {
+          "vin": "1C6SRFFT3MN153300",
+          "depot_id": "DEP-006",
+          "make": "RAM",
+          "model": "1500",
+          "model_year": 2021
+        },
+        {
+          "vin": "1C6SRFFT1MN158513",
+          "depot_id": "DEP-012",
+          "make": "RAM",
+          "model": "1500",
+          "model_year": 2021
+        },
+        {
+          "vin": "1C6SRFFT4MN183597",
+          "depot_id": "DEP-048",
+          "make": "RAM",
+          "model": "1500",
+          "model_year": 2021
+        },
+        {
+          "vin": "1C6SRFFT4MN166637",
+          "depot_id": "DEP-019",
+          "make": "RAM",
+          "model": "1500",
+          "model_year": 2021
+        },
+        {
+          "vin": "1C6SRFFTXMN151866",
+          "depot_id": "DEP-019",
+          "make": "RAM",
+          "model": "1500",
+          "model_year": 2021
+        },
+        {
+          "vin": "1C6SRFFT0MN144084",
+          "depot_id": "DEP-041",
+          "make": "RAM",
+          "model": "1500",
+          "model_year": 2021
+        },
+        {
+          "vin": "1C6SRFFT0MN153285",
+          "depot_id": "DEP-052",
+          "make": "RAM",
+          "model": "1500",
+          "model_year": 2021
+        },
+        {
+          "vin": "1C6SRFFT4MN155458",
+          "depot_id": "DEP-022",
+          "make": "RAM",
+          "model": "1500",
+          "model_year": 2021
+        },
+        {
+          "vin": "1C6SRFFT1MN182519",
+          "depot_id": "DEP-007",
+          "make": "RAM",
+          "model": "1500",
+          "model_year": 2021
+        },
+        {
+          "vin": "1C6SRFFT8MN160596",
+          "depot_id": "DEP-046",
+          "make": "RAM",
+          "model": "1500",
+          "model_year": 2021
+        }
+      ]
+    },
+    "17V629000": {
+      "campaign_id": "17V629000",
+      "component": "STEERING",
+      "park_it": true,
+      "consequence": "A loss of steering control increases the risk of a crash.",
+      "remedy": "DTNA will notify owners, and dealers will verify that the upper steering shaft pinch bolt is properly tightened, free of charge.  The recall began on October 26, 2017.  Owners may contact DTNA customer service at 1-800-547-0712.  DTNA's number for this recall is FL-748.  Note: Owners are advised not to drive their vehicles until they have been checked.",
+      "vehicles_exposed": 25,
+      "by_depot": {
+        "DEP-006": 2,
+        "DEP-054": 2,
+        "DEP-038": 2,
+        "DEP-012": 1,
+        "DEP-016": 1,
+        "DEP-027": 1,
+        "DEP-030": 1,
+        "DEP-034": 1,
+        "DEP-039": 1,
+        "DEP-042": 1,
+        "DEP-044": 1,
+        "DEP-045": 1,
+        "DEP-046": 1,
+        "DEP-051": 1,
+        "DEP-053": 1,
+        "DEP-055": 1,
+        "DEP-056": 1,
+        "DEP-058": 1,
+        "DEP-003": 1,
+        "DEP-060": 1,
+        "DEP-007": 1,
+        "DEP-008": 1
+      },
+      "sample_vehicles": [
+        {
+          "vin": "3AKJGLDR3HS185890",
+          "depot_id": "DEP-054",
+          "make": "FREIGHTLINER",
+          "model": "CASCADIA",
+          "model_year": 2017
+        },
+        {
+          "vin": "3AKJGLDR3HS197439",
+          "depot_id": "DEP-046",
+          "make": "FREIGHTLINER",
+          "model": "CASCADIA",
+          "model_year": 2017
+        },
+        {
+          "vin": "3AKJGLDR8HS197663",
+          "depot_id": "DEP-058",
+          "make": "FREIGHTLINER",
+          "model": "CASCADIA",
+          "model_year": 2017
+        },
+        {
+          "vin": "3AKJGLDR1HS197522",
+          "depot_id": "DEP-042",
+          "make": "FREIGHTLINER",
+          "model": "CASCADIA",
+          "model_year": 2017
+        },
+        {
+          "vin": "3AKJGLDR9HS195405",
+          "depot_id": "DEP-045",
+          "make": "FREIGHTLINER",
+          "model": "CASCADIA",
+          "model_year": 2017
+        },
+        {
+          "vin": "3AKJGLDR4HS185901",
+          "depot_id": "DEP-060",
+          "make": "FREIGHTLINER",
+          "model": "CASCADIA",
+          "model_year": 2017
+        },
+        {
+          "vin": "3AKJGLDR4HS198146",
+          "depot_id": "DEP-030",
+          "make": "FREIGHTLINER",
+          "model": "CASCADIA",
+          "model_year": 2017
+        },
+        {
+          "vin": "3AKJGLDR6HS196950",
+          "depot_id": "DEP-039",
+          "make": "FREIGHTLINER",
+          "model": "CASCADIA",
+          "model_year": 2017
+        },
+        {
+          "vin": "3AKJGLDR4HS186546",
+          "depot_id": "DEP-044",
+          "make": "FREIGHTLINER",
+          "model": "CASCADIA",
+          "model_year": 2017
+        },
+        {
+          "vin": "3AKJGLDR5HS193795",
+          "depot_id": "DEP-054",
+          "make": "FREIGHTLINER",
+          "model": "CASCADIA",
+          "model_year": 2017
+        },
+        {
+          "vin": "3AKJGLDRXHS199804",
+          "depot_id": "DEP-053",
+          "make": "FREIGHTLINER",
+          "model": "CASCADIA",
+          "model_year": 2017
+        },
+        {
+          "vin": "3AKJGLDRXHS190455",
+          "depot_id": "DEP-038",
+          "make": "FREIGHTLINER",
+          "model": "CASCADIA",
+          "model_year": 2017
+        },
+        {
+          "vin": "3AKJGLDR7HS188680",
+          "depot_id": "DEP-055",
+          "make": "FREIGHTLINER",
+          "model": "CASCADIA",
+          "model_year": 2017
+        },
+        {
+          "vin": "3AKJGLDR0HS193137",
+          "depot_id": "DEP-051",
+          "make": "FREIGHTLINER",
+          "model": "CASCADIA",
+          "model_year": 2017
+        },
+        {
+          "vin": "3AKJGLDR4HS193433",
+          "depot_id": "DEP-007",
+          "make": "FREIGHTLINER",
+          "model": "CASCADIA",
+          "model_year": 2017
+        },
+        {
+          "vin": "3AKJGLDR4HS190287",
+          "depot_id": "DEP-003",
+          "make": "FREIGHTLINER",
+          "model": "CASCADIA",
+          "model_year": 2017
+        },
+        {
+          "vin": "3AKJGLDR6HS186872",
+          "depot_id": "DEP-006",
+          "make": "FREIGHTLINER",
+          "model": "CASCADIA",
+          "model_year": 2017
+        },
+        {
+          "vin": "3AKJGLDR6HS196608",
+          "depot_id": "DEP-027",
+          "make": "FREIGHTLINER",
+          "model": "CASCADIA",
+          "model_year": 2017
+        },
+        {
+          "vin": "3AKJGLDR2HS196928",
+          "depot_id": "DEP-056",
+          "make": "FREIGHTLINER",
+          "model": "CASCADIA",
+          "model_year": 2017
+        },
+        {
+          "vin": "3AKJGLDR7HS192437",
+          "depot_id": "DEP-006",
+          "make": "FREIGHTLINER",
+          "model": "CASCADIA",
+          "model_year": 2017
+        },
+        {
+          "vin": "3AKJGLDR3HS189826",
+          "depot_id": "DEP-034",
+          "make": "FREIGHTLINER",
+          "model": "CASCADIA",
+          "model_year": 2017
+        },
+        {
+          "vin": "3AKJGLDR6HS192963",
+          "depot_id": "DEP-016",
+          "make": "FREIGHTLINER",
+          "model": "CASCADIA",
+          "model_year": 2017
+        },
+        {
+          "vin": "3AKJGLDR8HS197890",
+          "depot_id": "DEP-012",
+          "make": "FREIGHTLINER",
+          "model": "CASCADIA",
+          "model_year": 2017
+        },
+        {
+          "vin": "3AKJGLDR9HS194416",
+          "depot_id": "DEP-038",
+          "make": "FREIGHTLINER",
+          "model": "CASCADIA",
+          "model_year": 2017
+        },
+        {
+          "vin": "3AKJGLDRXHS191055",
+          "depot_id": "DEP-008",
+          "make": "FREIGHTLINER",
+          "model": "CASCADIA",
+          "model_year": 2017
+        }
+      ]
+    },
+    "21V631000": {
+      "campaign_id": "21V631000",
+      "component": "PARKING BRAKE:CONVENTIONAL:MECHANICAL:LINKAGE AND CABLE",
+      "park_it": false,
+      "consequence": "Parking brake failure can result in unintended vehicle movement, increasing the risk of a crash.",
+      "remedy": "Dealers will replace the passenger side parking brake cable with a cable that provides sufficient clearance to the damper shield, free of charge.  Interim owner notification letters were mailed on September 24, 2021.  Owner notification letters were mailed on March 14, 2022.  Owners may contact Ford customer service at 1-866-436-7332.  Ford's number for this recall is 21S39.",
+      "vehicles_exposed": 1801,
+      "by_depot": {
+        "DEP-035": 41,
+        "DEP-041": 40,
+        "DEP-002": 39,
+        "DEP-038": 38,
+        "DEP-023": 38,
+        "DEP-052": 38,
+        "DEP-027": 37,
+        "DEP-046": 36,
+        "DEP-054": 36,
+        "DEP-049": 36,
+        "DEP-031": 36,
+        "DEP-048": 35,
+        "DEP-024": 35,
+        "DEP-028": 34,
+        "DEP-015": 33,
+        "DEP-036": 33,
+        "DEP-004": 33,
+        "DEP-032": 33,
+        "DEP-058": 33,
+        "DEP-005": 33,
+        "DEP-050": 33,
+        "DEP-060": 32,
+        "DEP-013": 32,
+        "DEP-040": 32,
+        "DEP-043": 32,
+        "DEP-044": 32,
+        "DEP-053": 32,
+        "DEP-056": 32,
+        "DEP-022": 31,
+        "DEP-012": 31,
+        "DEP-034": 31,
+        "DEP-001": 30,
+        "DEP-006": 30,
+        "DEP-059": 30,
+        "DEP-020": 29,
+        "DEP-042": 29,
+        "DEP-045": 29,
+        "DEP-010": 29,
+        "DEP-003": 28,
+        "DEP-021": 28,
+        "DEP-030": 28,
+        "DEP-057": 28,
+        "DEP-019": 27,
+        "DEP-007": 26,
+        "DEP-014": 26,
+        "DEP-025": 26,
+        "DEP-029": 26,
+        "DEP-008": 24,
+        "DEP-051": 24,
+        "DEP-009": 23,
+        "DEP-047": 23,
+        "DEP-055": 23,
+        "DEP-016": 23,
+        "DEP-039": 23,
+        "DEP-037": 22,
+        "DEP-026": 21,
+        "DEP-033": 21,
+        "DEP-017": 20,
+        "DEP-018": 19,
+        "DEP-011": 19
+      },
+      "sample_vehicles": [
+        {
+          "vin": "1FTBW3XG1FK113560",
+          "depot_id": "DEP-003",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2015
+        },
+        {
+          "vin": "1FBZX2ZM4HK123029",
+          "depot_id": "DEP-003",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2017
+        },
+        {
+          "vin": "1FTNR2CM1FK132300",
+          "depot_id": "DEP-059",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2015
+        },
+        {
+          "vin": "1FBZX2YMXFK129240",
+          "depot_id": "DEP-020",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2015
+        },
+        {
+          "vin": "1FTBW3XG5FK118048",
+          "depot_id": "DEP-010",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2015
+        },
+        {
+          "vin": "1FTNE1ZM0FK115825",
+          "depot_id": "DEP-059",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2015
+        },
+        {
+          "vin": "1FTBW3XG1FK102154",
+          "depot_id": "DEP-046",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2015
+        },
+        {
+          "vin": "1FBZX2CM7HK138214",
+          "depot_id": "DEP-019",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2017
+        },
+        {
+          "vin": "1FTYE2CG0HK122301",
+          "depot_id": "DEP-020",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2017
+        },
+        {
+          "vin": "1FTYR2DG1HK115344",
+          "depot_id": "DEP-005",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2017
+        },
+        {
+          "vin": "1FBZX2ZM6HK105793",
+          "depot_id": "DEP-010",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2017
+        },
+        {
+          "vin": "1FBZX2ZM2GK131631",
+          "depot_id": "DEP-059",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2016
+        },
+        {
+          "vin": "1FTYR2CM8JK129464",
+          "depot_id": "DEP-059",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2018
+        },
+        {
+          "vin": "1FTBR2C88LK122560",
+          "depot_id": "DEP-010",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2020
+        },
+        {
+          "vin": "1FTBR2VG2LK115527",
+          "depot_id": "DEP-019",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2020
+        },
+        {
+          "vin": "1FTBF4XV0FK114090",
+          "depot_id": "DEP-053",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2015
+        },
+        {
+          "vin": "1FTYR2DG6HK128624",
+          "depot_id": "DEP-012",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2017
+        },
+        {
+          "vin": "1FTYR1ZM5GK135300",
+          "depot_id": "DEP-012",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2016
+        },
+        {
+          "vin": "1FTYR1ZM7GK119356",
+          "depot_id": "DEP-012",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2016
+        },
+        {
+          "vin": "1FDYR2CM6KK130030",
+          "depot_id": "DEP-012",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2019
+        },
+        {
+          "vin": "1FTBR2C89LK126052",
+          "depot_id": "DEP-012",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2020
+        },
+        {
+          "vin": "1FTBR2C89LK116962",
+          "depot_id": "DEP-012",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2020
+        },
+        {
+          "vin": "1FTSW2CM5FK139634",
+          "depot_id": "DEP-034",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2015
+        },
+        {
+          "vin": "1FTNE1ZMXFK137329",
+          "depot_id": "DEP-042",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2015
+        },
+        {
+          "vin": "1FTNE1CM4FK123032",
+          "depot_id": "DEP-034",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2015
+        }
+      ]
+    },
+    "25V010000": {
+      "campaign_id": "25V010000",
+      "component": "AIR BAGS:SIDE/WINDOW:CURTAIN:INFLATOR",
+      "park_it": false,
+      "consequence": "An inflator rupture may result in sharp metal fragments striking occupants, resulting in injury.",
+      "remedy": "Dealers will replace one or both side curtain air bags, as necessary, free of charge.  Owner notification letters were mailed February 13, 2025.  Owners may contact FCA customer service at 1-800-853-1403.  FCA's numbers for this recall are 05C, 09C, and 10C.",
+      "vehicles_exposed": 1681,
+      "by_depot": {
+        "DEP-030": 41,
+        "DEP-008": 38,
+        "DEP-011": 36,
+        "DEP-016": 35,
+        "DEP-025": 34,
+        "DEP-056": 34,
+        "DEP-053": 34,
+        "DEP-038": 34,
+        "DEP-035": 34,
+        "DEP-050": 33,
+        "DEP-013": 33,
+        "DEP-021": 33,
+        "DEP-059": 33,
+        "DEP-052": 32,
+        "DEP-006": 32,
+        "DEP-054": 32,
+        "DEP-015": 32,
+        "DEP-060": 31,
+        "DEP-007": 31,
+        "DEP-020": 31,
+        "DEP-031": 31,
+        "DEP-019": 30,
+        "DEP-017": 30,
+        "DEP-041": 30,
+        "DEP-045": 30,
+        "DEP-058": 29,
+        "DEP-001": 29,
+        "DEP-023": 29,
+        "DEP-048": 29,
+        "DEP-009": 28,
+        "DEP-039": 27,
+        "DEP-014": 27,
+        "DEP-002": 27,
+        "DEP-042": 27,
+        "DEP-028": 27,
+        "DEP-044": 27,
+        "DEP-051": 27,
+        "DEP-010": 26,
+        "DEP-057": 26,
+        "DEP-022": 26,
+        "DEP-046": 26,
+        "DEP-033": 26,
+        "DEP-003": 25,
+        "DEP-034": 25,
+        "DEP-004": 24,
+        "DEP-027": 23,
+        "DEP-032": 23,
+        "DEP-012": 23,
+        "DEP-018": 22,
+        "DEP-037": 22,
+        "DEP-043": 22,
+        "DEP-047": 22,
+        "DEP-049": 22,
+        "DEP-005": 22,
+        "DEP-055": 22,
+        "DEP-040": 21,
+        "DEP-029": 21,
+        "DEP-026": 21,
+        "DEP-036": 18,
+        "DEP-024": 16
+      },
+      "sample_vehicles": [
+        {
+          "vin": "3C6UR5FL2HG177945",
+          "depot_id": "DEP-031",
+          "make": "RAM",
+          "model": "2500",
+          "model_year": 2017
+        },
+        {
+          "vin": "3C6UR5DL7JG182194",
+          "depot_id": "DEP-028",
+          "make": "RAM",
+          "model": "2500",
+          "model_year": 2018
+        },
+        {
+          "vin": "3C6UR5FL6JG165657",
+          "depot_id": "DEP-047",
+          "make": "RAM",
+          "model": "2500",
+          "model_year": 2018
+        },
+        {
+          "vin": "3C6UR5FL3JG155362",
+          "depot_id": "DEP-047",
+          "make": "RAM",
+          "model": "2500",
+          "model_year": 2018
+        },
+        {
+          "vin": "3C6UR5DL7JG149261",
+          "depot_id": "DEP-048",
+          "make": "RAM",
+          "model": "2500",
+          "model_year": 2018
+        },
+        {
+          "vin": "3C6UR5DL8JG145199",
+          "depot_id": "DEP-047",
+          "make": "RAM",
+          "model": "2500",
+          "model_year": 2018
+        },
+        {
+          "vin": "3C6UR5CL2JG143076",
+          "depot_id": "DEP-048",
+          "make": "RAM",
+          "model": "2500",
+          "model_year": 2018
+        },
+        {
+          "vin": "1C6SRFJTXKN177954",
+          "depot_id": "DEP-031",
+          "make": "RAM",
+          "model": "1500",
+          "model_year": 2019
+        },
+        {
+          "vin": "1C6SRFJTXKN171250",
+          "depot_id": "DEP-028",
+          "make": "RAM",
+          "model": "1500",
+          "model_year": 2019
+        },
+        {
+          "vin": "1C6SRFJT6KN164229",
+          "depot_id": "DEP-031",
+          "make": "RAM",
+          "model": "1500",
+          "model_year": 2019
+        },
+        {
+          "vin": "1C6SRFJT2KN163580",
+          "depot_id": "DEP-031",
+          "make": "RAM",
+          "model": "1500",
+          "model_year": 2019
+        },
+        {
+          "vin": "1C6SRFJT5KN163041",
+          "depot_id": "DEP-003",
+          "make": "RAM",
+          "model": "1500",
+          "model_year": 2019
+        },
+        {
+          "vin": "1C6SRFFT0KN147936",
+          "depot_id": "DEP-031",
+          "make": "RAM",
+          "model": "1500",
+          "model_year": 2019
+        },
+        {
+          "vin": "3C6UR5FLXHG155434",
+          "depot_id": "DEP-001",
+          "make": "RAM",
+          "model": "2500",
+          "model_year": 2017
+        },
+        {
+          "vin": "3C6UR5CJ3HG149462",
+          "depot_id": "DEP-051",
+          "make": "RAM",
+          "model": "2500",
+          "model_year": 2017
+        },
+        {
+          "vin": "3C6UR5DL5JG179696",
+          "depot_id": "DEP-043",
+          "make": "RAM",
+          "model": "2500",
+          "model_year": 2018
+        },
+        {
+          "vin": "3C6UR5DL4JG151078",
+          "depot_id": "DEP-001",
+          "make": "RAM",
+          "model": "2500",
+          "model_year": 2018
+        },
+        {
+          "vin": "3C6UR5CJ7HG185302",
+          "depot_id": "DEP-030",
+          "make": "RAM",
+          "model": "2500",
+          "model_year": 2017
+        },
+        {
+          "vin": "3C6UR5FL5HG173596",
+          "depot_id": "DEP-009",
+          "make": "RAM",
+          "model": "2500",
+          "model_year": 2017
+        },
+        {
+          "vin": "3C6UR5FL0JG184074",
+          "depot_id": "DEP-008",
+          "make": "RAM",
+          "model": "2500",
+          "model_year": 2018
+        },
+        {
+          "vin": "3C6UR5DL0JG176687",
+          "depot_id": "DEP-050",
+          "make": "RAM",
+          "model": "2500",
+          "model_year": 2018
+        },
+        {
+          "vin": "3C6UR5CJ6JG176659",
+          "depot_id": "DEP-030",
+          "make": "RAM",
+          "model": "2500",
+          "model_year": 2018
+        },
+        {
+          "vin": "3C6UR5CL5JG174905",
+          "depot_id": "DEP-032",
+          "make": "RAM",
+          "model": "2500",
+          "model_year": 2018
+        },
+        {
+          "vin": "3C6UR5FL3JG171447",
+          "depot_id": "DEP-030",
+          "make": "RAM",
+          "model": "2500",
+          "model_year": 2018
+        },
+        {
+          "vin": "3C6UR5FL8JG165952",
+          "depot_id": "DEP-017",
+          "make": "RAM",
+          "model": "2500",
+          "model_year": 2018
+        }
+      ]
+    },
+    "24V852000": {
+      "campaign_id": "24V852000",
+      "component": "EQUIPMENT:OTHER:LABELS",
+      "park_it": false,
+      "consequence": "Without a label that shows the proper restraint usage guidelines, the occupants may have an increased risk of injury in the event of a crash.",
+      "remedy": "Ford will mail owners the warning labels, free of charge.  Owner notification letters were mailed December 19, 2024.  Owners may call Ford customer service at 1-866-436-7332.  Ford's number for this recall is 24C39.",
+      "vehicles_exposed": 1659,
+      "by_depot": {
+        "DEP-014": 39,
+        "DEP-006": 38,
+        "DEP-008": 37,
+        "DEP-030": 37,
+        "DEP-038": 36,
+        "DEP-018": 34,
+        "DEP-022": 34,
+        "DEP-046": 33,
+        "DEP-002": 33,
+        "DEP-015": 33,
+        "DEP-001": 32,
+        "DEP-059": 32,
+        "DEP-013": 32,
+        "DEP-005": 32,
+        "DEP-010": 31,
+        "DEP-021": 31,
+        "DEP-029": 31,
+        "DEP-042": 31,
+        "DEP-051": 30,
+        "DEP-043": 30,
+        "DEP-007": 30,
+        "DEP-033": 30,
+        "DEP-036": 30,
+        "DEP-041": 29,
+        "DEP-011": 29,
+        "DEP-052": 29,
+        "DEP-048": 29,
+        "DEP-028": 29,
+        "DEP-045": 28,
+        "DEP-020": 28,
+        "DEP-058": 28,
+        "DEP-040": 28,
+        "DEP-053": 27,
+        "DEP-009": 27,
+        "DEP-012": 27,
+        "DEP-019": 27,
+        "DEP-055": 26,
+        "DEP-050": 26,
+        "DEP-047": 26,
+        "DEP-025": 25,
+        "DEP-024": 25,
+        "DEP-044": 25,
+        "DEP-023": 25,
+        "DEP-060": 25,
+        "DEP-054": 25,
+        "DEP-049": 23,
+        "DEP-056": 23,
+        "DEP-057": 23,
+        "DEP-034": 22,
+        "DEP-004": 22,
+        "DEP-026": 22,
+        "DEP-027": 21,
+        "DEP-035": 20,
+        "DEP-039": 20,
+        "DEP-032": 20,
+        "DEP-017": 20,
+        "DEP-037": 20,
+        "DEP-003": 19,
+        "DEP-016": 19,
+        "DEP-031": 16
+      },
+      "sample_vehicles": [
+        {
+          "vin": "1FTFW3L87RK166235",
+          "depot_id": "DEP-053",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2024
+        },
+        {
+          "vin": "1FTFW1ED4MF184918",
+          "depot_id": "DEP-038",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2021
+        },
+        {
+          "vin": "1FTFW1ED9MF175177",
+          "depot_id": "DEP-053",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2021
+        },
+        {
+          "vin": "1FTFW1E80MF161834",
+          "depot_id": "DEP-038",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2021
+        },
+        {
+          "vin": "1FTEW1E49KF146688",
+          "depot_id": "DEP-030",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2019
+        },
+        {
+          "vin": "1FTEW1E54JF163244",
+          "depot_id": "DEP-053",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2018
+        },
+        {
+          "vin": "1FTFW1ED3NF182059",
+          "depot_id": "DEP-030",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2022
+        },
+        {
+          "vin": "1FTFW1ED8MF166132",
+          "depot_id": "DEP-056",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2021
+        },
+        {
+          "vin": "1FTEW1EP1JF179676",
+          "depot_id": "DEP-017",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2018
+        },
+        {
+          "vin": "1FTEW1EP5JF158572",
+          "depot_id": "DEP-017",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2018
+        },
+        {
+          "vin": "1FTFW1E84MF159777",
+          "depot_id": "DEP-011",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2021
+        },
+        {
+          "vin": "1FTFW1E80MF157072",
+          "depot_id": "DEP-014",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2021
+        },
+        {
+          "vin": "1FTFW1E87MF147767",
+          "depot_id": "DEP-011",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2021
+        },
+        {
+          "vin": "1FTEW1E43KF170954",
+          "depot_id": "DEP-011",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2019
+        },
+        {
+          "vin": "1FTEW1E49KF140177",
+          "depot_id": "DEP-014",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2019
+        },
+        {
+          "vin": "1FTEW1E56JF159261",
+          "depot_id": "DEP-014",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2018
+        },
+        {
+          "vin": "1FTFW3L84RK178665",
+          "depot_id": "DEP-045",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2024
+        },
+        {
+          "vin": "1FTFW1E82MF178702",
+          "depot_id": "DEP-010",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2021
+        },
+        {
+          "vin": "1FTFW1ED9MF150571",
+          "depot_id": "DEP-010",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2021
+        },
+        {
+          "vin": "1FTFW1ED3MF146340",
+          "depot_id": "DEP-048",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2021
+        },
+        {
+          "vin": "1FTEW1E44KF159641",
+          "depot_id": "DEP-010",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2019
+        },
+        {
+          "vin": "1FTEW1E44KF157887",
+          "depot_id": "DEP-048",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2019
+        },
+        {
+          "vin": "1FTEW1E52JF167776",
+          "depot_id": "DEP-048",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2018
+        },
+        {
+          "vin": "1FTFW3L81RK174654",
+          "depot_id": "DEP-050",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2024
+        },
+        {
+          "vin": "1FTFW3L8XRK146643",
+          "depot_id": "DEP-044",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2024
+        }
+      ]
+    },
+    "19V278000": {
+      "campaign_id": "19V278000",
+      "component": "EQUIPMENT:ELECTRICAL",
+      "park_it": false,
+      "consequence": "A damaged cable could cause a resistive short, increasing the risk of overheated or melted wiring, increasing the risk of a fire.",
+      "remedy": "Ford will notify owners, and dealers will disable the engine block heater from being used.  When replacement cables become available, a second notice will be mailed and dealers will replace the engine block heater cord, free of charge.  The recall began May 31, 2019.  Owners may contact Ford customer service at 1-866-436-7332.  Ford's number for this recall is 19S11.",
+      "vehicles_exposed": 1445,
+      "by_depot": {
+        "DEP-011": 39,
+        "DEP-030": 33,
+        "DEP-048": 33,
+        "DEP-012": 32,
+        "DEP-033": 31,
+        "DEP-056": 31,
+        "DEP-006": 31,
+        "DEP-049": 30,
+        "DEP-028": 30,
+        "DEP-045": 29,
+        "DEP-038": 29,
+        "DEP-024": 29,
+        "DEP-018": 29,
+        "DEP-027": 28,
+        "DEP-005": 28,
+        "DEP-014": 28,
+        "DEP-042": 28,
+        "DEP-044": 27,
+        "DEP-058": 27,
+        "DEP-026": 27,
+        "DEP-041": 26,
+        "DEP-035": 26,
+        "DEP-013": 25,
+        "DEP-016": 25,
+        "DEP-046": 25,
+        "DEP-007": 25,
+        "DEP-025": 25,
+        "DEP-015": 25,
+        "DEP-060": 24,
+        "DEP-017": 24,
+        "DEP-020": 24,
+        "DEP-029": 24,
+        "DEP-036": 23,
+        "DEP-008": 23,
+        "DEP-022": 23,
+        "DEP-019": 23,
+        "DEP-051": 23,
+        "DEP-050": 22,
+        "DEP-052": 22,
+        "DEP-040": 22,
+        "DEP-010": 22,
+        "DEP-021": 22,
+        "DEP-059": 22,
+        "DEP-023": 21,
+        "DEP-004": 20,
+        "DEP-054": 20,
+        "DEP-001": 19,
+        "DEP-031": 19,
+        "DEP-043": 19,
+        "DEP-047": 19,
+        "DEP-053": 19,
+        "DEP-057": 19,
+        "DEP-002": 18,
+        "DEP-037": 18,
+        "DEP-003": 18,
+        "DEP-032": 17,
+        "DEP-009": 16,
+        "DEP-039": 13,
+        "DEP-055": 13,
+        "DEP-034": 13
+      },
+      "sample_vehicles": [
+        {
+          "vin": "1FTEW1EP2JF169755",
+          "depot_id": "DEP-017",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2018
+        },
+        {
+          "vin": "1FTEW1EP5JF158572",
+          "depot_id": "DEP-017",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2018
+        },
+        {
+          "vin": "1FTEW1E59JF145581",
+          "depot_id": "DEP-005",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2018
+        },
+        {
+          "vin": "1FTEW1EG1FF153425",
+          "depot_id": "DEP-045",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2015
+        },
+        {
+          "vin": "1FTEW1EG1FF151481",
+          "depot_id": "DEP-059",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2015
+        },
+        {
+          "vin": "1FTEW1EG7GK165992",
+          "depot_id": "DEP-059",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2016
+        },
+        {
+          "vin": "1FTEW1EG4GK165013",
+          "depot_id": "DEP-059",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2016
+        },
+        {
+          "vin": "1FTEW1EG6GF152577",
+          "depot_id": "DEP-045",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2016
+        },
+        {
+          "vin": "1FTEW1EG0HF171465",
+          "depot_id": "DEP-017",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2017
+        },
+        {
+          "vin": "1FTEW1EGXHF148405",
+          "depot_id": "DEP-059",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2017
+        },
+        {
+          "vin": "1FTEW1EG7JF181710",
+          "depot_id": "DEP-041",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2018
+        },
+        {
+          "vin": "1FTEW1EG2JF179265",
+          "depot_id": "DEP-006",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2018
+        },
+        {
+          "vin": "1FTEW1EGXJF163217",
+          "depot_id": "DEP-006",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2018
+        },
+        {
+          "vin": "1FTEW1EG8GF180848",
+          "depot_id": "DEP-041",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2016
+        },
+        {
+          "vin": "1FTEW1EGXGF176042",
+          "depot_id": "DEP-006",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2016
+        },
+        {
+          "vin": "1FTEW1EG2HF172231",
+          "depot_id": "DEP-006",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2017
+        },
+        {
+          "vin": "1FTEW1EG4HF146178",
+          "depot_id": "DEP-006",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2017
+        },
+        {
+          "vin": "1FTEW1EP9JF153309",
+          "depot_id": "DEP-030",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2018
+        },
+        {
+          "vin": "1FTEW1EG8FF177057",
+          "depot_id": "DEP-031",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2015
+        },
+        {
+          "vin": "1FTEW1E59JF174904",
+          "depot_id": "DEP-056",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2018
+        },
+        {
+          "vin": "1FTEW1EGXJF167638",
+          "depot_id": "DEP-008",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2018
+        },
+        {
+          "vin": "1FTEW1EGXJF163413",
+          "depot_id": "DEP-007",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2018
+        },
+        {
+          "vin": "1FTEW1EPXJF163069",
+          "depot_id": "DEP-058",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2018
+        },
+        {
+          "vin": "1FTEW1EP3JF162202",
+          "depot_id": "DEP-008",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2018
+        },
+        {
+          "vin": "1FTEW1EG3FF170663",
+          "depot_id": "DEP-056",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2015
+        }
+      ]
+    },
+    "18V894000": {
+      "campaign_id": "18V894000",
+      "component": "ENGINE",
+      "park_it": false,
+      "consequence": "When the heater is plugged in, prolonged corrosion could cause a resistive short, increasing the risk of overheated or melted wiring which can increase the risk of a fire.",
+      "remedy": "Ford will notify owners, and dealers will disable the block heater cable, free of charge.  Once parts are available, Dealers will replace the engine block heater cable, free of charge.  The recall began June 3, 2019.  Owners may contact Ford customer service at 1-866-436-7332.  Ford's number for this recall is 18S45.     ",
+      "vehicles_exposed": 1445,
+      "by_depot": {
+        "DEP-011": 39,
+        "DEP-030": 33,
+        "DEP-048": 33,
+        "DEP-012": 32,
+        "DEP-033": 31,
+        "DEP-056": 31,
+        "DEP-006": 31,
+        "DEP-049": 30,
+        "DEP-028": 30,
+        "DEP-045": 29,
+        "DEP-038": 29,
+        "DEP-024": 29,
+        "DEP-018": 29,
+        "DEP-027": 28,
+        "DEP-005": 28,
+        "DEP-014": 28,
+        "DEP-042": 28,
+        "DEP-044": 27,
+        "DEP-058": 27,
+        "DEP-026": 27,
+        "DEP-041": 26,
+        "DEP-035": 26,
+        "DEP-013": 25,
+        "DEP-016": 25,
+        "DEP-046": 25,
+        "DEP-007": 25,
+        "DEP-025": 25,
+        "DEP-015": 25,
+        "DEP-060": 24,
+        "DEP-017": 24,
+        "DEP-020": 24,
+        "DEP-029": 24,
+        "DEP-036": 23,
+        "DEP-008": 23,
+        "DEP-022": 23,
+        "DEP-019": 23,
+        "DEP-051": 23,
+        "DEP-050": 22,
+        "DEP-052": 22,
+        "DEP-040": 22,
+        "DEP-010": 22,
+        "DEP-021": 22,
+        "DEP-059": 22,
+        "DEP-023": 21,
+        "DEP-004": 20,
+        "DEP-054": 20,
+        "DEP-001": 19,
+        "DEP-031": 19,
+        "DEP-043": 19,
+        "DEP-047": 19,
+        "DEP-053": 19,
+        "DEP-057": 19,
+        "DEP-002": 18,
+        "DEP-037": 18,
+        "DEP-003": 18,
+        "DEP-032": 17,
+        "DEP-009": 16,
+        "DEP-039": 13,
+        "DEP-055": 13,
+        "DEP-034": 13
+      },
+      "sample_vehicles": [
+        {
+          "vin": "1FTEW1EG3JF165231",
+          "depot_id": "DEP-060",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2018
+        },
+        {
+          "vin": "1FTEW1E56JF152228",
+          "depot_id": "DEP-060",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2018
+        },
+        {
+          "vin": "1FTEW1EG1FF147432",
+          "depot_id": "DEP-005",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2015
+        },
+        {
+          "vin": "1FTEW1EG3GF170860",
+          "depot_id": "DEP-005",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2016
+        },
+        {
+          "vin": "1FTEW1EGXGK153075",
+          "depot_id": "DEP-060",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2016
+        },
+        {
+          "vin": "1FTEW1EP2JF184725",
+          "depot_id": "DEP-045",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2018
+        },
+        {
+          "vin": "1FTEW1EP9JF176623",
+          "depot_id": "DEP-031",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2018
+        },
+        {
+          "vin": "1FTEW1EG5GF149055",
+          "depot_id": "DEP-026",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2016
+        },
+        {
+          "vin": "1FTEW1EG5GK148155",
+          "depot_id": "DEP-031",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2016
+        },
+        {
+          "vin": "1FTEW1EG9HF153630",
+          "depot_id": "DEP-026",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2017
+        },
+        {
+          "vin": "1FTEW1E42KF163848",
+          "depot_id": "DEP-028",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2019
+        },
+        {
+          "vin": "1FTEW1EP1JF157919",
+          "depot_id": "DEP-020",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2018
+        },
+        {
+          "vin": "1FTEW1EP7JF155849",
+          "depot_id": "DEP-020",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2018
+        },
+        {
+          "vin": "1FTEW1EG6JF153364",
+          "depot_id": "DEP-028",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2018
+        },
+        {
+          "vin": "1FTEW1EP3JF151832",
+          "depot_id": "DEP-033",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2018
+        },
+        {
+          "vin": "1FTEW1EG4GF142386",
+          "depot_id": "DEP-057",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2016
+        },
+        {
+          "vin": "1FTEW1EG1HF182121",
+          "depot_id": "DEP-033",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2017
+        },
+        {
+          "vin": "1FTEW1EG5HF181134",
+          "depot_id": "DEP-028",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2017
+        },
+        {
+          "vin": "1FTEW1E58JF184792",
+          "depot_id": "DEP-016",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2018
+        },
+        {
+          "vin": "1FTEW1E51JF143498",
+          "depot_id": "DEP-010",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2018
+        },
+        {
+          "vin": "1FTEW1E56JF141696",
+          "depot_id": "DEP-016",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2018
+        },
+        {
+          "vin": "1FTEW1EG1GK178138",
+          "depot_id": "DEP-016",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2016
+        },
+        {
+          "vin": "1FTEW1EP3JF171434",
+          "depot_id": "DEP-050",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2018
+        },
+        {
+          "vin": "1FTEW1EP1JF153708",
+          "depot_id": "DEP-001",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2018
+        },
+        {
+          "vin": "1FTEW1EGXJF153593",
+          "depot_id": "DEP-003",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2018
+        }
+      ]
+    },
+    "19V333000": {
+      "campaign_id": "19V333000",
+      "component": "SEATS",
+      "park_it": false,
+      "consequence": "In the event of a crash, if the seat back moves, the seat occupant has an increased risk of injury.",
+      "remedy": "New England has notified owners, directing them to contact Freedman for repairs to the foldaway seats, free of charge. The recall began May 27, 2019.  Owners may contact Freedman customer service at 1-800-443-4540 or New England at 1-800-886-9247. ",
+      "vehicles_exposed": 1413,
+      "by_depot": {
+        "DEP-035": 33,
+        "DEP-041": 33,
+        "DEP-002": 32,
+        "DEP-024": 32,
+        "DEP-049": 31,
+        "DEP-027": 30,
+        "DEP-005": 30,
+        "DEP-038": 29,
+        "DEP-036": 29,
+        "DEP-031": 29,
+        "DEP-023": 28,
+        "DEP-052": 28,
+        "DEP-020": 28,
+        "DEP-048": 28,
+        "DEP-015": 27,
+        "DEP-044": 27,
+        "DEP-046": 26,
+        "DEP-003": 26,
+        "DEP-006": 26,
+        "DEP-032": 26,
+        "DEP-040": 26,
+        "DEP-042": 26,
+        "DEP-053": 26,
+        "DEP-001": 25,
+        "DEP-021": 25,
+        "DEP-054": 25,
+        "DEP-056": 24,
+        "DEP-050": 24,
+        "DEP-043": 24,
+        "DEP-058": 24,
+        "DEP-013": 24,
+        "DEP-012": 24,
+        "DEP-010": 23,
+        "DEP-025": 23,
+        "DEP-028": 23,
+        "DEP-057": 23,
+        "DEP-022": 23,
+        "DEP-004": 23,
+        "DEP-019": 22,
+        "DEP-045": 22,
+        "DEP-030": 22,
+        "DEP-051": 22,
+        "DEP-059": 21,
+        "DEP-034": 20,
+        "DEP-009": 20,
+        "DEP-060": 20,
+        "DEP-014": 20,
+        "DEP-047": 19,
+        "DEP-008": 18,
+        "DEP-055": 18,
+        "DEP-026": 17,
+        "DEP-016": 17,
+        "DEP-011": 16,
+        "DEP-037": 16,
+        "DEP-007": 16,
+        "DEP-029": 16,
+        "DEP-039": 16,
+        "DEP-017": 15,
+        "DEP-018": 14,
+        "DEP-033": 13
+      },
+      "sample_vehicles": [
+        {
+          "vin": "1FTYR1ZM0GK120493",
+          "depot_id": "DEP-044",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2016
+        },
+        {
+          "vin": "1FTYR2DG3HK107343",
+          "depot_id": "DEP-038",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2017
+        },
+        {
+          "vin": "1FBZX2CM9FK136719",
+          "depot_id": "DEP-028",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2015
+        },
+        {
+          "vin": "1FBZX2YM7FK134699",
+          "depot_id": "DEP-012",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2015
+        },
+        {
+          "vin": "1FTNR2CM4FK124319",
+          "depot_id": "DEP-028",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2015
+        },
+        {
+          "vin": "1FTNR2CM0FK105525",
+          "depot_id": "DEP-044",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2015
+        },
+        {
+          "vin": "1FTYE2CG0HK132018",
+          "depot_id": "DEP-053",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2017
+        },
+        {
+          "vin": "1FBZX2YM5HK122294",
+          "depot_id": "DEP-052",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2017
+        },
+        {
+          "vin": "1FTNE1ZM6FK125436",
+          "depot_id": "DEP-052",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2015
+        },
+        {
+          "vin": "1FTNR2CG4FK121284",
+          "depot_id": "DEP-052",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2015
+        },
+        {
+          "vin": "1FTBF4XV5FK116272",
+          "depot_id": "DEP-053",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2015
+        },
+        {
+          "vin": "1FTYR2DG0HK123886",
+          "depot_id": "DEP-048",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2017
+        },
+        {
+          "vin": "1FTYR2DG0HK104156",
+          "depot_id": "DEP-024",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2017
+        },
+        {
+          "vin": "1FTNE1ZM2FK127328",
+          "depot_id": "DEP-048",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2015
+        },
+        {
+          "vin": "1FTSW2CM6FK105279",
+          "depot_id": "DEP-048",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2015
+        },
+        {
+          "vin": "1FBZX2ZM2FK100894",
+          "depot_id": "DEP-048",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2015
+        },
+        {
+          "vin": "1FTNR2CM1FK132300",
+          "depot_id": "DEP-059",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2015
+        },
+        {
+          "vin": "1FTNR2CG9FK121104",
+          "depot_id": "DEP-056",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2015
+        },
+        {
+          "vin": "1FTNE2CM0FK119498",
+          "depot_id": "DEP-006",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2015
+        },
+        {
+          "vin": "1FTNR2CG3FK118702",
+          "depot_id": "DEP-013",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2015
+        },
+        {
+          "vin": "1FTYE2CM5GK139647",
+          "depot_id": "DEP-016",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2016
+        },
+        {
+          "vin": "1FBZX2ZM1GK133094",
+          "depot_id": "DEP-032",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2016
+        },
+        {
+          "vin": "1FTYE2CM7GK100400",
+          "depot_id": "DEP-001",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2016
+        },
+        {
+          "vin": "1FTYE2CG0HK122637",
+          "depot_id": "DEP-057",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2017
+        },
+        {
+          "vin": "1FBZX2ZM7HK108475",
+          "depot_id": "DEP-057",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2017
+        }
+      ]
+    },
+    "25V315000": {
+      "campaign_id": "25V315000",
+      "component": "BACK OVER PREVENTION:SOFTWARE",
+      "park_it": false,
+      "consequence": "A frozen or missing rearview camera image can reduce the driver's view behind the vehicle, increasing the risk of a crash.",
+      "remedy": "The accessory protocol interface module (APIM) software will be updated by a dealer or through an over-the-air update, free of charge. This will be a phased campaign, with the remedy becoming available in different phases based on model and model years. Interim letters notifying owners of the safety risk were mailed on June 26, 2025. Additional letters will be mailed once the final remedy is available on each phase. Owner notification letters were sent on October 8, 2025. Owners may contact Ford customer service at 1-866-436-7332. Ford's number for this recall is 25S49.    ",
+      "vehicles_exposed": 1410,
+      "by_depot": {
+        "DEP-014": 37,
+        "DEP-059": 34,
+        "DEP-029": 33,
+        "DEP-009": 32,
+        "DEP-036": 31,
+        "DEP-051": 31,
+        "DEP-034": 29,
+        "DEP-018": 29,
+        "DEP-047": 29,
+        "DEP-010": 28,
+        "DEP-021": 28,
+        "DEP-002": 28,
+        "DEP-039": 28,
+        "DEP-016": 27,
+        "DEP-007": 27,
+        "DEP-008": 27,
+        "DEP-013": 27,
+        "DEP-045": 27,
+        "DEP-028": 26,
+        "DEP-046": 26,
+        "DEP-001": 25,
+        "DEP-015": 25,
+        "DEP-020": 25,
+        "DEP-055": 25,
+        "DEP-019": 24,
+        "DEP-042": 24,
+        "DEP-056": 24,
+        "DEP-022": 24,
+        "DEP-033": 24,
+        "DEP-038": 24,
+        "DEP-053": 23,
+        "DEP-005": 23,
+        "DEP-025": 23,
+        "DEP-041": 23,
+        "DEP-043": 23,
+        "DEP-052": 22,
+        "DEP-060": 22,
+        "DEP-027": 22,
+        "DEP-026": 21,
+        "DEP-054": 21,
+        "DEP-048": 21,
+        "DEP-030": 21,
+        "DEP-024": 21,
+        "DEP-032": 20,
+        "DEP-006": 20,
+        "DEP-012": 20,
+        "DEP-035": 19,
+        "DEP-044": 19,
+        "DEP-057": 19,
+        "DEP-031": 19,
+        "DEP-058": 18,
+        "DEP-023": 17,
+        "DEP-050": 17,
+        "DEP-003": 17,
+        "DEP-040": 17,
+        "DEP-049": 17,
+        "DEP-017": 16,
+        "DEP-037": 15,
+        "DEP-004": 14,
+        "DEP-011": 12
+      },
+      "sample_vehicles": [
+        {
+          "vin": "1FTFW1E84MF140808",
+          "depot_id": "DEP-020",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2021
+        },
+        {
+          "vin": "1FTFW1ED9NF184852",
+          "depot_id": "DEP-044",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2022
+        },
+        {
+          "vin": "1FTFW3L83RK147035",
+          "depot_id": "DEP-025",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2024
+        },
+        {
+          "vin": "1FBAX2CG5PK129078",
+          "depot_id": "DEP-046",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2023
+        },
+        {
+          "vin": "1FBAX9CG9PK115385",
+          "depot_id": "DEP-046",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2023
+        },
+        {
+          "vin": "1FTFW1E87MF162589",
+          "depot_id": "DEP-009",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2021
+        },
+        {
+          "vin": "1FTFW1E85MF158766",
+          "depot_id": "DEP-009",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2021
+        },
+        {
+          "vin": "1FTFW1ED4MF141390",
+          "depot_id": "DEP-039",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2021
+        },
+        {
+          "vin": "1FTFW1ED7NF155656",
+          "depot_id": "DEP-040",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2022
+        },
+        {
+          "vin": "1FTFW3L86RK159549",
+          "depot_id": "DEP-018",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2024
+        },
+        {
+          "vin": "1FTFW3L83RK157936",
+          "depot_id": "DEP-018",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2024
+        },
+        {
+          "vin": "1FTBR1VG9NK136324",
+          "depot_id": "DEP-040",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2022
+        },
+        {
+          "vin": "1FTBW2XG7PK121139",
+          "depot_id": "DEP-039",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2023
+        },
+        {
+          "vin": "1FTFW1E83MF176120",
+          "depot_id": "DEP-005",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2021
+        },
+        {
+          "vin": "1FTBW9CK2NK110131",
+          "depot_id": "DEP-028",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2022
+        },
+        {
+          "vin": "1FBAX9CG7PK126451",
+          "depot_id": "DEP-028",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2023
+        },
+        {
+          "vin": "1FTFW1E80MF157072",
+          "depot_id": "DEP-014",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2021
+        },
+        {
+          "vin": "1FTFW1ED2NF183428",
+          "depot_id": "DEP-014",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2022
+        },
+        {
+          "vin": "1FTFW1E82MF168381",
+          "depot_id": "DEP-011",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2021
+        },
+        {
+          "vin": "1FTFW1E84MF159777",
+          "depot_id": "DEP-011",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2021
+        },
+        {
+          "vin": "1FTBR1C82RK135596",
+          "depot_id": "DEP-058",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2024
+        },
+        {
+          "vin": "1FTBW9CK3NK124491",
+          "depot_id": "DEP-047",
+          "make": "FORD",
+          "model": "TRANSIT",
+          "model_year": 2022
+        },
+        {
+          "vin": "1FTFW1ED7MF166283",
+          "depot_id": "DEP-048",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2021
+        },
+        {
+          "vin": "1FTFW1E82MF160040",
+          "depot_id": "DEP-048",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2021
+        },
+        {
+          "vin": "1FTFW1ED5MF141558",
+          "depot_id": "DEP-013",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2021
+        }
+      ]
+    },
+    "21E027000": {
+      "campaign_id": "21E027000",
+      "component": "SUSPENSION:FRONT:CONTROL ARM:UPPER BALL JOINT",
+      "park_it": false,
+      "consequence": "An incorrectly installed ball joint may cause the ball joint stud to break, which can compromise front wheel control, increasing the risk of a crash.",
+      "remedy": "DRiV will notify owners, and dealers will inspect, and if necessary replace the ball joint, free of charge.  Owner letters were mailed May 5, 2021.  Owners may contact Tenneco Automotive customer service at 1-877-489-6659.",
+      "vehicles_exposed": 1384,
+      "by_depot": {
+        "DEP-011": 38,
+        "DEP-030": 32,
+        "DEP-033": 31,
+        "DEP-012": 31,
+        "DEP-048": 31,
+        "DEP-006": 29,
+        "DEP-049": 29,
+        "DEP-056": 29,
+        "DEP-028": 28,
+        "DEP-024": 28,
+        "DEP-042": 28,
+        "DEP-014": 28,
+        "DEP-045": 28,
+        "DEP-027": 27,
+        "DEP-018": 27,
+        "DEP-026": 27,
+        "DEP-038": 27,
+        "DEP-035": 26,
+        "DEP-013": 25,
+        "DEP-046": 25,
+        "DEP-007": 25,
+        "DEP-041": 25,
+        "DEP-016": 25,
+        "DEP-015": 25,
+        "DEP-058": 25,
+        "DEP-005": 24,
+        "DEP-017": 24,
+        "DEP-025": 24,
+        "DEP-029": 24,
+        "DEP-044": 24,
+        "DEP-060": 23,
+        "DEP-020": 23,
+        "DEP-059": 22,
+        "DEP-051": 22,
+        "DEP-050": 22,
+        "DEP-036": 22,
+        "DEP-019": 22,
+        "DEP-022": 22,
+        "DEP-052": 21,
+        "DEP-010": 21,
+        "DEP-023": 20,
+        "DEP-054": 20,
+        "DEP-008": 20,
+        "DEP-040": 20,
+        "DEP-031": 19,
+        "DEP-004": 19,
+        "DEP-021": 19,
+        "DEP-043": 19,
+        "DEP-057": 18,
+        "DEP-001": 18,
+        "DEP-037": 18,
+        "DEP-047": 17,
+        "DEP-032": 17,
+        "DEP-003": 17,
+        "DEP-002": 17,
+        "DEP-009": 16,
+        "DEP-053": 15,
+        "DEP-034": 13,
+        "DEP-055": 12,
+        "DEP-039": 11
+      },
+      "sample_vehicles": [
+        {
+          "vin": "1FTEW1EG2JF153460",
+          "depot_id": "DEP-027",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2018
+        },
+        {
+          "vin": "1FTEW1EG4FF170350",
+          "depot_id": "DEP-027",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2015
+        },
+        {
+          "vin": "1FTEW1E54JF184479",
+          "depot_id": "DEP-007",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2018
+        },
+        {
+          "vin": "1FTEW1EG3GF152259",
+          "depot_id": "DEP-007",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2016
+        },
+        {
+          "vin": "1FTEW1EG7GF145590",
+          "depot_id": "DEP-007",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2016
+        },
+        {
+          "vin": "1FTEW1EG5HF155410",
+          "depot_id": "DEP-057",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2017
+        },
+        {
+          "vin": "1FTEW1EP9JF183796",
+          "depot_id": "DEP-026",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2018
+        },
+        {
+          "vin": "1FTEW1EG1JF173778",
+          "depot_id": "DEP-033",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2018
+        },
+        {
+          "vin": "1FTEW1EG3HF164350",
+          "depot_id": "DEP-010",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2017
+        },
+        {
+          "vin": "1FTEW1E54JF183493",
+          "depot_id": "DEP-040",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2018
+        },
+        {
+          "vin": "1FTEW1EP6JF180290",
+          "depot_id": "DEP-024",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2018
+        },
+        {
+          "vin": "1FTEW1EG8JF170733",
+          "depot_id": "DEP-058",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2018
+        },
+        {
+          "vin": "1FTEW1EG3JF170039",
+          "depot_id": "DEP-015",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2018
+        },
+        {
+          "vin": "1FTEW1EP3JF143679",
+          "depot_id": "DEP-015",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2018
+        },
+        {
+          "vin": "1FTEW1EG9FF174426",
+          "depot_id": "DEP-024",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2015
+        },
+        {
+          "vin": "1FTEW1EG7GK146262",
+          "depot_id": "DEP-015",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2016
+        },
+        {
+          "vin": "1FTEW1EP2JF156827",
+          "depot_id": "DEP-044",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2018
+        },
+        {
+          "vin": "1FTEW1EG5FF181812",
+          "depot_id": "DEP-044",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2015
+        },
+        {
+          "vin": "1FTEW1EG1FF160102",
+          "depot_id": "DEP-016",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2015
+        },
+        {
+          "vin": "1FTEW1EG1FF146944",
+          "depot_id": "DEP-044",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2015
+        },
+        {
+          "vin": "1FTEW1EG2FF145852",
+          "depot_id": "DEP-036",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2015
+        },
+        {
+          "vin": "1FTEW1EG5GK168373",
+          "depot_id": "DEP-036",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2016
+        },
+        {
+          "vin": "1FTEW1EG5GK160290",
+          "depot_id": "DEP-044",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2016
+        },
+        {
+          "vin": "1FTEW1EGXGK155084",
+          "depot_id": "DEP-051",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2016
+        },
+        {
+          "vin": "1FTEW1EGXGK144599",
+          "depot_id": "DEP-051",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2016
+        }
+      ]
+    },
+    "18V568000": {
+      "campaign_id": "18V568000",
+      "component": "STRUCTURE:BODY:ROOF AND PILLARS",
+      "park_it": false,
+      "consequence": "A vehicle fire could result if materials ignite inside the vehicle.",
+      "remedy": "Ford will notify owners, and dealers will remove the B-pillar insulation material and wiring harness tape, and install heat resistant tape, free of charge. The recall began September 28, 2018.  Owners may contact Ford customer service at 1-866-436-7332.  Ford's number for this recall is 18S27.",
+      "vehicles_exposed": 1384,
+      "by_depot": {
+        "DEP-011": 38,
+        "DEP-030": 32,
+        "DEP-033": 31,
+        "DEP-012": 31,
+        "DEP-048": 31,
+        "DEP-006": 29,
+        "DEP-049": 29,
+        "DEP-056": 29,
+        "DEP-028": 28,
+        "DEP-024": 28,
+        "DEP-042": 28,
+        "DEP-014": 28,
+        "DEP-045": 28,
+        "DEP-027": 27,
+        "DEP-018": 27,
+        "DEP-026": 27,
+        "DEP-038": 27,
+        "DEP-035": 26,
+        "DEP-013": 25,
+        "DEP-046": 25,
+        "DEP-007": 25,
+        "DEP-041": 25,
+        "DEP-016": 25,
+        "DEP-015": 25,
+        "DEP-058": 25,
+        "DEP-005": 24,
+        "DEP-017": 24,
+        "DEP-025": 24,
+        "DEP-029": 24,
+        "DEP-044": 24,
+        "DEP-060": 23,
+        "DEP-020": 23,
+        "DEP-059": 22,
+        "DEP-051": 22,
+        "DEP-050": 22,
+        "DEP-036": 22,
+        "DEP-019": 22,
+        "DEP-022": 22,
+        "DEP-052": 21,
+        "DEP-010": 21,
+        "DEP-023": 20,
+        "DEP-054": 20,
+        "DEP-008": 20,
+        "DEP-040": 20,
+        "DEP-031": 19,
+        "DEP-004": 19,
+        "DEP-021": 19,
+        "DEP-043": 19,
+        "DEP-057": 18,
+        "DEP-001": 18,
+        "DEP-037": 18,
+        "DEP-047": 17,
+        "DEP-032": 17,
+        "DEP-003": 17,
+        "DEP-002": 17,
+        "DEP-009": 16,
+        "DEP-053": 15,
+        "DEP-034": 13,
+        "DEP-055": 12,
+        "DEP-039": 11
+      },
+      "sample_vehicles": [
+        {
+          "vin": "1FTEW1E50JF166402",
+          "depot_id": "DEP-014",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2018
+        },
+        {
+          "vin": "1FTEW1EG3JF159462",
+          "depot_id": "DEP-057",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2018
+        },
+        {
+          "vin": "1FTEW1EG5GK168373",
+          "depot_id": "DEP-036",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2016
+        },
+        {
+          "vin": "1FTEW1EG1GF146265",
+          "depot_id": "DEP-014",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2016
+        },
+        {
+          "vin": "1FTEW1EG1HF158384",
+          "depot_id": "DEP-032",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2017
+        },
+        {
+          "vin": "1FTEW1E5XJF168142",
+          "depot_id": "DEP-041",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2018
+        },
+        {
+          "vin": "1FTEW1EG7JF145189",
+          "depot_id": "DEP-056",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2018
+        },
+        {
+          "vin": "1FTEW1EG3JF144024",
+          "depot_id": "DEP-056",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2018
+        },
+        {
+          "vin": "1FTEW1EG6GK164736",
+          "depot_id": "DEP-056",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2016
+        },
+        {
+          "vin": "1FTEW1EG9GF147020",
+          "depot_id": "DEP-056",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2016
+        },
+        {
+          "vin": "1FTEW1EP0JF150685",
+          "depot_id": "DEP-029",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2018
+        },
+        {
+          "vin": "1FTEW1EP9JF143220",
+          "depot_id": "DEP-001",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2018
+        },
+        {
+          "vin": "1FTEW1EG3FF150977",
+          "depot_id": "DEP-034",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2015
+        },
+        {
+          "vin": "1FTEW1EG1GF176933",
+          "depot_id": "DEP-029",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2016
+        },
+        {
+          "vin": "1FTEW1EG1GF166385",
+          "depot_id": "DEP-029",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2016
+        },
+        {
+          "vin": "1FTEW1EG7GK142647",
+          "depot_id": "DEP-029",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2016
+        },
+        {
+          "vin": "1FTEW1EG4GF141528",
+          "depot_id": "DEP-002",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2016
+        },
+        {
+          "vin": "1FTEW1EG0HF144346",
+          "depot_id": "DEP-034",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2017
+        },
+        {
+          "vin": "1FTEW1EP8JF166116",
+          "depot_id": "DEP-009",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2018
+        },
+        {
+          "vin": "1FTEW1E56JF152228",
+          "depot_id": "DEP-060",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2018
+        },
+        {
+          "vin": "1FTEW1EG2FF143261",
+          "depot_id": "DEP-033",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2015
+        },
+        {
+          "vin": "1FTEW1EG1HF156196",
+          "depot_id": "DEP-060",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2017
+        },
+        {
+          "vin": "1FTEW1EG6JF166308",
+          "depot_id": "DEP-006",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2018
+        },
+        {
+          "vin": "1FTEW1E52JF145020",
+          "depot_id": "DEP-035",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2018
+        },
+        {
+          "vin": "1FTEW1EP7JF143913",
+          "depot_id": "DEP-035",
+          "make": "FORD",
+          "model": "F-150",
+          "model_year": 2018
+        }
+      ]
+    }
+  },
+  "signals": {
+    "total": 48,
+    "live": 9,
+    "fleet_relevant": 2,
+    "as_of_month": "2026-08-01",
+    "signals": [
+      {
+        "signal_id": "RAM|2500|SERVICE BRAKES:2025-12",
+        "series_key": "RAM|2500|SERVICE BRAKES",
+        "make": "RAM",
+        "model": "2500",
+        "component": "SERVICE BRAKES",
+        "run_start": "2025-12-01",
+        "run_end": "2026-01-01",
+        "run_len": 2,
+        "max_z": "5.62",
+        "complaint_count": 64,
+        "harm_share": "0.047",
+        "fleet_vehicles": 1256,
+        "is_live": false,
+        "status": "OPEN"
+      },
+      {
+        "signal_id": "TOYOTA|TUNDRA|VEHICLE SPEED CONTROL:2025-11",
+        "series_key": "TOYOTA|TUNDRA|VEHICLE SPEED CONTROL",
+        "make": "TOYOTA",
+        "model": "TUNDRA",
+        "component": "VEHICLE SPEED CONTROL",
+        "run_start": "2025-11-01",
+        "run_end": "2025-12-01",
+        "run_len": 2,
+        "max_z": "4.38",
+        "complaint_count": 33,
+        "harm_share": "0.030",
+        "fleet_vehicles": 232,
+        "is_live": false,
+        "status": "OPEN"
+      },
+      {
+        "signal_id": "KIA|CARNIVAL HYBRID|ELECTRICAL SYSTEM:2026-07",
+        "series_key": "KIA|CARNIVAL HYBRID|ELECTRICAL SYSTEM",
+        "make": "KIA",
+        "model": "CARNIVAL HYBRID",
+        "component": "ELECTRICAL SYSTEM",
+        "run_start": "2026-07-01",
+        "run_end": "2026-08-01",
+        "run_len": 2,
+        "max_z": "8.66",
+        "complaint_count": 12,
+        "harm_share": "0.083",
+        "fleet_vehicles": 0,
+        "is_live": true,
+        "status": "OPEN"
+      },
+      {
+        "signal_id": "TESLA|MODEL 3|SUSPENSION:2026-07",
+        "series_key": "TESLA|MODEL 3|SUSPENSION",
+        "make": "TESLA",
+        "model": "MODEL 3",
+        "component": "SUSPENSION",
+        "run_start": "2026-07-01",
+        "run_end": "2026-08-01",
+        "run_len": 2,
+        "max_z": "6.93",
+        "complaint_count": 38,
+        "harm_share": "0.000",
+        "fleet_vehicles": 0,
+        "is_live": true,
+        "status": "OPEN"
+      },
+      {
+        "signal_id": "JEEP|GRAND CHEROKEE L|ENGINE:2026-07",
+        "series_key": "JEEP|GRAND CHEROKEE L|ENGINE",
+        "make": "JEEP",
+        "model": "GRAND CHEROKEE L",
+        "component": "ENGINE",
+        "run_start": "2026-07-01",
+        "run_end": "2026-08-01",
+        "run_len": 2,
+        "max_z": "5.86",
+        "complaint_count": 17,
+        "harm_share": "0.000",
+        "fleet_vehicles": 0,
+        "is_live": true,
+        "status": "OPEN"
+      },
+      {
+        "signal_id": "TOYOTA|GRAND HIGHLANDER|FUEL/PROPULSION SYSTEM:2026-07",
+        "series_key": "TOYOTA|GRAND HIGHLANDER|FUEL/PROPULSION SYSTEM",
+        "make": "TOYOTA",
+        "model": "GRAND HIGHLANDER",
+        "component": "FUEL/PROPULSION SYSTEM",
+        "run_start": "2026-07-01",
+        "run_end": "2026-08-01",
+        "run_len": 2,
+        "max_z": "5.46",
+        "complaint_count": 11,
+        "harm_share": "0.000",
+        "fleet_vehicles": 0,
+        "is_live": true,
+        "status": "OPEN"
+      },
+      {
+        "signal_id": "FORD|EXPEDITION|STRUCTURE:2026-06",
+        "series_key": "FORD|EXPEDITION|STRUCTURE",
+        "make": "FORD",
+        "model": "EXPEDITION",
+        "component": "STRUCTURE",
+        "run_start": "2026-06-01",
+        "run_end": "2026-07-01",
+        "run_len": 2,
+        "max_z": "6.67",
+        "complaint_count": 15,
+        "harm_share": "0.133",
+        "fleet_vehicles": 0,
+        "is_live": true,
+        "status": "OPEN"
+      },
+      {
+        "signal_id": "FORD|EXPEDITION|SEAT BELTS:2026-06",
+        "series_key": "FORD|EXPEDITION|SEAT BELTS",
+        "make": "FORD",
+        "model": "EXPEDITION",
+        "component": "SEAT BELTS",
+        "run_start": "2026-06-01",
+        "run_end": "2026-07-01",
+        "run_len": 2,
+        "max_z": "6.67",
+        "complaint_count": 34,
+        "harm_share": "0.235",
+        "fleet_vehicles": 0,
+        "is_live": true,
+        "status": "OPEN"
+      },
+      {
+        "signal_id": "HONDA|ODYSSEY|UNKNOWN OR OTHER:2026-06",
+        "series_key": "HONDA|ODYSSEY|UNKNOWN OR OTHER",
+        "make": "HONDA",
+        "model": "ODYSSEY",
+        "component": "UNKNOWN OR OTHER",
+        "run_start": "2026-06-01",
+        "run_end": "2026-07-01",
+        "run_len": 2,
+        "max_z": "5.06",
+        "complaint_count": 67,
+        "harm_share": "0.060",
+        "fleet_vehicles": 0,
+        "is_live": true,
+        "status": "OPEN"
+      },
+      {
+        "signal_id": "HONDA|ODYSSEY|ENGINE:2026-06",
+        "series_key": "HONDA|ODYSSEY|ENGINE",
+        "make": "HONDA",
+        "model": "ODYSSEY",
+        "component": "ENGINE",
+        "run_start": "2026-06-01",
+        "run_end": "2026-07-01",
+        "run_len": 2,
+        "max_z": "4.95",
+        "complaint_count": 110,
+        "harm_share": "0.000",
+        "fleet_vehicles": 0,
+        "is_live": true,
+        "status": "OPEN"
+      },
+      {
+        "signal_id": "TESLA|MODEL Y|BACK OVER PREVENTION:2026-06",
+        "series_key": "TESLA|MODEL Y|BACK OVER PREVENTION",
+        "make": "TESLA",
+        "model": "MODEL Y",
+        "component": "BACK OVER PREVENTION",
+        "run_start": "2026-06-01",
+        "run_end": "2026-07-01",
+        "run_len": 2,
+        "max_z": "4.08",
+        "complaint_count": 18,
+        "harm_share": "0.778",
+        "fleet_vehicles": 0,
+        "is_live": true,
+        "status": "OPEN"
+      },
+      {
+        "signal_id": "TESLA|CYBERTRUCK|ELECTRICAL SYSTEM:2026-03",
+        "series_key": "TESLA|CYBERTRUCK|ELECTRICAL SYSTEM",
+        "make": "TESLA",
+        "model": "CYBERTRUCK",
+        "component": "ELECTRICAL SYSTEM",
+        "run_start": "2026-03-01",
+        "run_end": "2026-05-01",
+        "run_len": 3,
+        "max_z": "7.64",
+        "complaint_count": 34,
+        "harm_share": "0.000",
+        "fleet_vehicles": 0,
+        "is_live": false,
+        "status": "OPEN"
+      },
+      {
+        "signal_id": "NISSAN|ROGUE|VISIBILITY:2026-04",
+        "series_key": "NISSAN|ROGUE|VISIBILITY",
+        "make": "NISSAN",
+        "model": "ROGUE",
+        "component": "VISIBILITY",
+        "run_start": "2026-04-01",
+        "run_end": "2026-05-01",
+        "run_len": 2,
+        "max_z": "6.39",
+        "complaint_count": 22,
+        "harm_share": "0.000",
+        "fleet_vehicles": 0,
+        "is_live": false,
+        "status": "OPEN"
+      },
+      {
+        "signal_id": "HYUNDAI|PALISADE|AIR BAGS:2026-02",
+        "series_key": "HYUNDAI|PALISADE|AIR BAGS",
+        "make": "HYUNDAI",
+        "model": "PALISADE",
+        "component": "AIR BAGS",
+        "run_start": "2026-02-01",
+        "run_end": "2026-04-01",
+        "run_len": 3,
+        "max_z": "27.43",
+        "complaint_count": 70,
+        "harm_share": "0.029",
+        "fleet_vehicles": 0,
+        "is_live": false,
+        "status": "OPEN"
+      },
+      {
+        "signal_id": "HYUNDAI|SANTA FE|TIRES:2026-03",
+        "series_key": "HYUNDAI|SANTA FE|TIRES",
+        "make": "HYUNDAI",
+        "model": "SANTA FE",
+        "component": "TIRES",
+        "run_start": "2026-03-01",
+        "run_end": "2026-04-01",
+        "run_len": 2,
+        "max_z": "6.30",
+        "complaint_count": 12,
+        "harm_share": "0.000",
+        "fleet_vehicles": 0,
+        "is_live": false,
+        "status": "OPEN"
+      },
+      {
+        "signal_id": "HYUNDAI|TUCSON|SERVICE BRAKES:2026-03",
+        "series_key": "HYUNDAI|TUCSON|SERVICE BRAKES",
+        "make": "HYUNDAI",
+        "model": "TUCSON",
+        "component": "SERVICE BRAKES",
+        "run_start": "2026-03-01",
+        "run_end": "2026-04-01",
+        "run_len": 2,
+        "max_z": "4.42",
+        "complaint_count": 24,
+        "harm_share": "0.125",
+        "fleet_vehicles": 0,
+        "is_live": false,
+        "status": "OPEN"
+      },
+      {
+        "signal_id": "MAZDA|CX-90|STEERING:2026-01",
+        "series_key": "MAZDA|CX-90|STEERING",
+        "make": "MAZDA",
+        "model": "CX-90",
+        "component": "STEERING",
+        "run_start": "2026-01-01",
+        "run_end": "2026-03-01",
+        "run_len": 3,
+        "max_z": "9.90",
+        "complaint_count": 60,
+        "harm_share": "0.000",
+        "fleet_vehicles": 0,
+        "is_live": false,
+        "status": "OPEN"
+      },
+      {
+        "signal_id": "CHEVROLET|SILVERADO 1500|FORWARD COLLISION AVOIDANCE:2026-02",
+        "series_key": "CHEVROLET|SILVERADO 1500|FORWARD COLLISION AVOIDANCE",
+        "make": "CHEVROLET",
+        "model": "SILVERADO 1500",
+        "component": "FORWARD COLLISION AVOIDANCE",
+        "run_start": "2026-02-01",
+        "run_end": "2026-03-01",
+        "run_len": 2,
+        "max_z": "5.37",
+        "complaint_count": 22,
+        "harm_share": "0.000",
+        "fleet_vehicles": 0,
+        "is_live": false,
+        "status": "OPEN"
+      },
+      {
+        "signal_id": "KIA|EV6|UNKNOWN OR OTHER:2026-02",
+        "series_key": "KIA|EV6|UNKNOWN OR OTHER",
+        "make": "KIA",
+        "model": "EV6",
+        "component": "UNKNOWN OR OTHER",
+        "run_start": "2026-02-01",
+        "run_end": "2026-03-01",
+        "run_len": 2,
+        "max_z": "5.19",
+        "complaint_count": 16,
+        "harm_share": "0.000",
+        "fleet_vehicles": 0,
+        "is_live": false,
+        "status": "OPEN"
+      },
+      {
+        "signal_id": "TOYOTA|RAV4 PRIME|ELECTRICAL SYSTEM:2026-01",
+        "series_key": "TOYOTA|RAV4 PRIME|ELECTRICAL SYSTEM",
+        "make": "TOYOTA",
+        "model": "RAV4 PRIME",
+        "component": "ELECTRICAL SYSTEM",
+        "run_start": "2026-01-01",
+        "run_end": "2026-03-01",
+        "run_len": 3,
+        "max_z": "4.65",
+        "complaint_count": 32,
+        "harm_share": "0.000",
+        "fleet_vehicles": 0,
+        "is_live": false,
+        "status": "OPEN"
+      },
+      {
+        "signal_id": "LAND ROVER|DEFENDER|ELECTRICAL SYSTEM:2026-01",
+        "series_key": "LAND ROVER|DEFENDER|ELECTRICAL SYSTEM",
+        "make": "LAND ROVER",
+        "model": "DEFENDER",
+        "component": "ELECTRICAL SYSTEM",
+        "run_start": "2026-01-01",
+        "run_end": "2026-02-01",
+        "run_len": 2,
+        "max_z": "53.22",
+        "complaint_count": 46,
+        "harm_share": "0.022",
+        "fleet_vehicles": 0,
+        "is_live": false,
+        "status": "OPEN"
+      },
+      {
+        "signal_id": "LAND ROVER|DEFENDER|ENGINE:2026-01",
+        "series_key": "LAND ROVER|DEFENDER|ENGINE",
+        "make": "LAND ROVER",
+        "model": "DEFENDER",
+        "component": "ENGINE",
+        "run_start": "2026-01-01",
+        "run_end": "2026-02-01",
+        "run_len": 2,
+        "max_z": "14.17",
+        "complaint_count": 10,
+        "harm_share": "0.000",
+        "fleet_vehicles": 0,
+        "is_live": false,
+        "status": "OPEN"
+      },
+      {
+        "signal_id": "HYUNDAI|IONIQ 5|ELECTRICAL SYSTEM:2026-01",
+        "series_key": "HYUNDAI|IONIQ 5|ELECTRICAL SYSTEM",
+        "make": "HYUNDAI",
+        "model": "IONIQ 5",
+        "component": "ELECTRICAL SYSTEM",
+        "run_start": "2026-01-01",
+        "run_end": "2026-02-01",
+        "run_len": 2,
+        "max_z": "9.07",
+        "complaint_count": 277,
+        "harm_share": "0.004",
+        "fleet_vehicles": 0,
+        "is_live": false,
+        "status": "OPEN"
+      },
+      {
+        "signal_id": "LAND ROVER|RANGE ROVER SPORT|ELECTRICAL SYSTEM:2026-01",
+        "series_key": "LAND ROVER|RANGE ROVER SPORT|ELECTRICAL SYSTEM",
+        "make": "LAND ROVER",
+        "model": "RANGE ROVER SPORT",
+        "component": "ELECTRICAL SYSTEM",
+        "run_start": "2026-01-01",
+        "run_end": "2026-02-01",
+        "run_len": 2,
+        "max_z": "8.10",
+        "complaint_count": 17,
+        "harm_share": "0.059",
+        "fleet_vehicles": 0,
+        "is_live": false,
+        "status": "OPEN"
+      },
+      {
+        "signal_id": "HYUNDAI|IONIQ 5|UNKNOWN OR OTHER:2026-01",
+        "series_key": "HYUNDAI|IONIQ 5|UNKNOWN OR OTHER",
+        "make": "HYUNDAI",
+        "model": "IONIQ 5",
+        "component": "UNKNOWN OR OTHER",
+        "run_start": "2026-01-01",
+        "run_end": "2026-02-01",
+        "run_len": 2,
+        "max_z": "7.34",
+        "complaint_count": 28,
+        "harm_share": "0.000",
+        "fleet_vehicles": 0,
+        "is_live": false,
+        "status": "OPEN"
+      },
+      {
+        "signal_id": "RAM|PROMASTER|ENGINE AND ENGINE COOLING:2026-01",
+        "series_key": "RAM|PROMASTER|ENGINE AND ENGINE COOLING",
+        "make": "RAM",
+        "model": "PROMASTER",
+        "component": "ENGINE AND ENGINE COOLING",
+        "run_start": "2026-01-01",
+        "run_end": "2026-02-01",
+        "run_len": 2,
+        "max_z": "7.00",
+        "complaint_count": 17,
+        "harm_share": "0.059",
+        "fleet_vehicles": 0,
+        "is_live": false,
+        "status": "OPEN"
+      },
+      {
+        "signal_id": "KIA|EV6|ELECTRICAL SYSTEM:2025-12",
+        "series_key": "KIA|EV6|ELECTRICAL SYSTEM",
+        "make": "KIA",
+        "model": "EV6",
+        "component": "ELECTRICAL SYSTEM",
+        "run_start": "2025-12-01",
+        "run_end": "2026-02-01",
+        "run_len": 3,
+        "max_z": "5.71",
+        "complaint_count": 117,
+        "harm_share": "0.000",
+        "fleet_vehicles": 0,
+        "is_live": false,
+        "status": "OPEN"
+      },
+      {
+        "signal_id": "HYUNDAI|IONIQ 5|POWER TRAIN:2025-12",
+        "series_key": "HYUNDAI|IONIQ 5|POWER TRAIN",
+        "make": "HYUNDAI",
+        "model": "IONIQ 5",
+        "component": "POWER TRAIN",
+        "run_start": "2025-12-01",
+        "run_end": "2026-02-01",
+        "run_len": 3,
+        "max_z": "5.58",
+        "complaint_count": 84,
+        "harm_share": "0.012",
+        "fleet_vehicles": 0,
+        "is_live": false,
+        "status": "OPEN"
+      },
+      {
+        "signal_id": "HYUNDAI|IONIQ 5|FUEL/PROPULSION SYSTEM:2026-01",
+        "series_key": "HYUNDAI|IONIQ 5|FUEL/PROPULSION SYSTEM",
+        "make": "HYUNDAI",
+        "model": "IONIQ 5",
+        "component": "FUEL/PROPULSION SYSTEM",
+        "run_start": "2026-01-01",
+        "run_end": "2026-02-01",
+        "run_len": 2,
+        "max_z": "5.51",
+        "complaint_count": 76,
+        "harm_share": "0.000",
+        "fleet_vehicles": 0,
+        "is_live": false,
+        "status": "OPEN"
+      },
+      {
+        "signal_id": "HYUNDAI|SONATA|FUEL SYSTEM, GASOLINE:2026-01",
+        "series_key": "HYUNDAI|SONATA|FUEL SYSTEM, GASOLINE",
+        "make": "HYUNDAI",
+        "model": "SONATA",
+        "component": "FUEL SYSTEM, GASOLINE",
+        "run_start": "2026-01-01",
+        "run_end": "2026-02-01",
+        "run_len": 2,
+        "max_z": "5.42",
+        "complaint_count": 13,
+        "harm_share": "0.000",
+        "fleet_vehicles": 0,
+        "is_live": false,
+        "status": "OPEN"
+      },
+      {
+        "signal_id": "RAM|3500|ELECTRICAL SYSTEM:2026-01",
+        "series_key": "RAM|3500|ELECTRICAL SYSTEM",
+        "make": "RAM",
+        "model": "3500",
+        "component": "ELECTRICAL SYSTEM",
+        "run_start": "2026-01-01",
+        "run_end": "2026-02-01",
+        "run_len": 2,
+        "max_z": "5.11",
+        "complaint_count": 21,
+        "harm_share": "0.000",
+        "fleet_vehicles": 0,
+        "is_live": false,
+        "status": "OPEN"
+      },
+      {
+        "signal_id": "KIA|EV6|FUEL/PROPULSION SYSTEM:2025-12",
+        "series_key": "KIA|EV6|FUEL/PROPULSION SYSTEM",
+        "make": "KIA",
+        "model": "EV6",
+        "component": "FUEL/PROPULSION SYSTEM",
+        "run_start": "2025-12-01",
+        "run_end": "2026-01-01",
+        "run_len": 2,
+        "max_z": "10.92",
+        "complaint_count": 23,
+        "harm_share": "0.043",
+        "fleet_vehicles": 0,
+        "is_live": false,
+        "status": "OPEN"
+      },
+      {
+        "signal_id": "NISSAN|ROGUE|VISIBILITY/WIPER:2025-10",
+        "series_key": "NISSAN|ROGUE|VISIBILITY/WIPER",
+        "make": "NISSAN",
+        "model": "ROGUE",
+        "component": "VISIBILITY/WIPER",
+        "run_start": "2025-10-01",
+        "run_end": "2026-01-01",
+        "run_len": 4,
+        "max_z": "5.29",
+        "complaint_count": 61,
+        "harm_share": "0.000",
+        "fleet_vehicles": 0,
+        "is_live": false,
+        "status": "OPEN"
+      },
+      {
+        "signal_id": "KIA|EV6|POWER TRAIN:2025-12",
+        "series_key": "KIA|EV6|POWER TRAIN",
+        "make": "KIA",
+        "model": "EV6",
+        "component": "POWER TRAIN",
+        "run_start": "2025-12-01",
+        "run_end": "2026-01-01",
+        "run_len": 2,
+        "max_z": "5.10",
+        "complaint_count": 20,
+        "harm_share": "0.000",
+        "fleet_vehicles": 0,
+        "is_live": false,
+        "status": "OPEN"
+      },
+      {
+        "signal_id": "LAND ROVER|RANGE ROVER SPORT|STEERING:2025-12",
+        "series_key": "LAND ROVER|RANGE ROVER SPORT|STEERING",
+        "make": "LAND ROVER",
+        "model": "RANGE ROVER SPORT",
+        "component": "STEERING",
+        "run_start": "2025-12-01",
+        "run_end": "2026-01-01",
+        "run_len": 2,
+        "max_z": "4.28",
+        "complaint_count": 20,
+        "harm_share": "0.000",
+        "fleet_vehicles": 0,
+        "is_live": false,
+        "status": "OPEN"
+      },
+      {
+        "signal_id": "BMW|330I|ELECTRICAL SYSTEM:2025-11",
+        "series_key": "BMW|330I|ELECTRICAL SYSTEM",
+        "make": "BMW",
+        "model": "330I",
+        "component": "ELECTRICAL SYSTEM",
+        "run_start": "2025-11-01",
+        "run_end": "2025-12-01",
+        "run_len": 2,
+        "max_z": "10.29",
+        "complaint_count": 13,
+        "harm_share": "0.154",
+        "fleet_vehicles": 0,
+        "is_live": false,
+        "status": "OPEN"
+      },
+      {
+        "signal_id": "JEEP|WRANGLER 4XE|ELECTRICAL SYSTEM:2025-11",
+        "series_key": "JEEP|WRANGLER 4XE|ELECTRICAL SYSTEM",
+        "make": "JEEP",
+        "model": "WRANGLER 4XE",
+        "component": "ELECTRICAL SYSTEM",
+        "run_start": "2025-11-01",
+        "run_end": "2025-12-01",
+        "run_len": 2,
+        "max_z": "8.17",
+        "complaint_count": 60,
+        "harm_share": "0.000",
+        "fleet_vehicles": 0,
+        "is_live": false,
+        "status": "OPEN"
+      },
+      {
+        "signal_id": "JEEP|WRANGLER 4XE|ENGINE:2025-11",
+        "series_key": "JEEP|WRANGLER 4XE|ENGINE",
+        "make": "JEEP",
+        "model": "WRANGLER 4XE",
+        "component": "ENGINE",
+        "run_start": "2025-11-01",
+        "run_end": "2025-12-01",
+        "run_len": 2,
+        "max_z": "8.14",
+        "complaint_count": 44,
+        "harm_share": "0.000",
+        "fleet_vehicles": 0,
+        "is_live": false,
+        "status": "OPEN"
+      },
+      {
+        "signal_id": "HONDA|ACCORD|STEERING:2025-11",
+        "series_key": "HONDA|ACCORD|STEERING",
+        "make": "HONDA",
+        "model": "ACCORD",
+        "component": "STEERING",
+        "run_start": "2025-11-01",
+        "run_end": "2025-12-01",
+        "run_len": 2,
+        "max_z": "3.31",
+        "complaint_count": 35,
+        "harm_share": "0.000",
+        "fleet_vehicles": 0,
+        "is_live": false,
+        "status": "OPEN"
+      },
+      {
+        "signal_id": "HYUNDAI|TUCSON|FORWARD COLLISION AVOIDANCE:2025-10",
+        "series_key": "HYUNDAI|TUCSON|FORWARD COLLISION AVOIDANCE",
+        "make": "HYUNDAI",
+        "model": "TUCSON",
+        "component": "FORWARD COLLISION AVOIDANCE",
+        "run_start": "2025-10-01",
+        "run_end": "2025-11-01",
+        "run_len": 2,
+        "max_z": "4.93",
+        "complaint_count": 38,
+        "harm_share": "0.211",
+        "fleet_vehicles": 0,
+        "is_live": false,
+        "status": "OPEN"
+      },
+      {
+        "signal_id": "FORD|EDGE|SERVICE BRAKES, HYDRAULIC:2025-09",
+        "series_key": "FORD|EDGE|SERVICE BRAKES, HYDRAULIC",
+        "make": "FORD",
+        "model": "EDGE",
+        "component": "SERVICE BRAKES, HYDRAULIC",
+        "run_start": "2025-09-01",
+        "run_end": "2025-10-01",
+        "run_len": 2,
+        "max_z": "8.28",
+        "complaint_count": 38,
+        "harm_share": "0.079",
+        "fleet_vehicles": 0,
+        "is_live": false,
+        "status": "OPEN"
+      },
+      {
+        "signal_id": "HONDA|ODYSSEY|FORWARD COLLISION AVOIDANCE:2025-09",
+        "series_key": "HONDA|ODYSSEY|FORWARD COLLISION AVOIDANCE",
+        "make": "HONDA",
+        "model": "ODYSSEY",
+        "component": "FORWARD COLLISION AVOIDANCE",
+        "run_start": "2025-09-01",
+        "run_end": "2025-10-01",
+        "run_len": 2,
+        "max_z": "5.58",
+        "complaint_count": 117,
+        "harm_share": "0.034",
+        "fleet_vehicles": 0,
+        "is_live": false,
+        "status": "OPEN"
+      },
+      {
+        "signal_id": "NISSAN|ROGUE|ENGINE AND ENGINE COOLING:2025-07",
+        "series_key": "NISSAN|ROGUE|ENGINE AND ENGINE COOLING",
+        "make": "NISSAN",
+        "model": "ROGUE",
+        "component": "ENGINE AND ENGINE COOLING",
+        "run_start": "2025-07-01",
+        "run_end": "2025-09-01",
+        "run_len": 3,
+        "max_z": "11.16",
+        "complaint_count": 63,
+        "harm_share": "0.032",
+        "fleet_vehicles": 0,
+        "is_live": false,
+        "status": "OPEN"
+      },
+      {
+        "signal_id": "FORD|BRONCO SPORT|FUEL SYSTEM, GASOLINE:2025-08",
+        "series_key": "FORD|BRONCO SPORT|FUEL SYSTEM, GASOLINE",
+        "make": "FORD",
+        "model": "BRONCO SPORT",
+        "component": "FUEL SYSTEM, GASOLINE",
+        "run_start": "2025-08-01",
+        "run_end": "2025-09-01",
+        "run_len": 2,
+        "max_z": "6.09",
+        "complaint_count": 16,
+        "harm_share": "0.063",
+        "fleet_vehicles": 0,
+        "is_live": false,
+        "status": "OPEN"
+      },
+      {
+        "signal_id": "FORD|BRONCO SPORT|FUEL/PROPULSION SYSTEM:2025-08",
+        "series_key": "FORD|BRONCO SPORT|FUEL/PROPULSION SYSTEM",
+        "make": "FORD",
+        "model": "BRONCO SPORT",
+        "component": "FUEL/PROPULSION SYSTEM",
+        "run_start": "2025-08-01",
+        "run_end": "2025-09-01",
+        "run_len": 2,
+        "max_z": "4.50",
+        "complaint_count": 12,
+        "harm_share": "0.000",
+        "fleet_vehicles": 0,
+        "is_live": false,
+        "status": "OPEN"
+      },
+      {
+        "signal_id": "ACURA|TLX|ELECTRICAL SYSTEM:2025-08",
+        "series_key": "ACURA|TLX|ELECTRICAL SYSTEM",
+        "make": "ACURA",
+        "model": "TLX",
+        "component": "ELECTRICAL SYSTEM",
+        "run_start": "2025-08-01",
+        "run_end": "2025-09-01",
+        "run_len": 2,
+        "max_z": "3.96",
+        "complaint_count": 11,
+        "harm_share": "0.091",
+        "fleet_vehicles": 0,
+        "is_live": false,
+        "status": "OPEN"
+      },
+      {
+        "signal_id": "CHEVROLET|TRAVERSE|SERVICE BRAKES:2025-07",
+        "series_key": "CHEVROLET|TRAVERSE|SERVICE BRAKES",
+        "make": "CHEVROLET",
+        "model": "TRAVERSE",
+        "component": "SERVICE BRAKES",
+        "run_start": "2025-07-01",
+        "run_end": "2025-08-01",
+        "run_len": 2,
+        "max_z": "11.96",
+        "complaint_count": 50,
+        "harm_share": "0.020",
+        "fleet_vehicles": 0,
+        "is_live": false,
+        "status": "OPEN"
+      },
+      {
+        "signal_id": "CHEVROLET|TRAVERSE|FORWARD COLLISION AVOIDANCE:2025-07",
+        "series_key": "CHEVROLET|TRAVERSE|FORWARD COLLISION AVOIDANCE",
+        "make": "CHEVROLET",
+        "model": "TRAVERSE",
+        "component": "FORWARD COLLISION AVOIDANCE",
+        "run_start": "2025-07-01",
+        "run_end": "2025-08-01",
+        "run_len": 2,
+        "max_z": "7.03",
+        "complaint_count": 36,
+        "harm_share": "0.000",
+        "fleet_vehicles": 0,
+        "is_live": false,
+        "status": "OPEN"
+      }
+    ]
+  },
+  "captured_at": "2026-09-02T14:23:41+00:00",
+  "source": "databricks_postgres.bootcamp_students (Lakebase)"
+}

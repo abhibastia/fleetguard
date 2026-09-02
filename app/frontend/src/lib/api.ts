@@ -131,6 +131,21 @@ export interface Evidence {
   generated_at: string;
 }
 
+export interface Health {
+  status: string;
+  auth_mode: string;
+  console: boolean;
+  data_mode: string;
+  snapshot_captured_at: string | null;
+}
+
+export interface AuthStatus {
+  enabled: boolean;
+  signed_in: boolean;
+  user_name: string | null;
+  may_approve: boolean;
+}
+
 export interface Me {
   user_name: string | null;
   token_source: string;
@@ -138,6 +153,10 @@ export interface Me {
 
 export const api = {
   me: () => request<Me>("/me"),
+  authStatus: () => request<AuthStatus>("/auth/status"),
+  // /healthz sits outside /api on purpose — it must answer even when the API is unhappy.
+  health: () =>
+    fetch("/healthz", { credentials: "include" }).then((r) => r.json() as Promise<Health>),
   queue: (limit = 50) => request<QueueItem[]>(`/queue?limit=${limit}`),
   campaign: (id: string) => request<CampaignDetail>(`/campaigns/${encodeURIComponent(id)}`),
   approve: (id: string, body: { title: string; rationale: string; due_in_days: number }) =>

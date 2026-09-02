@@ -31,16 +31,29 @@ services:
       # evidence page needs no session. The operator console lives on Databricks Apps
       # where OBO supplies the user's token.
       - key: FLEETGUARD_AUTH_MODE
-        value: render-u2m
+        value: app-login
+      # Snapshot, not live. This host cannot hold a Databricks credential: service-principal
+      # creation is admin-only on this account, personal access tokens are disabled for the
+      # user, Lakebase roles are all OAuth-based, and the account-level OAuth app needed for
+      # U2M requires account admin (all measured 2026-09-02). app-login mode REFUSES to start
+      # unless this is `snapshot`, so the two settings cannot drift apart.
+      - key: FLEETGUARD_DATA_MODE
+        value: snapshot
       - key: DATABRICKS_HOST
         value: https://dbc-7b106152-caf3.cloud.databricks.com
       - key: FLEETGUARD_PG_PROJECT
         value: projects/summer-bootcamp-2026-v2
-      # Set in the Render dashboard, never committed. From the custom OAuth app integration
-      # registered in the Databricks ACCOUNT console (not the workspace admin console).
-      - key: DATABRICKS_CLIENT_ID
+      # Set in the Render dashboard, never committed. From a GitHub OAuth App
+      # (github.com → Settings → Developer settings → OAuth Apps).
+      #   Homepage URL:              https://fleetguard-console-abhi.onrender.com
+      #   Authorization callback URL: https://fleetguard-console-abhi.onrender.com/api/auth/callback
+      - key: GITHUB_CLIENT_ID
         sync: false
-      - key: DATABRICKS_CLIENT_SECRET
+      - key: GITHUB_CLIENT_SECRET
+        sync: false
+      # Comma-separated GitHub logins allowed to APPROVE. Signing in grants read access;
+      # dispatching work orders against a fleet is a separate decision. Empty = nobody.
+      - key: FLEETGUARD_APPROVERS
         sync: false
       # Signs the session cookie holding the user's OAuth token.
       - key: FLEETGUARD_SESSION_SECRET

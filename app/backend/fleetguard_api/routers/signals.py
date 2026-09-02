@@ -20,6 +20,7 @@ from datetime import date
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
+from .. import snapshot
 from ..db import PG_SCHEMA, connect, rows_to_dicts
 from ..deps import CurrentPrincipal
 
@@ -63,6 +64,9 @@ def get_signals(
     affecting you" is a materially different statement from either number alone, and a panel
     showing only the filtered list would make an empty fleet result look like a broken query.
     """
+    if snapshot.is_snapshot():
+        return SignalSummary(**snapshot.signals(fleet_only, limit))
+
     where = "WHERE fleet_vehicles > 0" if fleet_only else ""
     with connect(principal) as conn, conn.cursor() as cur:
         cur.execute(

@@ -10,6 +10,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel
 
+from .. import snapshot
 from ..db import PG_SCHEMA, connect, rows_to_dicts
 from ..deps import CurrentPrincipal
 from ..scoping import mask_vin, resolve_scope
@@ -59,6 +60,12 @@ def get_queue(
     volume. `DO_NOT_DRIVE` covers only 211 of 15,211 campaigns (I-014), so it is a genuine
     discriminator rather than a always-true flag.
     """
+    # Snapshot mode short-circuits before any Lakebase call. The branch is here, at the top
+    # of the handler, rather than hidden behind a store abstraction: one greppable line per
+    # endpoint is easier to audit than a layer that could silently pick the wrong source.
+    if snapshot.is_snapshot():
+        return [QueueItem(**r) for r in snapshot.queue(limit)]
+
     scope = resolve_scope(principal, depot_id)
     sql = f"""
         SELECT c.campaign_id,
@@ -94,6 +101,15 @@ def get_campaign(
     the operator acts on depot totals, not a 1,801-row scroll. The full set is what the
     approval gate writes work orders against.
     """
+    if snapshot.is_snapshot():
+        d = snapshot.campaign(campaign_id)
+        if not d:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND,
+                f"{campaign_id} is not in the demo snapshot — open one from the queue's top rows.",
+            )
+        return CampaignDetail(**d)
+
     scope = resolve_scope(principal, depot_id)
     with connect(principal) as conn, conn.cursor() as cur:
         cur.execute(

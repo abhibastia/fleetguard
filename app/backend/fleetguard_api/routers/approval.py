@@ -17,9 +17,11 @@ from datetime import date, timedelta
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 
+from .. import snapshot
 from ..db import PG_SCHEMA, connect, rows_to_dicts
 from ..deps import CurrentPrincipal
 from ..scoping import resolve_scope
+from . import auth_routes
 
 router = APIRouter(tags=["approval"])
 
@@ -61,6 +63,28 @@ def approve_campaign(
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
             "approval requires an identified user; this token carries no identity",
+        )
+
+    # Two refusals before any work, both stated plainly rather than mimed.
+    #
+    # 1. Signing in proves you are someone. It does not prove you may dispatch work orders
+    #    against a fleet, so approval is restricted to an explicit allowlist.
+    if auth_routes.enabled() and not auth_routes.may_approve(approver):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            f"{approver} is signed in but not an approver on this deployment.",
+        )
+
+    # 2. The public deployment has no Databricks credential, so there is nothing to write to.
+    #    Refusing is the honest answer: a simulated approval that returned a plausible
+    #    service-campaign id would be a lie told by the safety-critical path (I-050's lesson,
+    #    applied to a write instead of a read).
+    if snapshot.is_snapshot():
+        raise HTTPException(
+            status.HTTP_501_NOT_IMPLEMENTED,
+            "This deployment runs on a data snapshot and cannot create work orders. "
+            "The approval path is real and runs against live Lakebase where the console "
+            "has a Databricks identity.",
         )
 
     scope = resolve_scope(principal, body.depot_id)
@@ -164,6 +188,8 @@ def approve_campaign(
 
 @router.get("/service-campaigns", tags=["approval"])
 def list_service_campaigns(principal: CurrentPrincipal, limit: int = 50) -> list[dict]:
+    if snapshot.is_snapshot():
+        return []  # nothing has been approved on a read-only surface, and that is the truth
     """Recently launched service campaigns — what the demo checks after approving."""
     with connect(principal) as conn, conn.cursor() as cur:
         cur.execute(

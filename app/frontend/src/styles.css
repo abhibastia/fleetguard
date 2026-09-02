@@ -737,3 +737,60 @@ table.rows tbody tr {
   width: 16px;
   height: 16px;
 }
+
+/* ── sign-in ────────────────────────────────────────────────────────────────────────── */
+
+.signin {
+  display: flex;
+  justify-content: center;
+  padding-top: 6vh;
+}
+
+.signin-card {
+  width: 100%;
+  max-width: 430px;
+  padding: 28px;
+}
+
+.signin-card h2 {
+  margin: 0 0 6px;
+  font-size: 22px;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+}
+
+.signin-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  margin-top: 20px;
+  padding: 11px 16px;
+  border-radius: var(--r-sm);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 620;
+  text-decoration: none;
+}
+
+.signin-btn:hover {
+  background: var(--accent-hover);
+}
+
+/* Snapshot notice — the console says what it is serving rather than implying live data. */
+.snapshot-note {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  margin-bottom: 18px;
+  padding: 10px 13px;
+  border-radius: var(--r-sm);
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-line);
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.snapshot-note strong {
+  color: var(--warn);
+}

@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { api, type Me } from "./lib/api";
+import { api, type AuthStatus, type Health, type Me } from "./lib/api";
 import { applyTheme, currentTheme, type Theme } from "./lib/theme";
 import { Assistant } from "./views/Assistant";
 import { Campaign } from "./views/Campaign";
 import { Evidence } from "./views/Evidence";
 import { Queue } from "./views/Queue";
+import { SignIn } from "./views/SignIn";
 import { Signals } from "./views/Signals";
 
 type View =
@@ -106,6 +107,8 @@ function ThemeToggle() {
 export function App() {
   const [view, setView] = useState<View>(viewFromHash);
   const [me, setMe] = useState<Me | null>(null);
+  const [auth, setAuth] = useState<AuthStatus | null>(null);
+  const [health, setHealth] = useState<Health | null>(null);
 
   // Back/forward must work: a browser button that silently does nothing is worse than no
   // routing at all.
@@ -129,11 +132,25 @@ export function App() {
       .me()
       .then(setMe)
       .catch(() => setMe(null));
+    // Unauthenticated by design — the console must be able to ask "should I show a sign-in
+    // screen?" without already being signed in.
+    api
+      .authStatus()
+      .then(setAuth)
+      .catch(() => setAuth(null));
+    api
+      .health()
+      .then(setHealth)
+      .catch(() => setHealth(null));
   }, []);
 
   // Campaign detail is reached *from* the queue, so it keeps the queue tab marked current
   // rather than leaving no tab active — which reads as "you are nowhere".
   const tab = view.name === "campaign" ? "queue" : view.name;
+
+  // Closed only when sign-in is actually configured and the visitor is not signed in. If the
+  // deployment has no sign-in at all, showing a gate nobody can pass would strand them.
+  const gateClosed = Boolean(auth?.enabled && !auth.signed_in);
 
   return (
     <>
@@ -168,16 +185,43 @@ export function App() {
           {/* Green means "an identity is attached to what you do here". A successful /me
               call with no user_name is NOT that — it is the dev/static path, and showing
               green beside "not signed in" would contradict the words next to it. */}
-          <span className={me?.user_name ? "dot" : "dot off"} />
-          {me?.user_name ?? "not signed in"}
-          {me && <span className="muted">· {me.token_source}</span>}
+          <span className={auth?.user_name || me?.user_name ? "dot" : "dot off"} />
+          {auth?.user_name ?? me?.user_name ?? "not signed in"}
+          {auth?.signed_in && !auth.may_approve && <span className="muted">· read-only</span>}
+          {!auth?.signed_in && me && <span className="muted">· {me.token_source}</span>}
+          {auth?.signed_in && (
+            <form method="post" action="/api/auth/logout" style={{ margin: 0 }}>
+              <button className="crumb" style={{ margin: 0, fontSize: 12 }} type="submit">
+                Sign out
+              </button>
+            </form>
+          )}
         </span>
 
         <ThemeToggle />
       </header>
 
       <main>
-        {view.name === "queue" && (
+        {/* Say what is being served. A console showing point-in-time data while implying it
+            is live is the interface version of reporting a failed query as "no results". */}
+        {health?.data_mode === "snapshot" && view.name !== "evidence" && (
+          <div className="snapshot-note">
+            <strong>SNAPSHOT</strong>
+            <span>
+              Fleet data captured from live Lakebase
+              {health.snapshot_captured_at ? ` on ${health.snapshot_captured_at.slice(0, 10)}` : ""}
+              , not queried live — this public deployment holds no Databricks credential. Approving
+              a campaign is disabled here.
+            </span>
+          </div>
+        )}
+
+        {/* Evidence stays reachable without a session: it is a published result about public
+            NHTSA data, and it is the reason the public URL exists. Everything else reads
+            fleet data and waits behind the gate. */}
+        {gateClosed && view.name !== "evidence" && <SignIn enabled={auth?.enabled ?? false} />}
+
+        {!gateClosed && view.name === "queue" && (
           <div className="split">
             <div>
               <Queue onOpen={(id) => setView({ name: "campaign", id })} />
@@ -185,10 +229,10 @@ export function App() {
             <Assistant />
           </div>
         )}
-        {view.name === "campaign" && (
+        {!gateClosed && view.name === "campaign" && (
           <Campaign id={view.id} onBack={() => setView({ name: "queue" })} />
         )}
-        {view.name === "signals" && <Signals />}
+        {!gateClosed && view.name === "signals" && <Signals />}
         {view.name === "evidence" && <Evidence />}
       </main>
     </>

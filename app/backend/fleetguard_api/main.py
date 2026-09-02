@@ -19,8 +19,9 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from . import snapshot
 from .deps import CurrentPrincipal
-from .routers import approval, chat, evidence, queue, signals
+from .routers import approval, auth_routes, chat, evidence, queue, signals
 
 app = FastAPI(
     title="FleetGuard API",
@@ -35,6 +36,8 @@ class Health(BaseModel):
     status: str
     auth_mode: str
     console: bool
+    data_mode: str
+    snapshot_captured_at: str | None = None
 
 
 class Me(BaseModel):
@@ -55,10 +58,21 @@ def healthz() -> Health:
     diagnosable without a valid session. Render's free tier spins down on inactivity, so this
     is also the endpoint to warm before a demo.
     """
+    # `data_mode` is reported for the same reason `auth_mode` is: a deployment serving a
+    # snapshot must be diagnosable as such from outside, without reading its environment.
+    captured = None
+    if snapshot.is_snapshot():
+        try:
+            captured = snapshot.captured_at()
+        except FileNotFoundError:
+            captured = None
+
     return Health(
         status="ok",
         auth_mode=os.getenv("FLEETGUARD_AUTH_MODE", "<unset>"),
         console=(CONSOLE_DIR / "index.html").exists(),
+        data_mode=snapshot.data_mode(),
+        snapshot_captured_at=captured,
     )
 
 
@@ -74,6 +88,7 @@ api.include_router(approval.router)
 api.include_router(chat.router)
 api.include_router(evidence.router)
 api.include_router(signals.router)
+api.include_router(auth_routes.router)
 app.include_router(api)
 
 

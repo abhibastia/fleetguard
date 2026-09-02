@@ -19,6 +19,11 @@ from .auth.tokens import AuthError, Principal, TokenProvider, build_token_provid
 # takes `session_lookup` as an injected callable.
 _SESSIONS: dict[str, dict] = {}
 
+# Public alias: the auth routes write sessions, this module reads them. One dict, one owner.
+# In-memory is adequate for a single Render instance — a restart signs everyone out, which is
+# an acceptable cost for a demo surface and is documented rather than pretended away.
+SESSIONS = _SESSIONS
+
 
 def session_lookup(session_id: str) -> dict | None:
     return _SESSIONS.get(session_id)

@@ -120,6 +120,41 @@ class SessionTokenProvider:
         )
 
 
+class AppLoginTokenProvider:
+    """Render with an app-owned login: identity without a Databricks token.
+
+    This is the one provider whose `Principal` carries **no** Databricks credential, because
+    on this deployment none can exist — service-principal creation is admin-only, personal
+    access tokens are disabled for this account, and Lakebase roles are all OAuth-based
+    (measured 2026-09-02). The app authenticates *who you are*; the data behind it comes from
+    a committed snapshot.
+
+    That makes an invariant load-bearing: **this provider is only valid alongside
+    `FLEETGUARD_DATA_MODE=snapshot`.** `build_token_provider` refuses otherwise rather than
+    handing a Lakebase query an empty token and letting it fail somewhere less obvious.
+    """
+
+    def __init__(self, session_lookup, cookie_name: str = "fg_session") -> None:
+        self._lookup = session_lookup
+        self._cookie_name = cookie_name
+
+    def resolve(self, headers: dict[str, str]) -> Principal:
+        lowered = {k.lower(): v for k, v in headers.items()}
+        session_id = _cookie_value(lowered.get("cookie", ""), self._cookie_name)
+        if not session_id:
+            raise AuthError("sign in to continue")
+
+        session = self._lookup(session_id)
+        if not session or not session.get("user_name"):
+            raise AuthError("session unknown or expired; sign in again")
+
+        return Principal(
+            token="",  # deliberate: there is no Databricks credential on this surface
+            user_name=session["user_name"],
+            source="app-login",
+        )
+
+
 class StaticTokenProvider:
     """Local development only — a token supplied by the developer.
 
@@ -163,6 +198,17 @@ def build_token_provider(env: dict[str, str] | None = None, session_lookup=None)
         if session_lookup is None:
             raise AuthError("render-u2m mode requires a session_lookup")
         return SessionTokenProvider(session_lookup)
+    if mode == "app-login":
+        if session_lookup is None:
+            raise AuthError("app-login mode requires a session_lookup")
+        # The invariant that makes a token-less Principal safe. Checked here, at construction,
+        # so a misconfigured deployment fails at startup rather than on the first query.
+        if (env.get("FLEETGUARD_DATA_MODE") or "").strip().lower() != "snapshot":
+            raise AuthError(
+                "app-login mode requires FLEETGUARD_DATA_MODE=snapshot — it issues no "
+                "Databricks credential, so live Lakebase reads cannot work behind it."
+            )
+        return AppLoginTokenProvider(session_lookup)
     if mode == "static-dev":
         token = env.get("FLEETGUARD_DEV_TOKEN", "")
         if not token:
@@ -170,7 +216,8 @@ def build_token_provider(env: dict[str, str] | None = None, session_lookup=None)
         return StaticTokenProvider(token, env.get("FLEETGUARD_DEV_USER"))
 
     raise AuthError(
-        "FLEETGUARD_AUTH_MODE must be one of: databricks-apps, render-u2m, static-dev. "
+        "FLEETGUARD_AUTH_MODE must be one of: databricks-apps, app-login, render-u2m, "
+        "static-dev. "
         "It is required rather than defaulted — an unset value must not silently pick a "
         "trust model."
     )
