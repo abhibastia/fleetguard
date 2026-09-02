@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type Me } from "./lib/api";
+import { applyTheme, currentTheme, type Theme } from "./lib/theme";
 import { Assistant } from "./views/Assistant";
 import { Campaign } from "./views/Campaign";
 import { Evidence } from "./views/Evidence";
@@ -49,6 +50,56 @@ function Mark() {
         strokeLinecap="round"
       />
     </svg>
+  );
+}
+
+function SunIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="4.2" stroke="currentColor" strokeWidth="1.7" />
+      <path
+        d="M12 2.5v2.2M12 19.3v2.2M4.2 4.2l1.6 1.6M18.2 18.2l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.2 19.8l1.6-1.6M18.2 5.8l1.6-1.6"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function MoonIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M20 13.6A8.2 8.2 0 0 1 10.4 4a8.4 8.4 0 1 0 9.6 9.6Z"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+/** Shows the theme you would switch *to*, which is the convention users expect from a
+ *  single-button toggle — and says so in the label, because an icon alone is ambiguous. */
+function ThemeToggle() {
+  const [theme, setTheme] = useState<Theme>(currentTheme);
+
+  function flip() {
+    const next: Theme = theme === "dark" ? "light" : "dark";
+    applyTheme(next);
+    setTheme(next);
+  }
+
+  return (
+    <button
+      className="theme-toggle"
+      onClick={flip}
+      title={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
+      aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
+    >
+      {theme === "dark" ? <SunIcon /> : <MoonIcon />}
+    </button>
   );
 }
 
@@ -121,6 +172,8 @@ export function App() {
           {me?.user_name ?? "not signed in"}
           {me && <span className="muted">· {me.token_source}</span>}
         </span>
+
+        <ThemeToggle />
       </header>
 
       <main>

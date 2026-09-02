@@ -1,11 +1,29 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>FleetGuard — recall response console</title>
-    <script type="module" crossorigin src="/assets/index-BN3--KIu.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-CHkiE30i.css">
+    <!--
+      Applied before first paint so a light-theme user never sees a dark flash. It must stay
+      inline and synchronous: moving this into the bundle reintroduces the flash, because the
+      bundle loads after the first paint.
+
+      Dark is the default and the attribute is already on <html> above, so a failure here
+      leaves the page correct rather than unstyled.
+    -->
+    <script>
+      try {
+        // ?theme=light wins for this page load only and is NOT persisted — it exists so a
+        // themed view can be linked, printed or screenshotted without changing what the
+        // person who opens it sees next time.
+        var q = new URLSearchParams(location.search).get("theme");
+        var t = q === "light" || q === "dark" ? q : localStorage.getItem("fleetguard.theme");
+        if (t === "light") document.documentElement.setAttribute("data-theme", "light");
+      } catch (e) {}
+    </script>
+    <script type="module" crossorigin src="/assets/index-gWVYc86A.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-D8E9f-pH.css">
   </head>
   <body>
     <div id="root"></div>

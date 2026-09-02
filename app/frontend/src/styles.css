@@ -36,11 +36,68 @@
   --accent-bg: #131a2b;
   --accent-line: #2a3757;
 
+  /* Derived colours that used to be hardcoded. They live here so a theme can move them. */
+  --header-bg: rgba(20, 23, 31, 0.92);
+  --on-accent: #08111f;
+  --accent-hover: #8fb2ff;
+  --on-danger: #2b0d10;
+  --danger-hover: #ff8080;
+
   --r-sm: 6px;
   --r: 10px;
   --r-lg: 14px;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px -12px rgba(0, 0, 0, 0.6);
   --header-h: 56px;
+
+  /* Tells the browser to render native controls — checkboxes, scrollbars, the caret — in
+     the matching scheme. Without it the checkbox stays light-mode white on a dark page. */
+  color-scheme: dark;
+}
+
+/* Light theme.
+ *
+ * Not an inversion. On a dark surface, saturated colour reads as *alert*; on a light one the
+ * same saturation reads as decoration, so the semantic colours are darkened for contrast
+ * against white rather than being reused. The greys are cool-neutral to match the dark
+ * theme's temperature — a warm light theme beside a cool dark one looks like two products.
+ *
+ * Dark stays the default (no attribute = dark): this is a monitoring surface, and the light
+ * theme exists for daylight, projectors and printing rather than as the primary experience.
+ */
+:root[data-theme="light"] {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --surface-2: #f0f2f5;
+  --surface-3: #e6e9ee;
+  --line: #e0e4ea;
+  --line-strong: #c8ced8;
+
+  --text: #14171f;
+  --muted: #57606f;
+  --faint: #838c9b;
+
+  --danger: #c92a2a;
+  --danger-bg: #fdf0f0;
+  --danger-line: #f3c4c4;
+  --warn: #a86a00;
+  --warn-bg: #fdf5e6;
+  --warn-line: #f0dcb0;
+  --ok: #0f7a4f;
+  --ok-bg: #eefaf3;
+  --ok-line: #bfe6d3;
+  --accent: #2f5fd8;
+  --accent-bg: #eef3fd;
+  --accent-line: #c6d6f7;
+
+  --header-bg: rgba(255, 255, 255, 0.9);
+  --on-accent: #ffffff;
+  --accent-hover: #244fbb;
+  --on-danger: #ffffff;
+  --danger-hover: #a81f1f;
+
+  --shadow: 0 1px 2px rgba(16, 24, 40, 0.05), 0 8px 24px -14px rgba(16, 24, 40, 0.18);
+
+  color-scheme: light;
 }
 
 * {
@@ -85,7 +142,7 @@ header {
   height: var(--header-h);
   padding: 0 24px;
   border-bottom: 1px solid var(--line);
-  background: rgba(20, 23, 31, 0.92);
+  background: var(--header-bg);
   backdrop-filter: blur(8px);
 }
 
@@ -273,23 +330,23 @@ button:hover:not(:disabled) {
 button.primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: #08111f;
+  color: var(--on-accent);
   font-weight: 650;
 }
 button.primary:hover:not(:disabled) {
-  background: #8fb2ff;
-  border-color: #8fb2ff;
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
 
 button.danger {
   background: var(--danger);
   border-color: var(--danger);
-  color: #2b0d10;
+  color: var(--on-danger);
   font-weight: 650;
 }
 button.danger:hover:not(:disabled) {
-  background: #ff8080;
-  border-color: #ff8080;
+  background: var(--danger-hover);
+  border-color: var(--danger-hover);
 }
 
 button:disabled {
@@ -652,4 +709,31 @@ table.rows tbody tr {
     animation: none;
     opacity: 0.6;
   }
+}
+
+/* ── theme toggle ───────────────────────────────────────────────────────────────────── */
+
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: var(--r-sm);
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid transparent;
+  flex-shrink: 0;
+}
+
+.theme-toggle:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--surface-2);
+  border-color: var(--line);
+}
+
+.theme-toggle svg {
+  width: 16px;
+  height: 16px;
 }
