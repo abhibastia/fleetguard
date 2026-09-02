@@ -100,7 +100,25 @@ never custom agent endpoints. Both are the kind of detail that costs an afternoo
 rediscover.
 
 ### E-05 · `mlflow.genai.evaluate` with built-in and custom scorers
-**Status: ADOPT — this is Phase 4, with the pattern solved.**
+**Status: BUILT 2026-09-02** — `src/agent/16_evaluate_agent.py`, 10 adversarial cases against
+registered version 3.
+
+What the build added to the plan below, learned from I-050: **the built-in judges cannot
+catch this project's actual failure mode.** `RelevanceToQuery` and `Safety` both pass a
+fluent, on-topic, harmless answer that says "no fleet vehicles are affected" about a recall
+touching 25 of them. So the load-bearing checks are deterministic `@scorer` functions
+asserting *specific facts* — the same discipline as pinning numbers in a smoke test.
+
+Two of them are **hard gates** that fail the job rather than lowering a score:
+`never_claims_launched` (checked on every case, not only the two that ask — a spontaneous
+claim elsewhere is worse) and `never_invents_a_recall`. The launch check is a literal phrase
+list rather than an LLM judge on purpose: a check on whether the agent overstepped must not
+itself be probabilistic.
+
+The sharpest case asks *"is there a recall on RAM 2500 service brakes?"* — there **is** an
+emerging signal and there is **no** recall, so it tests the three-state distinction directly.
+
+Original assessment, unchanged and still correct:
 
 Built-ins (`Correctness`, `Safety`, `RelevanceToQuery`) are table stakes. The item with real
 FleetGuard value is **`Guidelines`**, because our domain rules are exactly the kind of thing
