@@ -26,6 +26,47 @@ no error and passed the obvious check.
 
 ## Tooling / process
 
+### I-056 — `StatementParameterListItem` sends values as STRING, so `LIMIT :n` is rejected
+*Date:* 2026-09-02 · *Status:* resolved
+
+**Symptom.** The agent's new `lookup_emerging_signals` tool failed on first run:
+
+```
+INVALID_LIMIT_LIKE_EXPRESSION.DATA_TYPE — The limit like expression "5" is invalid.
+The limit expression must be integer type, but got "STRING".
+```
+
+**Root cause.** `StatementParameterListItem(name="lim", value=str(limit))` binds a **string**.
+That is fine for `campaign_number = :cid`, where the column is a string anyway, and it is
+what the existing exposure tool does — so the pattern was copied without noticing that
+`LIMIT` is one of the few positions where the *type* matters, not just the value.
+
+**Resolution.** Coerce to a bounded int in Python and interpolate:
+
+```python
+lim = max(1, min(int(limit), 50))
+... f"LIMIT {lim}"
+```
+
+This is safe where interpolation normally is not: after `int()`, the value cannot carry SQL
+no matter what the model passed. Parameter binding is still used everywhere the value is a
+string (`campaign_id` remains bound). The SDK's `type` field on the parameter item is the
+other candidate fix and was not tried — the bounded int is provably safe and needs no
+round trip to confirm.
+
+**What went right.** The failure was **loud**. Under the pre-I-050 code this exact error
+would have returned `FAILED` with `result = None`, the tool would have handed back an empty
+list, and the agent would have reported "no emerging defects affect your fleet" — the same
+false all-clear, in the newest tool, the same day the fix landed. Instead `_run_sql` raised
+and the build failed before anything was registered or deployed.
+
+**Lesson.** The I-050 guard paid for itself within hours, on a bug that had nothing to do
+with permissions. Worth noting the shape: **a rule that turns silent failures into loud ones
+catches classes of bug you did not anticipate**, which is the argument for adding them even
+when the specific known failure is already fixed.
+
+---
+
 ### I-055 — A file that was never written is indistinguishable from one that fails to import
 *Date:* 2026-09-02 · *Status:* resolved
 
