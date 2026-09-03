@@ -353,18 +353,19 @@ Databricks *account* console; measured 2026-09-02, this account's groups are `['
 also unnecessary: U2M and OBO both end with the app holding the user's token, and Apps
 ingress performs the login for free.
 
-**U2M is being revived, 2026-09-03, for a window where Databricks Apps is not being used.**
-The registration blocker is unchanged — still needs account-admin, still not obtained — but
-the code side of E-14's "retired" decision undersold how little is actually blocked: the
-auth seam (E-13) already had `SessionTokenProvider` built and tested for exactly this
-shape, so only the browser-facing half was missing. `auth/databricks_oauth.py` (PKCE,
-token exchange, refresh) and `routers/databricks_auth_routes.py` (`/auth/databricks/login`
-+ `/callback`) now exist, wired to `FLEETGUARD_AUTH_MODE=render-u2m`, coexisting with
-`app-login`'s GitHub flow rather than replacing it — `/auth/status` reports whichever one
-the deployment's mode selects (`routers/auth_routes.py::_active_provider`). Render's live
-deployment is untouched: `render.yaml` still runs `app-login` + `snapshot`, with the new
-`DATABRICKS_CLIENT_ID`/`DATABRICKS_CLIENT_SECRET`/`FLEETGUARD_PUBLIC_URL` vars present only
-as placeholders for the day the account-admin registration lands.
+**U2M is revived and live, 2026-09-03, for a window where Databricks Apps is not being
+used.** The registration blocker is resolved — an account-admin registered the custom OAuth
+app integration U2M needs — closing E-14's stated reason for retiring this path. The code
+side of that "retired" decision had undersold how little was actually blocked: the auth
+seam (E-13) already had `SessionTokenProvider` built and tested for exactly this shape, so
+only the browser-facing half was missing. `auth/databricks_oauth.py` (PKCE, token exchange,
+refresh) and `routers/databricks_auth_routes.py` (`/auth/databricks/login` + `/callback`)
+now exist, and `render.yaml` on `main` runs `FLEETGUARD_AUTH_MODE=render-u2m` +
+`FLEETGUARD_DATA_MODE=lakebase`. They coexist with `app-login`'s GitHub flow rather than
+replacing it in code — `/auth/status` reports whichever one the deployment's mode selects
+(`routers/auth_routes.py::_active_provider`) — but only one is active per deployment, and
+this one now is. **Not yet confirmed:** a real browser completing the login round-trip
+against the live deploy (`docs/STATUS.md`'s "Next" list carries the checklist).
 
 **The judges have Databricks identities in this same shared workspace** (confirmed
 2026-09-03) — which makes `render-u2m` (and eventually `databricks-apps` OBO) the actually
