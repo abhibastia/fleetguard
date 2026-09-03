@@ -353,6 +353,40 @@ Databricks *account* console; measured 2026-09-02, this account's groups are `['
 also unnecessary: U2M and OBO both end with the app holding the user's token, and Apps
 ingress performs the login for free.
 
+**U2M is being revived, 2026-09-03, for a window where Databricks Apps is not being used.**
+The registration blocker is unchanged — still needs account-admin, still not obtained — but
+the code side of E-14's "retired" decision undersold how little is actually blocked: the
+auth seam (E-13) already had `SessionTokenProvider` built and tested for exactly this
+shape, so only the browser-facing half was missing. `auth/databricks_oauth.py` (PKCE,
+token exchange, refresh) and `routers/databricks_auth_routes.py` (`/auth/databricks/login`
++ `/callback`) now exist, wired to `FLEETGUARD_AUTH_MODE=render-u2m`, coexisting with
+`app-login`'s GitHub flow rather than replacing it — `/auth/status` reports whichever one
+the deployment's mode selects (`routers/auth_routes.py::_active_provider`). Render's live
+deployment is untouched: `render.yaml` still runs `app-login` + `snapshot`, with the new
+`DATABRICKS_CLIENT_ID`/`DATABRICKS_CLIENT_SECRET`/`FLEETGUARD_PUBLIC_URL` vars present only
+as placeholders for the day the account-admin registration lands.
+
+**The judges have Databricks identities in this same shared workspace** (confirmed
+2026-09-03) — which makes `render-u2m` (and eventually `databricks-apps` OBO) the actually
+strong path for them to check the system: they sign in with their own account, and Unity
+Catalog / Postgres evaluate access under their genuine identity — §5.1's claim demonstrated,
+not simulated. Read access being open to anyone in the shared workspace is therefore the
+intended shape, not a leak.
+
+Write access is a different question, and was a real gap until this same session:
+`approval.py`'s `FLEETGUARD_APPROVERS` allowlist used to be checked only when
+`auth_routes.enabled()` (GitHub/`app-login`) was true, so any principal carrying a real
+Databricks token — `render-u2m`, and `databricks-apps` OBO once deployed — skipped it
+entirely. That was defensible when "has a Databricks identity here" implied "is a trusted
+operator"; it stopped being defensible the moment the workspace turned out to include the
+judges and cohort too, since every one of them could then have launched real service
+campaigns, not just viewed them. **Fixed 2026-09-03:** the gate now applies unconditionally
+— `if not auth_routes.may_approve(approver)`, regardless of `principal.source` — so sign-in
+stays open to any workspace identity while approval stays restricted to whoever
+`FLEETGUARD_APPROVERS` names. Unset means nobody can approve, on any surface, which is the
+same "no unset value silently picks a trust model" rule the auth modes already follow.
+Covered by `tests/test_approval_gate.py`, parametrized across all four principal sources.
+
 **The "no shared identity on Render" rule stands, and has been satisfied rather than
 waived.** Its stated reason was that the URL is public and the API has a write path, so one
 shared identity would let anyone approve service campaigns. Both halves are now addressed:

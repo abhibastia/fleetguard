@@ -1,9 +1,13 @@
 """Sign-in for the public deployment — GitHub OAuth.
 
-**Why GitHub rather than Databricks.** Databricks U2M needs an account-level OAuth app that
-this account cannot register (E-14), and every machine-credential route is closed too
-(service principals are admin-only, PATs are disabled for this user). GitHub costs nothing,
-needs no admin, and — importantly — means this app never stores a password.
+**Why GitHub rather than Databricks, for `app-login`.** Databricks U2M needs an
+account-level OAuth app that this account could not register when this mode was built
+(E-14), and every machine-credential route is closed too (service principals are
+admin-only, PATs are disabled for this user). GitHub costs nothing, needs no admin, and —
+importantly — means this app never stores a password. Where a registered OAuth app *is*
+available, `databricks_auth_routes.py` is the sibling login for `FLEETGUARD_AUTH_MODE=
+render-u2m`, carrying a real Databricks token instead of an app-only identity; `/auth/status`
+below reports whichever one is configured.
 
 **What the login actually protects.** `ARCHITECTURE.md` §8a says not to put a shared identity
 on a public URL *"because the API has a write path, so anyone could approve service
@@ -27,6 +31,7 @@ from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
+from ..auth import databricks_oauth as dbx
 from ..deps import SESSIONS
 
 router = APIRouter(tags=["auth"])
@@ -71,6 +76,24 @@ class AuthStatus(BaseModel):
     signed_in: bool
     user_name: str | None
     may_approve: bool
+    # Which login flow this deployment runs, and where to send the browser for it — the
+    # console reads these instead of hardcoding a GitHub-shaped button, so it renders
+    # correctly under either FLEETGUARD_AUTH_MODE without a frontend redeploy.
+    provider: str
+    login_url: str | None
+
+
+def _active_provider() -> tuple[bool, str, str | None]:
+    """(is_enabled, provider, login_url) for whichever flow FLEETGUARD_AUTH_MODE selects.
+
+    Deliberately keyed off the auth mode rather than "whichever provider's env vars happen
+    to be set" — two logins configured at once on one deployment is not a state this app is
+    designed to run in, and guessing would hide a misconfiguration instead of surfacing it.
+    """
+    mode = (os.getenv("FLEETGUARD_AUTH_MODE") or "").strip().lower()
+    if mode == "render-u2m":
+        return dbx.enabled(), "databricks", "/api/auth/databricks/login"
+    return enabled(), "github", "/api/auth/login"
 
 
 @router.get("/auth/status", response_model=AuthStatus)
@@ -79,11 +102,14 @@ def auth_status(request: Request) -> AuthStatus:
     sid = request.cookies.get(COOKIE)
     session = SESSIONS.get(sid) if sid else None
     user = session.get("user_name") if session else None
+    is_enabled, provider, login_url = _active_provider()
     return AuthStatus(
-        enabled=enabled(),
+        enabled=is_enabled,
         signed_in=bool(user),
         user_name=user,
         may_approve=may_approve(user),
+        provider=provider,
+        login_url=login_url if is_enabled else None,
     )
 
 

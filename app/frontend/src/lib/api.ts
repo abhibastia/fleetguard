@@ -156,6 +156,11 @@ export interface AuthStatus {
   signed_in: boolean;
   user_name: string | null;
   may_approve: boolean;
+  // Which login flow this deployment runs ("github" | "databricks") and where to send the
+  // browser for it. The console renders off these instead of a hardcoded GitHub button, so
+  // it's correct under either FLEETGUARD_AUTH_MODE without a frontend redeploy.
+  provider: string;
+  login_url: string | null;
 }
 
 export interface Me {

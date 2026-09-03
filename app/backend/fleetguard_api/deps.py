@@ -12,6 +12,7 @@ from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request, status
 
+from .auth import databricks_oauth
 from .auth.tokens import AuthError, Principal, TokenProvider, build_token_provider
 
 # In-memory session store for the Render U2M flow. Deliberately trivial for MVP; swapping it
@@ -29,10 +30,22 @@ def session_lookup(session_id: str) -> dict | None:
     return _SESSIONS.get(session_id)
 
 
+def _session_lookup_for(mode: str):
+    """`render-u2m` sessions hold a real Databricks token that expires in ~1 hour — far
+    inside the 8-hour session cookie's lifetime — so that mode's lookup must refresh it in
+    place before `SessionTokenProvider` reads `access_token`. Every other mode's session
+    never expires independently of the cookie, so the plain dict lookup is enough.
+    """
+    if mode == "render-u2m":
+        return lambda session_id: databricks_oauth.resolve(session_id, _SESSIONS)
+    return session_lookup
+
+
 @lru_cache(maxsize=1)
 def get_token_provider() -> TokenProvider:
     """Built once per process. Cached because the choice cannot change at runtime."""
-    return build_token_provider(dict(os.environ), session_lookup=session_lookup)
+    mode = (os.environ.get("FLEETGUARD_AUTH_MODE") or "").strip().lower()
+    return build_token_provider(dict(os.environ), session_lookup=_session_lookup_for(mode))
 
 
 def current_principal(request: Request) -> Principal:

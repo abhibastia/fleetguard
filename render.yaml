@@ -60,3 +60,32 @@ services:
         generateValue: true
       - key: PYTHON_VERSION
         value: "3.12"
+
+      # --- render-u2m (live data, no Databricks Apps) — NOT active on this deployment ---
+      #
+      # `databricks_auth_routes.py` / `auth/databricks_oauth.py` implement U2M OAuth (PKCE)
+      # against this same DATABRICKS_HOST, so this service CAN serve live Lakebase data
+      # without Databricks Apps — but only once someone with Databricks *account*-admin
+      # rights on the shared bootcamp metastore registers a custom OAuth app integration
+      # (`databricks account custom-app-integration create`, or Account Console -> App
+      # connections). That is still outstanding (ENHANCEMENTS.md E-14) — these three vars
+      # are placeholders for that day, not live credentials.
+      #
+      # To switch this deployment to live data once the app is registered:
+      #   1. Fill in DATABRICKS_CLIENT_ID / DATABRICKS_CLIENT_SECRET below from the
+      #      registration (confidential client), and set the registration's redirect URI to
+      #      exactly `${FLEETGUARD_PUBLIC_URL}/api/auth/databricks/callback`.
+      #   2. Change FLEETGUARD_AUTH_MODE above from `app-login` to `render-u2m`.
+      #   3. Change FLEETGUARD_DATA_MODE above from `snapshot` to `lakebase` (or unset it —
+      #      `lakebase` is the default). `render-u2m` does not refuse a live data mode the
+      #      way `app-login` refuses anything BUT snapshot, because it actually holds a
+      #      Databricks token to back it.
+      # Do this as one deliberate change, not by setting only some of these — a half-flipped
+      # config is exactly the "unset value silently picks a trust model" failure this
+      # project's auth modes are built to refuse.
+      - key: FLEETGUARD_PUBLIC_URL
+        value: https://fleetguard-console-abhi.onrender.com
+      - key: DATABRICKS_CLIENT_ID
+        sync: false
+      - key: DATABRICKS_CLIENT_SECRET
+        sync: false

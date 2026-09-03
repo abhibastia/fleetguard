@@ -21,7 +21,7 @@ from pydantic import BaseModel
 
 from . import snapshot
 from .deps import CurrentPrincipal
-from .routers import approval, auth_routes, chat, evidence, queue, signals
+from .routers import approval, auth_routes, chat, databricks_auth_routes, evidence, queue, signals
 
 app = FastAPI(
     title="FleetGuard API",
@@ -89,6 +89,7 @@ api.include_router(chat.router)
 api.include_router(evidence.router)
 api.include_router(signals.router)
 api.include_router(auth_routes.router)
+api.include_router(databricks_auth_routes.router)
 app.include_router(api)
 
 

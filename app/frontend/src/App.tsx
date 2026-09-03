@@ -223,8 +223,8 @@ export function App() {
               </button>
             </form>
           )}
-          {gateClosed && (
-            <a className="signin-link" href="/api/auth/login">
+          {gateClosed && auth?.login_url && (
+            <a className="signin-link" href={auth.login_url}>
               Sign in
             </a>
           )}
@@ -251,7 +251,9 @@ export function App() {
         {/* Evidence stays reachable without a session: it is a published result about public
             NHTSA data, and it is the reason the public URL exists. Everything else reads
             fleet data and waits behind the gate. */}
-        {gateClosed && view.name !== "evidence" && <SignIn enabled={auth?.enabled ?? false} />}
+        {gateClosed && view.name !== "evidence" && (
+          <SignIn enabled={auth?.enabled ?? false} provider={auth?.provider ?? "github"} loginUrl={auth?.login_url ?? null} />
+        )}
 
         {!gateClosed && view.name === "queue" && (
           <div className="split">
