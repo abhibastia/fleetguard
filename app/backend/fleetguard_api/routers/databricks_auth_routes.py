@@ -98,7 +98,12 @@ def login() -> RedirectResponse:
 
 
 @router.get("/callback", include_in_schema=False)
-def callback(code: str = "", state: str = "") -> RedirectResponse:
+def callback(
+    code: str = "",
+    state: str = "",
+    error: str = "",
+    error_description: str = "",
+) -> RedirectResponse:
     if not _mode_is_active():
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -114,6 +119,16 @@ def callback(code: str = "", state: str = "") -> RedirectResponse:
     entry = _STATES.pop(state, None) if state else None
     if entry is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid or expired sign-in state.")
+
+    # A denied/failed authorization redirects back with `error` (+ optional
+    # `error_description`) instead of `code` — the standard OAuth2 error shape. Surfacing it
+    # is the whole point of this branch: "No authorization code returned" alone gave no way
+    # to tell a scope/consent problem from a misconfigured redirect_uri from anything else.
+    if error:
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED,
+            f"Databricks returned {error}: {error_description or '(no description)'}",
+        )
     if not code:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "No authorization code returned.")
 
