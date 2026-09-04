@@ -119,10 +119,18 @@ def chat(principal: CurrentPrincipal, req: ChatRequest) -> ChatReply:
             detail="You do not have query permission on the agent endpoint.",
         )
     if resp.status_code >= 400:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Agent endpoint returned {resp.status_code}.",
-        )
+        # The serving endpoint's own error body is the useful part — e.g. "the given
+        # endpoint is stopped" vs. a malformed request are both bare 400s otherwise
+        # indistinguishable from this message alone. Found 2026-09-04: a stopped endpoint
+        # surfaced as an opaque "returned 400" with no way to tell it apart from a real bug.
+        try:
+            reason = resp.json().get("message", "")
+        except ValueError:
+            reason = ""
+        detail = f"Agent endpoint returned {resp.status_code}"
+        if reason:
+            detail += f": {reason}"
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=detail)
 
     text = _extract_text(resp.json())
     if not text:

@@ -177,6 +177,13 @@ export function Campaign({ id, onBack }: { id: string; onBack: () => void }) {
                   ? "Launching…"
                   : `Approve — ${c.vehicles_exposed.toLocaleString()} work orders`}
               </button>
+              {!busy && (rationale.trim().length < 3 || title.trim().length < 3) && (
+                <p className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+                  {title.trim().length < 3
+                    ? "Add a title to enable Approve."
+                    : "Add a rationale (min. 3 characters) to enable Approve."}
+                </p>
+              )}
             </>
           )}
         </div>
