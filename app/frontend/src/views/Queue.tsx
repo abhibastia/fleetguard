@@ -1,17 +1,27 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api, ApiError, type QueueItem } from "../lib/api";
+import { SortIndicator, useSort } from "../lib/sort";
+
+const SEVERITY_FILTER_ALL = "ALL" as const;
+const SEVERITY_FILTER_URGENT = "URGENT" as const;
+
+type SortKey = "vehicles_exposed" | "depots_affected";
 
 /**
  * The work queue — the operator's landing surface.
  *
  * Ordering comes from the backend and is deliberately **consequence before volume**: a
- * 25-vehicle do-not-drive defect outranks a 1,801-vehicle label recall. The UI must not
- * re-sort by count, or it would undo that judgement.
+ * 25-vehicle do-not-drive defect outranks a 1,801-vehicle label recall. That default must
+ * survive untouched — `useSort` only reorders after an explicit header click, never on
+ * load, so an operator sees consequence-first until they deliberately ask for something
+ * else. Only `vehicles_exposed`/`depots_affected` are sortable at all; severity itself isn't,
+ * since the tags already carry more information than a re-sortable rank would.
  */
 export function Queue({ onOpen }: { onOpen: (id: string) => void }) {
   const [items, setItems] = useState<QueueItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [gated, setGated] = useState(false);
+  const [severityFilter, setSeverityFilter] = useState<string>(SEVERITY_FILTER_ALL);
 
   useEffect(() => {
     api
@@ -19,6 +29,17 @@ export function Queue({ onOpen }: { onOpen: (id: string) => void }) {
       .then(setItems)
       .catch((e: ApiError) => (e.status === 401 ? setGated(true) : setError(e.message)));
   }, []);
+
+  const filtered = useMemo(() => {
+    return (items ?? []).filter((i) => {
+      if (severityFilter === SEVERITY_FILTER_URGENT) return i.park_it || i.do_not_drive;
+      return true;
+    });
+  }, [items, severityFilter]);
+  const { sorted, sortKey, sortDir, toggleSort } = useSort<QueueItem, SortKey>(
+    filtered,
+    (i, key) => i[key],
+  );
 
   // A 401 here is expected on the public deployment. Explaining that is far better than a
   // red error a viewer would read as a broken build.
@@ -88,36 +109,53 @@ export function Queue({ onOpen }: { onOpen: (id: string) => void }) {
         </div>
       </div>
 
-      <div className="wrap">
-        <table className="rows">
-          <thead>
-            <tr>
-              <th>Campaign</th>
-              <th>Component</th>
-              <th>Severity</th>
-              <th className="num">Vehicles</th>
-              <th className="num">Depots</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((i) => (
-              <tr key={i.campaign_id} onClick={() => onOpen(i.campaign_id)}>
-                <td>
-                  <strong>{i.campaign_id}</strong>
-                </td>
-                <td className="muted">{i.component ?? "—"}</td>
-                <td>
-                  {i.park_it && <span className="tag parkit">PARK IT</span>}
-                  {!i.park_it && i.do_not_drive && <span className="tag dnd">DO NOT DRIVE</span>}
-                  {!i.park_it && !i.do_not_drive && <span className="muted">—</span>}
-                </td>
-                <td className="num">{i.vehicles_exposed.toLocaleString()}</td>
-                <td className="num">{i.depots_affected}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="filter-row">
+        <select value={severityFilter} onChange={(e) => setSeverityFilter(e.target.value)}>
+          <option value={SEVERITY_FILTER_ALL}>All campaigns</option>
+          <option value={SEVERITY_FILTER_URGENT}>Immediate action only</option>
+        </select>
       </div>
+
+      {sorted.length === 0 ? (
+        <div className="panel">No campaigns match the current filter.</div>
+      ) : (
+        <div className="wrap">
+          <table className="rows">
+            <thead>
+              <tr>
+                <th>Campaign</th>
+                <th>Component</th>
+                <th>Severity</th>
+                <th className="num sortable" onClick={() => toggleSort("vehicles_exposed")}>
+                  Vehicles<SortIndicator columnKey="vehicles_exposed" sortKey={sortKey} sortDir={sortDir} />
+                </th>
+                <th className="num sortable" onClick={() => toggleSort("depots_affected")}>
+                  Depots<SortIndicator columnKey="depots_affected" sortKey={sortKey} sortDir={sortDir} />
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.map((i) => (
+                <tr key={i.campaign_id} onClick={() => onOpen(i.campaign_id)}>
+                  <td>
+                    <strong>{i.campaign_id}</strong>
+                  </td>
+                  <td className="muted">{i.component ?? "—"}</td>
+                  <td>
+                    {i.park_it && <span className="tag parkit">PARK IT</span>}
+                    {!i.park_it && i.do_not_drive && (
+                      <span className="tag dnd">DO NOT DRIVE</span>
+                    )}
+                    {!i.park_it && !i.do_not_drive && <span className="muted">—</span>}
+                  </td>
+                  <td className="num">{i.vehicles_exposed.toLocaleString()}</td>
+                  <td className="num">{i.depots_affected}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </>
   );
 }

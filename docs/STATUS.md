@@ -1,6 +1,6 @@
 # FleetGuard — project status
 
-**Last updated:** 2026-09-03 (session end) · **MVP target: 7 September — MET** · **Demo: 25–30 September**
+**Last updated:** 2026-09-04 (session end) · **MVP target: 7 September — MET** · **Demo: 25–30 September**
 
 > **MVP = one vertical slice working end to end:** recall lands → exposure ranked → human
 > approves → work orders written to Lakebase → visible in UC via CDF → visible in a browser.
@@ -31,6 +31,7 @@ next-actions list in priority order.** Design lives in `FleetGuard_Proposal.md`,
 | **10 — Governance** | ✅ **Visible slice DONE** | Postgres RLS on `fleetguard_vehicle`, `ENABLE`+`FORCE`, proved under real toggled states including the exposure join. Fail-open, nobody enrolled yet — mechanism real, enrollment is future work. Not the full ABAC/DQ-monitor matrix, by design. |
 | **11 — Deployment hardening** | ⬜ Not started | |
 | **12 — Second connector** | ❌ **Cut** | Deliberately dropped for schedule. |
+| **13 — Work-order lifecycle + technician assignment** | ✅ **DONE (2026-09-04, post-MVP)** | Not in the original 12 phases — grew out of a session UX walkthrough plus a "does this give a commercial fleet real value" analysis. `GET/PATCH /api/work-orders`, a new `fleetguard_technician` roster (120 rows, real depot-consistency check on assignment, not free text), a new "Work orders" tab. Both gated by `FLEETGUARD_APPROVERS`, both fully audited. Verified end to end against live Lakebase + CDF, not just the API response. See "Next" item 0.5. |
 
 ---
 
@@ -50,12 +51,16 @@ next-actions list in priority order.** Design lives in `FleetGuard_Proposal.md`,
 | ops (7) | `ops_ingest_watermark` · `ops_recall_poll_state` · `ops_hybrid_query_test` · `ops_lakebase_load` · `ops_cdf_latency` · `ops_psycopg_probe` · `ops_pg_privilege_diagnostic` | measurement + cursor state |
 | api (2) | `bronze_recall_api` · `gold_recall_alert` | 2,117 rows / 653 campaigns · 0 alerts (correct — nothing novel) |
 
-**Lakebase** (`databricks_postgres.bootcamp_students`): 11 `fleetguard_*` tables, **139,000+ rows**
+**Lakebase** (`databricks_postgres.bootcamp_students`): 12 `fleetguard_*` tables, **139,000+ rows**
 (`fleetguard_defect_signal` populated 2026-09-02 — 48 signals; empty since Phase 5 until then)
 (vehicle 20,000 · exposure 118,323 · campaign 592 · depot 60 · + service campaigns/work orders/audit).
 Per-user identity verified: 25 Databricks identities exist as Postgres login roles, `current_user`
-resolves to the caller, and `row_security` is `on`. **CDF** (`bootcamp_students.bootcamp_cdc`): 11 `lb_fleetguard_*_history` tables,
-exact names, no collision suffixes.
+resolves to the caller, and `row_security` is `on`. **CDF** (`bootcamp_students.bootcamp_cdc`): 12 `lb_fleetguard_*_history` tables,
+exact names, no collision suffixes. **`fleetguard_technician` added 2026-09-04** (120 rows, ~2 per
+depot, real roster backing work-order assignment) — picked up by CDF automatically via
+`REPLICA IDENTITY FULL`, same as every other table, no extra CDF configuration step needed.
+`fleetguard_work_order.status` also gained a real `CHECK` constraint the same day (previously bare
+`TEXT`, only `'OPEN'` ever written) — see I-066.
 
 **Models:** `bootcamp_students.fleetguard.fleetguard_agent` — **3 registered versions**, v3 serving (v1 superseded by I-050's fix, v2 by the signals tool).
 
@@ -570,6 +575,31 @@ edge, not an oracle."* v2 dropped after verification (I-052); one entity billing
    further — a `sql`-only re-scope would still permanently lose the write path and chat
    feature (neither has an assignable scope short of `all-apis`), landing worse than Apps
    for comparable rework.
+0.5 **Work-order lifecycle + technician assignment, built and verified live (2026-09-04) —
+   see the new Phase 13 row above.** Came out of a UX walkthrough plus a "does this give a
+   commercial fleet real value" analysis: once a campaign was approved, work orders sat at
+   `OPEN` forever with no UI ever reading them again. `GET/PATCH /api/work-orders` and a new
+   "Work orders" tab close that; `fleetguard_technician` (120 seeded, ~2/depot) backs a real
+   assignment dropdown instead of free text, with a server-side depot-consistency check
+   (assigning a DEP-042 technician to a DEP-051 order is rejected, not just UI-filtered).
+   Both gated by the same `FLEETGUARD_APPROVERS` allowlist as approving a campaign; both
+   fully audited (`STATUS_CHANGE` / `ASSIGNED`, real `before_state`/`after_state` — the
+   audit log's `before_state` column existed since Phase 7 but had never been populated
+   until this).
+
+   **Loose ends, in order of relevance:**
+   - A handful of test rows from live verification are sitting in Lakebase — one work order
+     cycled through every status (`WO-cf39b334b046`) and reassigned/unassigned a technician a
+     few times. Harmless (clearly attributable, fully audited) but worth clearing before a
+     real demo, same as the `SC-17V629000-*` test service campaigns from item 0.
+   - The broader "commercial fleet value" menu this came from still has 7 undecided items
+     (recent-service-campaigns view, cost/ROI framing, notification digest, depot risk
+     heatmap, trend charts, audit log export, role-based views) — nothing else has been
+     started; pick the next one when ready rather than assuming an order.
+   - Everything is committed on `feature/console-refresh-2026-09`, **not merged to `main`**.
+     The branch now covers three logically separate pieces of work (layout/approval/chat
+     refresh, work-order tracking, technician assignment) — squash-merge when ready, per the
+     standing convention, but decide then whether that's one squash commit or a few.
 1. **Databricks App (~20 Sept).** Still the one thing that makes queue, assistant and
    Emerging live for a real user, via OBO. The auth seam means it is an afternoon. Keep it
    `STOPPED` between sessions — `apps create` provisions billing compute on *create*.

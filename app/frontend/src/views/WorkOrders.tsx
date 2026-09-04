@@ -1,0 +1,371 @@
+import { useEffect, useMemo, useState } from "react";
+import { api, ApiError, type Technician, type WorkOrder } from "../lib/api";
+import { SortIndicator, useSort } from "../lib/sort";
+
+const STATUSES = ["OPEN", "IN_PROGRESS", "COMPLETED", "CANCELLED"] as const;
+const UNASSIGNED = "" as const; // <select> has no null value, so "" stands in for it locally
+const STATUS_FILTER_ALL = "ALL" as const;
+const DEPOT_FILTER_ALL = "ALL" as const;
+
+type SortKey = "wo_id" | "vin" | "depot_id" | "due_date" | "status" | "actual_cost";
+
+function isOverdue(w: WorkOrder): boolean {
+  if (!w.due_date || w.status === "COMPLETED" || w.status === "CANCELLED") return false;
+  return new Date(w.due_date) < new Date(new Date().toDateString());
+}
+
+/**
+ * Work orders — what happens after "approve," which until now nothing showed.
+ *
+ * `approval.py` creates one row per exposed vehicle when a service campaign launches; this is
+ * the first view that reads them back. Status changes go through the same approver allowlist
+ * as launching a campaign — marking a safety recall "completed" when it wasn't is a real
+ * compliance risk, not a casual edit — so a 403 here is expected for a signed-in but
+ * unauthorised identity, and is shown inline rather than hidden client-side (the backend is
+ * the actual enforcement point, same precedent as the Approve button in Campaign.tsx).
+ */
+export function WorkOrders({
+  serviceCampaignId,
+  onClearFilter,
+}: {
+  serviceCampaignId?: string;
+  onClearFilter?: () => void;
+}) {
+  const [orders, setOrders] = useState<WorkOrder[] | null>(null);
+  const [technicians, setTechnicians] = useState<Technician[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [gated, setGated] = useState(false);
+  const [updating, setUpdating] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<string>(STATUS_FILTER_ALL);
+  const [depotFilter, setDepotFilter] = useState<string>(DEPOT_FILTER_ALL);
+  const [overdueOnly, setOverdueOnly] = useState(false);
+  // Local draft text per row while typing, committed on blur - a PATCH on every keystroke
+  // would be both wasteful and would thrash the audit log with one row per digit.
+  const [costDrafts, setCostDrafts] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    let stale = false;
+    setOrders(null);
+    api
+      .workOrders({ serviceCampaignId })
+      .then((d) => {
+        if (!stale) setOrders(d);
+      })
+      .catch((e: ApiError) => {
+        if (stale) return;
+        if (e.status === 401) setGated(true);
+        else setError(e.message);
+      });
+    return () => {
+      stale = true;
+    };
+  }, [serviceCampaignId]);
+
+  useEffect(() => {
+    let stale = false;
+    // Fetched once, unscoped - filtered per row by depot_id client-side (§ below). A depot
+    // roster is small (~2 people) and shared across every row at that depot, so this is one
+    // request instead of one per distinct depot on the page.
+    api
+      .technicians()
+      .then((t) => {
+        if (!stale) setTechnicians(t);
+      })
+      .catch(() => {
+        /* the roster is an enhancement to the assignment control, not required to read or
+           change status - a failure here shouldn't block the rest of the page. */
+      });
+    return () => {
+      stale = true;
+    };
+  }, []);
+
+  async function changeStatus(wo: WorkOrder, newStatus: string) {
+    setUpdating(wo.wo_id);
+    setError(null);
+    try {
+      const updated = await api.updateWorkOrder(wo.wo_id, { status: newStatus });
+      setOrders((prev) => prev?.map((o) => (o.wo_id === updated.wo_id ? updated : o)) ?? prev);
+    } catch (e) {
+      setError((e as ApiError).message);
+    } finally {
+      setUpdating(null);
+    }
+  }
+
+  async function changeAssignment(wo: WorkOrder, technicianId: string) {
+    setUpdating(wo.wo_id);
+    setError(null);
+    try {
+      // technicianId === UNASSIGNED ("") means the "— Unassigned —" option was picked - send
+      // an explicit null, not an omitted field, so the backend records a real unassign rather
+      // than silently doing nothing (see the model_fields_set distinction in api.ts).
+      const body = { assigned_to: technicianId === UNASSIGNED ? null : technicianId };
+      const updated = await api.updateWorkOrder(wo.wo_id, body);
+      setOrders((prev) => prev?.map((o) => (o.wo_id === updated.wo_id ? updated : o)) ?? prev);
+    } catch (e) {
+      setError((e as ApiError).message);
+    } finally {
+      setUpdating(null);
+    }
+  }
+
+  async function commitCost(wo: WorkOrder) {
+    const draft = costDrafts[wo.wo_id];
+    if (draft === undefined) return; // never touched - nothing to commit
+    const trimmed = draft.trim();
+    const parsed = trimmed === "" ? null : Number(trimmed);
+    if (parsed !== null && (Number.isNaN(parsed) || parsed < 0)) {
+      setError(`"${draft}" is not a valid cost`);
+      return;
+    }
+    if (parsed === (wo.actual_cost ?? null)) return; // unchanged - no PATCH needed
+    setUpdating(wo.wo_id);
+    setError(null);
+    try {
+      const updated = await api.updateWorkOrder(wo.wo_id, { actual_cost: parsed });
+      setOrders((prev) => prev?.map((o) => (o.wo_id === updated.wo_id ? updated : o)) ?? prev);
+      setCostDrafts((prev) => {
+        const next = { ...prev };
+        delete next[wo.wo_id];
+        return next;
+      });
+    } catch (e) {
+      setError((e as ApiError).message);
+    } finally {
+      setUpdating(null);
+    }
+  }
+
+  // Hooks run every render regardless of loading state, so filtering/sorting is computed here
+  // (over `orders ?? []`) rather than after the early returns below.
+  const depotOptions = useMemo(
+    () => Array.from(new Set((orders ?? []).map((o) => o.depot_id))).sort(),
+    [orders],
+  );
+  const filtered = useMemo(() => {
+    return (orders ?? []).filter((o) => {
+      if (statusFilter !== STATUS_FILTER_ALL && o.status !== statusFilter) return false;
+      if (depotFilter !== DEPOT_FILTER_ALL && o.depot_id !== depotFilter) return false;
+      if (overdueOnly && !isOverdue(o)) return false;
+      return true;
+    });
+  }, [orders, statusFilter, depotFilter, overdueOnly]);
+  const { sorted, sortKey, sortDir, toggleSort } = useSort<WorkOrder, SortKey>(
+    filtered,
+    (o, key) => o[key] ?? "",
+  );
+
+  if (gated)
+    return (
+      <div className="panel">
+        <h3 style={{ marginTop: 0 }}>Sign-in required</h3>
+        <p className="muted" style={{ marginBottom: 0 }}>
+          Work orders are read under your Databricks identity. This public deployment has no
+          sign-in — the <strong>Evidence</strong> tab needs no session.
+        </p>
+      </div>
+    );
+  if (!orders && error) return <div className="error">{error}</div>;
+  if (!orders)
+    return (
+      <>
+        <div className="stats">
+          {[0, 1, 2, 3].map((i) => (
+            <div className="stat" key={i}>
+              <div className="skeleton tall" style={{ marginBottom: 0 }} />
+            </div>
+          ))}
+        </div>
+        <div className="skeleton wide tall" />
+      </>
+    );
+
+  const counts = {
+    open: orders.filter((o) => o.status === "OPEN").length,
+    inProgress: orders.filter((o) => o.status === "IN_PROGRESS").length,
+    completed: orders.filter((o) => o.status === "COMPLETED").length,
+    overdue: orders.filter(isOverdue).length,
+  };
+
+  return (
+    <>
+      <div className="page-head">
+        <h2>Work orders</h2>
+        <p>
+          Created one per exposed vehicle when a service campaign launches. Status changes here
+          are the record of whether the vehicle actually got fixed, not just dispatched.
+        </p>
+      </div>
+
+      {serviceCampaignId && (
+        <div className="filter-banner">
+          <span>
+            Showing <strong>{serviceCampaignId}</strong> only.
+          </span>
+          {onClearFilter && (
+            <button className="filter-clear" onClick={onClearFilter}>
+              Clear filter
+            </button>
+          )}
+        </div>
+      )}
+
+      <div className="stats">
+        <div className="stat">
+          <div className="v">{counts.open}</div>
+          <div className="k">Open</div>
+        </div>
+        <div className="stat">
+          <div className="v">{counts.inProgress}</div>
+          <div className="k">In progress</div>
+        </div>
+        <div className="stat is-ok">
+          <div className="v">{counts.completed}</div>
+          <div className="k">Completed</div>
+        </div>
+        <div className={counts.overdue > 0 ? "stat is-danger" : "stat"}>
+          <div className="v">{counts.overdue}</div>
+          <div className="k">Overdue</div>
+        </div>
+      </div>
+
+      {error && <div className="error">{error}</div>}
+
+      {orders.length === 0 ? (
+        <div className="panel">
+          No work orders yet. That is a result, not an error — none have been created by an
+          approved campaign so far.
+        </div>
+      ) : (
+        <>
+          <div className="filter-row">
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+              <option value={STATUS_FILTER_ALL}>All statuses</option>
+              {STATUSES.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+            <select value={depotFilter} onChange={(e) => setDepotFilter(e.target.value)}>
+              <option value={DEPOT_FILTER_ALL}>All depots</option>
+              {depotOptions.map((d) => (
+                <option key={d} value={d}>
+                  {d}
+                </option>
+              ))}
+            </select>
+            <label className="filter-checkbox">
+              <input
+                type="checkbox"
+                checked={overdueOnly}
+                onChange={(e) => setOverdueOnly(e.target.checked)}
+              />
+              Overdue only
+            </label>
+          </div>
+
+          {sorted.length === 0 ? (
+            <div className="panel">No work orders match the current filters.</div>
+          ) : (
+            <div className="wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th className="sortable" onClick={() => toggleSort("wo_id")}>
+                      Work order<SortIndicator columnKey="wo_id" sortKey={sortKey} sortDir={sortDir} />
+                    </th>
+                    <th>Campaign</th>
+                    <th className="sortable" onClick={() => toggleSort("vin")}>
+                      VIN<SortIndicator columnKey="vin" sortKey={sortKey} sortDir={sortDir} />
+                    </th>
+                    <th className="sortable" onClick={() => toggleSort("depot_id")}>
+                      Depot<SortIndicator columnKey="depot_id" sortKey={sortKey} sortDir={sortDir} />
+                    </th>
+                    <th className="sortable" onClick={() => toggleSort("due_date")}>
+                      Due<SortIndicator columnKey="due_date" sortKey={sortKey} sortDir={sortDir} />
+                    </th>
+                    <th>Completed</th>
+                    <th>Assigned to</th>
+                    <th className="sortable" onClick={() => toggleSort("status")}>
+                      Status<SortIndicator columnKey="status" sortKey={sortKey} sortDir={sortDir} />
+                    </th>
+                    <th className="num sortable" onClick={() => toggleSort("actual_cost")}>
+                      Cost ($)<SortIndicator columnKey="actual_cost" sortKey={sortKey} sortDir={sortDir} />
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sorted.map((o) => (
+                    <tr key={o.wo_id}>
+                      <td className="muted">{o.wo_id}</td>
+                      <td>{o.service_campaign_id ?? "—"}</td>
+                      <td>{o.vin}</td>
+                      <td>{o.depot_id}</td>
+                      <td className="muted">
+                        {o.due_date ?? "—"}
+                        {isOverdue(o) && (
+                          <span className="tag parkit" style={{ marginLeft: 8 }}>
+                            OVERDUE
+                          </span>
+                        )}
+                      </td>
+                      <td className="muted">
+                        {o.completed_at ? o.completed_at.slice(0, 10) : "—"}
+                      </td>
+                      <td>
+                        <select
+                          value={o.assigned_to ?? UNASSIGNED}
+                          disabled={updating === o.wo_id}
+                          onChange={(e) => changeAssignment(o, e.target.value)}
+                        >
+                          <option value={UNASSIGNED}>— Unassigned —</option>
+                          {technicians
+                            .filter((t) => t.depot_id === o.depot_id)
+                            .map((t) => (
+                              <option key={t.technician_id} value={t.technician_id}>
+                                {t.name}
+                              </option>
+                            ))}
+                        </select>
+                      </td>
+                      <td>
+                        <select
+                          value={o.status}
+                          disabled={updating === o.wo_id}
+                          onChange={(e) => changeStatus(o, e.target.value)}
+                        >
+                          {STATUSES.map((s) => (
+                            <option key={s} value={s}>
+                              {s}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="num">
+                        <input
+                          type="number"
+                          min={0}
+                          step={0.01}
+                          placeholder="not logged"
+                          disabled={updating === o.wo_id}
+                          value={costDrafts[o.wo_id] ?? (o.actual_cost ?? "")}
+                          onChange={(e) =>
+                            setCostDrafts((prev) => ({ ...prev, [o.wo_id]: e.target.value }))
+                          }
+                          onBlur={() => commitCost(o)}
+                          style={{ minWidth: 90 }}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+    </>
+  );
+}

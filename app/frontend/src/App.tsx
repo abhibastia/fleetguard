@@ -1,15 +1,24 @@
 import { useEffect, useRef, useState } from "react";
 import { api, type AuthStatus, type Health, type Me } from "./lib/api";
 import { applyTheme, currentTheme, type Theme } from "./lib/theme";
+import { AuditLog } from "./views/AuditLog";
 import { Assistant } from "./views/Assistant";
 import { Campaign } from "./views/Campaign";
 import { Evidence } from "./views/Evidence";
 import { Queue } from "./views/Queue";
+import { ServiceCampaigns } from "./views/ServiceCampaigns";
 import { SignIn } from "./views/SignIn";
 import { Signals } from "./views/Signals";
+import { WorkOrders } from "./views/WorkOrders";
 
 type View =
-  { name: "queue" } | { name: "signals" } | { name: "campaign"; id: string } | { name: "evidence" };
+  | { name: "queue" }
+  | { name: "signals" }
+  | { name: "campaign"; id: string }
+  | { name: "evidence" }
+  | { name: "work-orders"; serviceCampaignId?: string }
+  | { name: "launched" }
+  | { name: "audit-log" };
 
 /**
  * The console is a single page, but its tabs are addressable.
@@ -23,6 +32,12 @@ function viewFromHash(): View {
   if (h.startsWith("campaign/")) return { name: "campaign", id: decodeURIComponent(h.slice(9)) };
   if (h === "emerging") return { name: "signals" };
   if (h === "evidence") return { name: "evidence" };
+  if (h.startsWith("work-orders/")) {
+    return { name: "work-orders", serviceCampaignId: decodeURIComponent(h.slice(12)) };
+  }
+  if (h === "work-orders") return { name: "work-orders" };
+  if (h === "launched") return { name: "launched" };
+  if (h === "audit-log") return { name: "audit-log" };
   return { name: "queue" };
 }
 
@@ -30,6 +45,13 @@ function hashForView(v: View): string {
   if (v.name === "campaign") return `#/campaign/${encodeURIComponent(v.id)}`;
   if (v.name === "signals") return "#/emerging";
   if (v.name === "evidence") return "#/evidence";
+  if (v.name === "work-orders") {
+    return v.serviceCampaignId
+      ? `#/work-orders/${encodeURIComponent(v.serviceCampaignId)}`
+      : "#/work-orders";
+  }
+  if (v.name === "launched") return "#/launched";
+  if (v.name === "audit-log") return "#/audit-log";
   return "#/queue";
 }
 
@@ -206,6 +228,24 @@ export function App() {
           >
             Evidence
           </button>
+          <button
+            onClick={() => setView({ name: "launched" })}
+            aria-current={tab === "launched" ? "page" : undefined}
+          >
+            Launched
+          </button>
+          <button
+            onClick={() => setView({ name: "work-orders" })}
+            aria-current={tab === "work-orders" ? "page" : undefined}
+          >
+            Work orders
+          </button>
+          <button
+            onClick={() => setView({ name: "audit-log" })}
+            aria-current={tab === "audit-log" ? "page" : undefined}
+          >
+            Audit log
+          </button>
         </nav>
 
         <span className="who">
@@ -267,6 +307,20 @@ export function App() {
           <Campaign id={view.id} onBack={() => setView({ name: "queue" })} />
         )}
         {!gateClosed && view.name === "signals" && <Signals />}
+        {!gateClosed && view.name === "launched" && (
+          <ServiceCampaigns
+            onOpen={(serviceCampaignId) => setView({ name: "work-orders", serviceCampaignId })}
+          />
+        )}
+        {!gateClosed && view.name === "work-orders" && (
+          <WorkOrders
+            serviceCampaignId={view.serviceCampaignId}
+            onClearFilter={
+              view.serviceCampaignId ? () => setView({ name: "work-orders" }) : undefined
+            }
+          />
+        )}
+        {!gateClosed && view.name === "audit-log" && <AuditLog />}
         {view.name === "evidence" && <Evidence />}
       </main>
     </>

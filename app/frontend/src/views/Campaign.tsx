@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, ApiError, type ApprovalResult, type CampaignDetail } from "../lib/api";
+import { ApprovalConfirmation } from "./ApprovalConfirmation";
 
 /**
  * Campaign detail and the approval gate.
@@ -135,15 +136,7 @@ export function Campaign({ id, onBack }: { id: string; onBack: () => void }) {
           <h3>Launch service campaign</h3>
 
           {result ? (
-            <div className="success">
-              <strong>{result.service_campaign_id}</strong>
-              <br />
-              {result.work_orders_created} work orders created
-              <br />
-              approved by {result.approved_by}
-              <br />
-              due {result.due_date}
-            </div>
+            <ApprovalConfirmation result={result} />
           ) : (
             <>
               <label htmlFor="t">Title</label>

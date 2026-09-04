@@ -396,7 +396,17 @@ print(f"model : {MODEL_NAME}\nllm   : {LLM_ENDPOINT}\nindex : {INDEX}")
 # MAGIC         return emitted
 # MAGIC
 # MAGIC     def predict(self, request: ResponsesAgentRequest) -> ResponsesAgentResponse:
-# MAGIC         msgs = [m.model_dump(exclude_none=True) for m in request.input]
+# MAGIC         # mlflow's Message type defaults `type` to the literal "message" (not None), so
+# MAGIC         # `exclude_none=True` alone does not strip it - every item picks up a synthetic
+# MAGIC         # "type" key that the underlying chat-completions endpoint rejects once a second
+# MAGIC         # turn replays an assistant message back as input. Filter to what the completions
+# MAGIC         # API actually accepts. Do NOT apply this same filter to the model_dump in _run()
+# MAGIC         # above - that one carries tool_calls the model needs to see on its own turn.
+# MAGIC         ALLOWED_KEYS = {"role", "content"}
+# MAGIC         msgs = [
+# MAGIC             {k: v for k, v in m.model_dump(exclude_none=True).items() if k in ALLOWED_KEYS}
+# MAGIC             for m in request.input
+# MAGIC         ]
 # MAGIC         out = self._run(msgs)
 # MAGIC         return ResponsesAgentResponse(
 # MAGIC             output=[

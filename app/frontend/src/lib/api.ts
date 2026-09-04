@@ -168,6 +168,66 @@ export interface Me {
   token_source: string;
 }
 
+export interface WorkOrder {
+  wo_id: string;
+  service_campaign_id: string | null;
+  vin: string;
+  depot_id: string;
+  assigned_to: string | null;
+  assigned_to_name: string | null;
+  due_date: string | null;
+  status: string;
+  created_at: string;
+  completed_at: string | null;
+  actual_cost: number | null;
+}
+
+export interface Technician {
+  technician_id: string;
+  name: string;
+  depot_id: string;
+  active: boolean;
+}
+
+export interface ServiceCampaign {
+  service_campaign_id: string;
+  campaign_id: string;
+  title: string;
+  vehicle_count: number;
+  status: string;
+  approved_by: string | null;
+  approved_at: string | null;
+  open_count: number;
+  in_progress_count: number;
+  completed_count: number;
+  cancelled_count: number;
+  total_actual_cost: number;
+  costed_count: number;
+}
+
+export interface AuditLogEntry {
+  audit_id: number;
+  entity_type: string;
+  entity_id: string;
+  action: string;
+  actor_principal: string;
+  before_state: Record<string, unknown> | null;
+  after_state: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface CostBreakdownRow {
+  key: string;
+  total_actual_cost: number;
+  costed_count: number;
+  total_work_orders: number;
+}
+
+export interface CostBreakdown {
+  by_component: CostBreakdownRow[];
+  by_depot: CostBreakdownRow[];
+}
+
 export const api = {
   me: () => request<Me>("/me"),
   authStatus: () => request<AuthStatus>("/auth/status"),
@@ -185,5 +245,31 @@ export const api = {
     request<ChatReply>("/chat", { method: "POST", body: JSON.stringify({ messages }) }),
   signals: (fleetOnly = false) => request<SignalSummary>(`/signals?fleet_only=${fleetOnly}`),
   evidence: () => request<Evidence>("/evidence"),
-  serviceCampaigns: () => request<Record<string, unknown>[]>("/service-campaigns"),
+  serviceCampaigns: (limit = 50) =>
+    request<ServiceCampaign[]>(`/service-campaigns?limit=${limit}`),
+  workOrders: (params?: { serviceCampaignId?: string; depotId?: string; status?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.serviceCampaignId) q.set("service_campaign_id", params.serviceCampaignId);
+    if (params?.depotId) q.set("depot_id", params.depotId);
+    if (params?.status) q.set("status", params.status);
+    const qs = q.toString();
+    return request<WorkOrder[]>(`/work-orders${qs ? `?${qs}` : ""}`);
+  },
+  // `assigned_to`/`actual_cost` deliberately allow `null` (explicit unassign / explicit clear)
+  // distinct from omitting the key entirely (leave unchanged) — JSON.stringify drops
+  // `undefined` keys but keeps an explicit `null`, which is exactly the distinction the
+  // backend's `model_fields_set` check relies on. Never pass a field as `undefined` meaning
+  // "clear it" — that's a no-op, not a clear.
+  updateWorkOrder: (
+    woId: string,
+    body: { status?: string; assigned_to?: string | null; actual_cost?: number | null },
+  ) =>
+    request<WorkOrder>(`/work-orders/${encodeURIComponent(woId)}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  technicians: (depotId?: string) =>
+    request<Technician[]>(`/technicians${depotId ? `?depot_id=${encodeURIComponent(depotId)}` : ""}`),
+  costBreakdown: () => request<CostBreakdown>("/cost-breakdown"),
+  auditLog: (limit = 200) => request<AuditLogEntry[]>(`/audit-log?limit=${limit}`),
 };

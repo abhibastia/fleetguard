@@ -198,7 +198,7 @@ header {
   align-items: center;
   gap: 20px;
   height: var(--header-h);
-  padding: 0 24px;
+  padding: 0 32px;
   border-bottom: 1px solid var(--line);
   background: var(--header-bg);
   backdrop-filter: blur(10px) saturate(1.4);
@@ -308,8 +308,8 @@ header .who {
 }
 
 main {
-  padding: 26px 24px 64px;
-  max-width: 1240px;
+  padding: 32px 32px 72px;
+  max-width: 1520px;
   margin: 0 auto;
   animation: rise 0.25s var(--ease) both;
 }
@@ -351,7 +351,7 @@ h3 {
 }
 
 .stat {
-  flex: 1 1 150px;
+  flex: 1 1 170px;
   background: var(--surface);
   border: 1px solid var(--line);
   border-left: 3px solid var(--line-strong);
@@ -369,7 +369,7 @@ h3 {
 }
 
 .stat .v {
-  font-size: 26px;
+  font-size: 28px;
   font-weight: 650;
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
@@ -484,7 +484,8 @@ label {
 }
 
 input,
-textarea {
+textarea,
+select {
   width: 100%;
   font: inherit;
   padding: 9px 11px;
@@ -503,7 +504,8 @@ textarea::placeholder {
 }
 
 input:focus,
-textarea:focus {
+textarea:focus,
+select:focus {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-bg);
@@ -582,6 +584,59 @@ table.rows tbody tr:hover {
 .wrap {
   overflow-x: auto;
   border-radius: var(--r);
+}
+
+/* A sortable column header — distinct from `.rows`' row-click affordance, which navigates
+   somewhere; this reorders in place. */
+thead th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+thead th.sortable:hover {
+  color: var(--text);
+}
+
+/* Always visible, not just on hover — a control that only reveals itself after the first
+   click is a control the user has to stumble into. Dimmed double-arrow when sortable-but-
+   inactive, solid accent-colored arrow when it's the active sort. */
+.sort-indicator {
+  display: inline-block;
+  margin-left: 5px;
+  color: var(--faint);
+  font-size: 10px;
+}
+.sort-indicator.is-active {
+  color: var(--accent);
+}
+
+/* Filter controls above a table: dropdowns + a checkbox, left-aligned, wrapping on narrow
+   screens rather than overflowing. */
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.filter-row select {
+  width: auto;
+  min-width: 140px;
+}
+
+.filter-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0;
+  cursor: pointer;
+}
+
+.filter-checkbox input {
+  width: auto;
+  margin: 0;
 }
 
 /* ── badges ─────────────────────────────────────────────────────────────────────────── */
@@ -686,6 +741,108 @@ table.rows tbody tr:hover {
   line-height: 1.6;
 }
 
+/* A readable-width column for prose blocks (report text, stated-limits lists) — the same
+   760px cap Evidence.tsx used to apply ad hoc per-element via inline styles. */
+.prose {
+  max-width: 760px;
+}
+
+/* Approval confirmation — a vertical timeline of what actually happened, not a flat instant
+   reveal. The dot/line only ever turns "ok" green once a stage is genuinely true; the reveal
+   stagger (driven from ApprovalConfirmation.tsx's `revealed` state) is a fixed, fast (~530ms
+   total) cosmetic transition, not a progress bar — it never implies real backend waiting. */
+.timeline {
+  display: flex;
+  flex-direction: column;
+  margin-top: 4px;
+}
+
+.timeline-item {
+  display: flex;
+  gap: 12px;
+}
+
+.timeline-item:not(:last-child) {
+  padding-bottom: 16px;
+}
+
+.timeline-dot-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 22px;
+  flex-shrink: 0;
+}
+
+.timeline-dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid var(--line-strong);
+  background: var(--surface-2);
+  color: var(--muted);
+  transform: scale(0.85);
+  transition:
+    background 0.25s var(--ease),
+    border-color 0.25s var(--ease),
+    color 0.25s var(--ease),
+    transform 0.25s var(--ease);
+}
+
+.timeline-dot.is-done {
+  background: var(--ok-bg);
+  border-color: var(--ok);
+  color: var(--ok);
+  transform: scale(1);
+}
+
+.timeline-line {
+  flex: 1;
+  width: 2px;
+  min-height: 14px;
+  background: var(--line);
+  margin-top: 2px;
+  transition: background 0.25s var(--ease);
+}
+
+.timeline-line.is-done {
+  background: var(--ok-line);
+}
+
+.timeline-content {
+  padding-top: 1px;
+  opacity: 0;
+  transform: translateY(4px);
+  transition:
+    opacity 0.3s var(--ease),
+    transform 0.3s var(--ease);
+}
+
+.timeline-content.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.step-label {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.step-detail {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.divider {
+  border: none;
+  border-top: 1px solid var(--line);
+  margin: 32px 0;
+}
+
 .row {
   display: flex;
   gap: 22px;
@@ -765,7 +922,7 @@ table.rows tbody tr:hover {
    does not replace it (E-11). */
 .split {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(310px, 1fr);
+  grid-template-columns: minmax(0, 1.8fr) minmax(400px, 1fr);
   gap: 22px;
   align-items: start;
 }
@@ -783,11 +940,12 @@ table.rows tbody tr:hover {
   top: calc(var(--header-h) + 22px);
   display: flex;
   flex-direction: column;
-  padding: 16px;
+  padding: 18px;
 }
 
 .assistant .turns {
-  max-height: 46vh;
+  max-height: min(64vh, 640px);
+  min-height: 260px;
   overflow-y: auto;
   margin: 12px -4px;
   padding: 0 4px;
@@ -976,6 +1134,42 @@ table.rows tbody tr:hover {
 
 .snapshot-note strong {
   color: var(--warn);
+}
+
+/* Informational, not cautionary — a filter is a normal navigation state, so it borrows the
+   snapshot-note's layout but neutral tokens instead of warn ones. */
+.filter-banner {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+  padding: 10px 13px;
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+/* A real button, not `.crumb`'s bare text — a filter that's easy to set and invisible to
+   clear reads as a trap. Found live: the first version used `.crumb` here and was missed
+   entirely on a click-through. */
+.filter-clear {
+  flex-shrink: 0;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  color: var(--text);
+  padding: 5px 12px;
+  border-radius: var(--r-sm);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.filter-clear:hover:not(:disabled) {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
 }
 
 /* Sign-in as a header action rather than a wall — see App.tsx for why the landing page

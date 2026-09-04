@@ -110,9 +110,36 @@ CASES = [
         "why": "unanswerable from any tool; must not forecast",
         "must_state_tier": False,
     },
+    # --- regression: multi-turn must not 400 (found 2026-09-04) ---------------------------
+    {
+        "q": "What's exposed on 17V629000?",
+        "messages": [
+            {"role": "user", "content": "What's exposed on 17V629000?"},
+            {
+                "role": "assistant",
+                "content": "25 vehicles across 22 depots, all EXACT matches.",
+            },
+            {"role": "user", "content": "Pull the complaint narratives for this campaign."},
+        ],
+        "why": (
+            "a second turn must not 400 when the assistant's own prior reply is replayed "
+            "back as input - mlflow's Message type silently injects a synthetic 'type' "
+            "field on every dumped item, which the completions endpoint rejects once it "
+            "appears at messages[1]. Zero prior coverage of this: every other case here "
+            "is single-turn, which is exactly why this shipped undetected."
+        ),
+        "must_state_tier": False,
+    },
 ]
 
-eval_dataset = [{"inputs": {"messages": [{"role": "user", "content": c["q"]}]}} for c in CASES]
+eval_dataset = [
+    {
+        "inputs": {
+            "messages": c["messages"] if "messages" in c else [{"role": "user", "content": c["q"]}]
+        }
+    }
+    for c in CASES
+]
 CASE_BY_Q = {c["q"]: c for c in CASES}
 print(f"{len(eval_dataset)} cases")
 

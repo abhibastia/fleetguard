@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { api, ApiError, type ChatTurn } from "../lib/api";
+import { renderMarkdownLite } from "../lib/markdown";
 
 /**
  * The agent panel — advisory, and sitting *beside* the queue rather than in front of it.
@@ -78,7 +79,7 @@ export function Assistant() {
         )}
         {turns.map((t, i) => (
           <div key={i} className={t.role === "user" ? "turn user" : "turn agent"}>
-            {t.content}
+            {t.role === "assistant" ? renderMarkdownLite(t.content) : t.content}
           </div>
         ))}
         {busy && (

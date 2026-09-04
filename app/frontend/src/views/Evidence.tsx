@@ -73,7 +73,7 @@ export function Evidence() {
       </div>
 
       <div className="wrap">
-        <table style={{ maxWidth: 760 }}>
+        <table className="prose">
           <thead>
             <tr>
               <th>Arm</th>
@@ -110,7 +110,7 @@ export function Evidence() {
         </table>
       </div>
 
-      <div className="panel" style={{ marginTop: 20, maxWidth: 760 }}>
+      <div className="panel prose" style={{ marginTop: 20 }}>
         <p style={{ marginTop: 0 }}>
           <strong>{data.lift}× lift</strong>, two-proportion z ≈ {data.z},{" "}
           <strong>p ≈ {data.p_value}</strong>. Statistically real, practically modest.
@@ -124,7 +124,7 @@ export function Evidence() {
       </div>
 
       <h3>Stated limits</h3>
-      <ul className="muted" style={{ maxWidth: 720 }}>
+      <ul className="muted prose">
         <li>
           It misses roughly five of every six investigations — {real.detected} of {real.n}.
         </li>
@@ -149,7 +149,7 @@ export function Evidence() {
         snapshot generated {data.generated_at}
       </p>
 
-      <hr style={{ border: "none", borderTop: "1px solid var(--line)", margin: "32px 0" }} />
+      <hr className="divider" />
 
       <div className="page-head">
         <h2>Model B — how confident is a fuzzy match?</h2>
@@ -182,7 +182,7 @@ export function Evidence() {
       </div>
 
       <h3>Stated limits</h3>
-      <ul className="muted" style={{ maxWidth: 720 }}>
+      <ul className="muted prose">
         <li>
           Threshold {data.model_b.threshold.toFixed(2)} is tuned for{" "}
           <strong>recall over precision</strong>: a fleet manager missing a genuine match leaves a

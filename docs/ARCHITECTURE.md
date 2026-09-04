@@ -388,6 +388,88 @@ stays open to any workspace identity while approval stays restricted to whoever
 same "no unset value silently picks a trust model" rule the auth modes already follow.
 Covered by `tests/test_approval_gate.py`, parametrized across all four principal sources.
 
+**Work orders don't end at `OPEN` (added 2026-09-04).** `approve_campaign` always created one
+`fleetguard_work_order` row per exposed vehicle, but until this session nothing ever read or
+updated them again — the console had no way to show whether a vehicle was actually fixed.
+`routers/work_orders.py` adds `GET /api/work-orders` (filterable by campaign/depot/status) and
+`PATCH /api/work-orders/{id}`, gated by the same `FLEETGUARD_APPROVERS` allowlist as approval
+for the same reason: marking a safety recall "completed" when it wasn't is a compliance risk,
+not casual data entry. `fleetguard_work_order.status` gained a real `CHECK` constraint the same
+day (previously bare `TEXT`, only `'OPEN'` ever written) — `src/lakebase/
+16_add_work_order_status_check.py`, proven against a live rejected write, not just configured.
+
+**Assignment is a real roster, not free text.** `fleetguard_technician` (`src/lakebase/
+17_create_technician_roster.py`, 120 rows seeded against the actual live depot list, ~2 per
+depot) backs the `PATCH` endpoint's optional `assigned_to` field. The handler validates that
+the chosen technician belongs to the *same depot* as the work order — server-side, not a UI
+filter, matching the rule everywhere else in this codebase that the frontend never enforces
+anything the backend can enforce itself. `assigned_to: null` is a deliberate unassign, distinct
+from omitting the field entirely (leave unchanged); `WorkOrderUpdate.model_fields_set` is what
+tells the two apart, since a Pydantic default and an explicit `null` are otherwise
+indistinguishable. Both status changes and (re)assignments get their own `fleetguard_audit_log`
+row (`STATUS_CHANGE` / `ASSIGNED`) with real `before_state`/`after_state` — the first live use
+of `before_state`, which existed in the schema since Phase 7 but had never been populated.
+
+**Launched campaigns have a persistent home (added 2026-09-04).** `GET /api/service-campaigns`
+(`routers/approval.py`) existed since the approval gate itself but had no consumer — the only
+way to see what had been launched was to re-query Lakebase by hand. It now returns a typed
+`ServiceCampaignOut` per row (was a bare `list[dict]`) with a per-status work-order breakdown
+(`open_count`/`in_progress_count`/`completed_count`/`cancelled_count`) computed via `FILTER`
+clauses over the same join `list_work_orders` uses, so a launched-but-untouched campaign and a
+fully-closed-out one read differently at a glance — that distinction did not exist before
+work-order status tracking landed. The new `ServiceCampaigns.tsx` view (nav tab "Launched") is
+its first consumer; clicking a row opens `WorkOrders.tsx` pre-filtered to that
+`service_campaign_id` via a new optional route segment (`#/work-orders/<id>`), with a "Clear
+filter" affordance to return to the unfiltered list. No new gate — this is a read endpoint
+under the same `CurrentPrincipal` requirement as every other fleet-data read, not a write.
+
+**Cost tracking is logged and summed, not assumed (added 2026-09-04, revised same day).** A
+first version of this feature multiplied one editable "$ assumed cost per vehicle" input by the
+completed-work-order count — flagged in review as still wrong even with the assumption made
+visible: different repairs cost different amounts (a steering-rack repair on a Class 8 tractor
+and a brake job on a pickup are not the same cost), and a single blended multiplier can't
+represent that regardless of how honestly it's labeled. It was replaced same-day with real
+per-work-order cost capture:
+
+- `fleetguard_work_order.actual_cost` (`NUMERIC(10,2)`, nullable, `CHECK (actual_cost >= 0)`) —
+  `src/lakebase/18_add_work_order_actual_cost.py`. Nullable because cost is logged manually and
+  will lag completion; every aggregate below reports `costed_count` alongside a total specifically
+  so a partial-coverage total is never presented as if it were complete.
+- `PATCH /api/work-orders/{id}` accepts `actual_cost` as a third independent field alongside
+  `status`/`assigned_to`, same `model_fields_set` omitted-vs-explicit-null handling, same
+  `FLEETGUARD_APPROVERS` gate, its own `COST_LOGGED` audit-log action. A negative value is
+  rejected with a clean 400 before it can reach the live CHECK constraint.
+- `GET /api/service-campaigns` gained `total_actual_cost`/`costed_count` per campaign (summed
+  via the same `LEFT JOIN ... GROUP BY` the status breakdown already used).
+- New `GET /api/cost-breakdown` groups logged cost two ways — by `component` (joining
+  `work_order → service_campaign → recall_campaign`) and by `depot_id` — specifically so a
+  reader can see "STEERING repairs cost more than BRAKES" or "this depot runs above the fleet
+  average for the same repair" instead of one number that erases both distinctions.
+- `ServiceCampaigns.tsx`'s panel states the measured lead-time context (still using the Evidence
+  page's own `real.median_lead_days`, still careful to say "before an investigation would open,"
+  not before a recall or an incident — conflating those was an earlier mistake in this project's
+  proposal draft, see the three-intervals warning in CLAUDE.md) alongside the real logged-cost
+  total and its coverage, with the by-component/by-depot tables beneath it. No dollar figure
+  anywhere in this feature is now assumed — every one is a sum of what someone actually entered.
+
+**Audit log has a consumer (added 2026-09-04).** `fleetguard_audit_log` has recorded every
+campaign launch, work-order status change, (re)assignment, and cost log since Phase 7, but
+nothing ever exposed it — the same gap `list_service_campaigns` had before `ServiceCampaigns.tsx`
+existed. `routers/audit_log.py` adds `GET /api/audit-log` (filterable by `entity_type`/
+`entity_id`/`action`) and `GET /api/audit-log/export.csv` (same filters, streamed as a
+downloadable file with `Content-Disposition: attachment`). Both are read-only, so — unlike
+approval and work-order writes — they carry no `FLEETGUARD_APPROVERS` gate: the allowlist exists
+to stop someone *writing* a plausible-looking action into the log, not to stop someone *reading*
+what already happened, and every other fleet-data read in this app follows the same asymmetry.
+`before_state`/`after_state` are stored as `JSONB` and confirmed (checked live against
+`bootcamp_students.fleetguard_audit_log`) to come back from psycopg3 as native Python `dict`
+already — no manual `json.loads` needed on the read path, only on the way into the CSV cell.
+`AuditLog.tsx` (nav tab "Audit log") renders each row's before/after as a single human-readable
+"key: before → after" line instead of two raw JSON blobs, plus an "Export CSV" link that is a
+plain `<a href>` rather than a fetch-and-blob dance — the browser already carries the session
+cookie (or, on Databricks Apps, the platform-injected header) on a same-origin navigation, so no
+extra client code is needed to authenticate the download.
+
 **The "no shared identity on Render" rule stands, and has been satisfied rather than
 waived.** Its stated reason was that the URL is public and the API has a write path, so one
 shared identity would let anyone approve service campaigns. Both halves are now addressed:

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
@@ -195,9 +195,27 @@ def approve_campaign(
     )
 
 
-@router.get("/service-campaigns", tags=["approval"])
-def list_service_campaigns(principal: CurrentPrincipal, limit: int = 50) -> list[dict]:
-    """Recently launched service campaigns — what the demo checks after approving.
+class ServiceCampaignOut(BaseModel):
+    service_campaign_id: str
+    campaign_id: str
+    title: str
+    vehicle_count: int
+    status: str
+    approved_by: str | None
+    approved_at: datetime | None
+    open_count: int
+    in_progress_count: int
+    completed_count: int
+    cancelled_count: int
+    total_actual_cost: float
+    costed_count: int
+
+
+@router.get("/service-campaigns", response_model=list[ServiceCampaignOut], tags=["approval"])
+def list_service_campaigns(
+    principal: CurrentPrincipal, limit: int = 50
+) -> list[ServiceCampaignOut]:
+    """Recently launched service campaigns, with a per-status work-order breakdown.
 
     A string literal placed after the snapshot-mode return below is NOT a docstring to the
     interpreter — it silently becomes a dead no-op statement, and FastAPI's generated docs
@@ -210,7 +228,12 @@ def list_service_campaigns(principal: CurrentPrincipal, limit: int = 50) -> list
         cur.execute(
             f"""SELECT s.service_campaign_id, s.campaign_id, s.title, s.vehicle_count,
                        s.status, s.approved_by, s.approved_at,
-                       COUNT(w.wo_id) FILTER (WHERE w.status = 'OPEN') AS open_work_orders
+                       COUNT(w.wo_id) FILTER (WHERE w.status = 'OPEN') AS open_count,
+                       COUNT(w.wo_id) FILTER (WHERE w.status = 'IN_PROGRESS') AS in_progress_count,
+                       COUNT(w.wo_id) FILTER (WHERE w.status = 'COMPLETED') AS completed_count,
+                       COUNT(w.wo_id) FILTER (WHERE w.status = 'CANCELLED') AS cancelled_count,
+                       COALESCE(SUM(w.actual_cost), 0) AS total_actual_cost,
+                       COUNT(w.wo_id) FILTER (WHERE w.actual_cost IS NOT NULL) AS costed_count
                 FROM {PG_SCHEMA}.fleetguard_service_campaign s
                 LEFT JOIN {PG_SCHEMA}.fleetguard_work_order w
                        ON w.service_campaign_id = s.service_campaign_id

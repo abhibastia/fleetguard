@@ -59,7 +59,9 @@ class Scope:
         return f"{prefix} {self.predicate}" if self.predicate else ""
 
 
-def resolve_scope(principal: Principal, depot_id: str | None = None) -> Scope:
+def resolve_scope(
+    principal: Principal, depot_id: str | None = None, *, column: str = "v.depot_id"
+) -> Scope:
     """Decide what this caller may see.
 
     MVP: every authenticated caller gets `FULL`, because no role mapping exists yet and
@@ -72,11 +74,17 @@ def resolve_scope(principal: Principal, depot_id: str | None = None) -> Scope:
     is on the fail-open path regardless of what `resolve_scope` returns. Once real
     assignments exist, this should read them and the predicates below become defence-in-depth
     behind RLS rather than the only control.
+
+    `column` defaults to `v.depot_id` — every existing caller (`queue.py`, `approval.py`)
+    queries through a `fleetguard_vehicle` join aliased `v`. A table that carries its own
+    `depot_id` directly (e.g. `fleetguard_work_order`, no join needed) passes
+    `column="depot_id"` instead, so the same "voluntary narrowing" decision serves both shapes
+    without duplicating this function's logic per table.
     """
     if depot_id:
         return Scope(
             mode=ScopeMode.DEPOT,
-            predicate="v.depot_id = %(depot_id)s",
+            predicate=f"{column} = %(depot_id)s",
             params={"depot_id": depot_id},
             mask_vin=False,
         )

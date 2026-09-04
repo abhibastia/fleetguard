@@ -27,6 +27,95 @@ no error and passed the obvious check.
 
 ## Tooling / process
 
+### I-069 — A labeled assumption is still an assumption; the fix was real data, not a better disclaimer
+*Date:* 2026-09-04 · *Status:* resolved
+
+**Symptom.** A first "cost of early action" feature multiplied one editable "$ assumed cost per
+vehicle" input by the count of completed work orders, with a footnote explicitly stating the
+dollar figure was an assumption, not a measurement. It looked compliant with this project's own
+"never assert a number that hasn't been measured" discipline — the assumption was visible and
+adjustable, not hidden.
+
+**Root cause.** Labeling an assumption honestly does not fix the deeper problem: a single flat
+multiplier applied uniformly to every vehicle is structurally wrong regardless of how
+transparently it's disclosed, because different repairs cost different amounts (a steering-rack
+repair on a Class 8 tractor and a brake job on a pickup are not the same cost). The feature was
+solving "how do we disclose an assumption honestly" when the real question was "why are we
+guessing at all when the actual cost is knowable per repair." Caught not by a code review but by
+the user asking what the feature was even for, given vehicles clearly cost different amounts to
+service.
+
+**Resolution.** Replaced same-day with real per-work-order cost capture instead of a better
+disclaimer: `fleetguard_work_order.actual_cost` (`src/lakebase/
+18_add_work_order_actual_cost.py`), logged manually via `PATCH /work-orders/{id}`, summed and
+broken down by component and by depot (`GET /api/cost-breakdown`) rather than blended into one
+number. Every aggregate reports `costed_count` alongside its total specifically so partial
+coverage is never presented as a complete picture. See `docs/ARCHITECTURE.md`'s cost-tracking
+entry for the full design. **Lesson for future numbers in this app:** if a claim needs a
+disclaimer to be honest, check whether the disclaimer is covering for a wrong design, not just
+an unmeasured one — those are different problems with different fixes.
+
+### I-068 — New Lakebase scripts must copy `db.py`'s conditional `PSYCOPG_IMPL`, not `15_enable_depot_rls.py`'s unconditional one
+*Date:* 2026-09-04 · *Status:* resolved
+
+**Symptom.** `16_add_work_order_status_check.py`, freshly written by copying
+`15_enable_depot_rls.py`'s connection boilerplate, failed immediately on local execution:
+`ImportError: couldn't import requested psycopg 'python' implementation: libpq library not
+found`.
+
+**Root cause.** `15_enable_depot_rls.py` unconditionally sets
+`os.environ.setdefault("PSYCOPG_IMPL", "python")` — safe because that script has only ever
+been run from an actual Databricks notebook, where the pure-Python impl is required (I-045,
+FIPS self-test failure on serverless). `db.py::_select_psycopg_impl` does this conditionally
+(`if os.getenv("DATABRICKS_RUNTIME_VERSION")`) for exactly the reason stated in its own
+docstring: macOS has no system libpq, so forcing the pure-Python impl locally breaks import
+entirely. Copying the simpler unconditional version into a new script that *is* run locally
+(as every Lakebase migration in this session was) reintroduces a bug `db.py` had already
+fixed elsewhere in the codebase.
+
+**Resolution.** New script matched `db.py`'s conditional check instead. **Any future
+`src/lakebase/*.py` script that might run locally must do the same** — copy the pattern from
+`db.py`, not from `15_enable_depot_rls.py`, even though the latter looks like the more direct
+template for "a Lakebase migration script."
+
+### I-067 — Postgres has no `ADD CONSTRAINT IF NOT EXISTS`
+*Date:* 2026-09-04 · *Status:* resolved
+
+**Symptom.** `ALTER TABLE ... ADD CONSTRAINT IF NOT EXISTS fg_wo_status_check CHECK (...)`
+failed with `psycopg.errors.SyntaxError: syntax error at or near "EXISTS"`.
+
+**Root cause.** Unlike `ADD COLUMN IF NOT EXISTS` (which Postgres does support, and which
+`CREATE TABLE IF NOT EXISTS` / `DROP POLICY IF EXISTS` elsewhere in this codebase's Lakebase
+scripts correctly rely on), there is no `IF NOT EXISTS` variant for `ADD CONSTRAINT` in any
+Postgres version. Assumed it existed by analogy with the other `IF NOT EXISTS` forms already
+in use — wrong.
+
+**Resolution.** Idempotency has to be a manual existence check against `pg_constraint`
+(`SELECT 1 FROM pg_constraint WHERE conname = %(name)s AND conrelid = %(table)s::regclass`)
+before running the bare `ADD CONSTRAINT`. `16_add_work_order_status_check.py` does this and
+was verified idempotent by running it twice.
+
+### I-066 — psycopg3's `IN %s` does not expand a tuple parameter the way psycopg2's did
+*Date:* 2026-09-04 · *Status:* resolved
+
+**Symptom.** `cur.execute("... WHERE status NOT IN %s ...", (ALLOWED_TUPLE,))` failed with
+`psycopg.errors.SyntaxError: syntax error at or near "$1"` — the tuple was bound as one
+opaque parameter (`$1`) rather than expanded into `('OPEN', 'IN_PROGRESS', ...)`.
+
+**Root cause.** psycopg2 substituted parameters client-side, so a Python tuple passed for an
+`IN %s` placeholder was rendered as a literal parenthesised list in the query text before
+sending it. psycopg3 binds parameters **server-side** by default — the value is sent as a
+single bind parameter, and Postgres has no server-side way to expand one bind parameter into
+an `IN (...)` list. The `IN %s` + tuple idiom that "just works" in psycopg2 is a silent
+footgun when carried into psycopg3 code (this codebase already uses psycopg3 throughout, per
+`db.py`).
+
+**Resolution.** Use `= ANY(%(name)s)` with a Python **list** instead of `IN %s` with a tuple
+— psycopg3 adapts a list to a Postgres array cleanly, and `= ANY(array)` is the correct
+psycopg3-idiomatic equivalent of "column is one of these values." Fixed in
+`16_add_work_order_status_check.py`'s safety check; worth checking for the same pattern if
+any future script reaches for `IN %s`.
+
 ### I-065 — `aitools tools statement submit --file` silently mangled YAML containing literal `%` characters
 *Date:* 2026-09-03 · *Status:* resolved (switched tool), root cause not confirmed
 
