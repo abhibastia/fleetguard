@@ -31,7 +31,7 @@ next-actions list in priority order.** Design lives in `FleetGuard_Proposal.md`,
 | **10 — Governance** | ✅ **Visible slice DONE** | Postgres RLS on `fleetguard_vehicle`, `ENABLE`+`FORCE`, proved under real toggled states including the exposure join. Fail-open, nobody enrolled yet — mechanism real, enrollment is future work. Not the full ABAC/DQ-monitor matrix, by design. |
 | **11 — Deployment hardening** | ⬜ Not started | |
 | **12 — Second connector** | ❌ **Cut** | Deliberately dropped for schedule. |
-| **13 — Work-order lifecycle + technician assignment** | ✅ **DONE (2026-09-04, post-MVP)** | Not in the original 12 phases — grew out of a session UX walkthrough plus a "does this give a commercial fleet real value" analysis. `GET/PATCH /api/work-orders`, a new `fleetguard_technician` roster (120 rows, real depot-consistency check on assignment, not free text), a new "Work orders" tab. Both gated by `FLEETGUARD_APPROVERS`, both fully audited. Verified end to end against live Lakebase + CDF, not just the API response. See "Next" item 0.5. |
+| **13 — Commercial-fleet-value roadmap (work orders, cost, audit)** | ✅ **5/8 DONE (2026-09-04, post-MVP)** | Not in the original 12 phases — grew out of a session UX walkthrough plus a "does this give a commercial fleet real value" analysis. Work-order lifecycle + technician roster (`GET/PATCH /api/work-orders`, depot-consistency check, not free text); "Launched" campaigns view + table sort/filter; per-work-order actual-cost logging + component/depot breakdown (`GET /api/cost-breakdown`, replacing a same-day-rejected flat-multiplier design, I-069); audit log made readable (in-app view + CSV export of `fleetguard_audit_log`, unused since Phase 7). All writes gated by `FLEETGUARD_APPROVERS`, fully audited. Verified end to end against live Lakebase + CDF across several rounds, not just API responses. **Merged to `main` (`ab554f2`) and pushed.** Remaining: notification digest, depot risk heatmap, trend charts, role-based views — see "Next" item 0.5. |
 
 ---
 
@@ -568,38 +568,52 @@ edge, not an oracle."* v2 dropped after verification (I-052); one entity billing
    campaign, all 25 work orders, and the audit log row — confirmed present in
    `bootcamp_students.bootcamp_cdc.lb_fleetguard_*_history` via CDF. Read, write, and CDF
    propagation are all proven; only the browser-based OAuth login itself remains blocked.
-   (Test row left in place, clearly titled "TEST - end-to-end verification (static-dev)" —
-   flag for cleanup before the demo.)
+   (Test rows from this and later verification rounds were cleaned from live Lakebase
+   2026-09-04 — see item 0.5 below.)
 
    If the admin doesn't grant `all-apis`: revisit Databricks Apps instead of narrowing
    further — a `sql`-only re-scope would still permanently lose the write path and chat
    feature (neither has an assignable scope short of `all-apis`), landing worse than Apps
    for comparable rework.
-0.5 **Work-order lifecycle + technician assignment, built and verified live (2026-09-04) —
-   see the new Phase 13 row above.** Came out of a UX walkthrough plus a "does this give a
-   commercial fleet real value" analysis: once a campaign was approved, work orders sat at
-   `OPEN` forever with no UI ever reading them again. `GET/PATCH /api/work-orders` and a new
-   "Work orders" tab close that; `fleetguard_technician` (120 seeded, ~2/depot) backs a real
-   assignment dropdown instead of free text, with a server-side depot-consistency check
-   (assigning a DEP-042 technician to a DEP-051 order is rejected, not just UI-filtered).
-   Both gated by the same `FLEETGUARD_APPROVERS` allowlist as approving a campaign; both
-   fully audited (`STATUS_CHANGE` / `ASSIGNED`, real `before_state`/`after_state` — the
-   audit log's `before_state` column existed since Phase 7 but had never been populated
-   until this).
+0.5 **Commercial-fleet-value roadmap — 5 of 8 items built and verified live, merged to `main`
+   and pushed (2026-09-04).** Came out of a UX walkthrough plus a "does this give a commercial
+   fleet real value" analysis. Done, in build order:
+   - **Work-order lifecycle + technician assignment.** `GET/PATCH /api/work-orders` and a
+     "Work orders" tab, so work orders no longer sit at `OPEN` forever unread.
+     `fleetguard_technician` (120 seeded, ~2/depot) backs a real assignment dropdown with a
+     server-side depot-consistency check, not just UI filtering.
+   - **"Launched" campaigns view** — first consumer of `GET /api/service-campaigns`, which
+     existed since the approval gate itself but had no UI. Click-through into a filtered
+     Work-orders view.
+   - **Sort/filter on the Recall queue, Work orders, and Launched tables** — click-to-sort
+     headers with an always-visible indicator (not hover-only, fixed after review), plus
+     dropdown filters. Recall queue's consequence-before-volume default order is preserved
+     until a user explicitly clicks a header.
+   - **Per-work-order actual cost logging** (`fleetguard_work_order.actual_cost`, nullable,
+     `CHECK >= 0`), summed and broken down by component/depot via `GET /api/cost-breakdown`.
+     Replaced a same-day-rejected first design that multiplied one flat assumed "$/vehicle"
+     figure — wrong even fully disclosed, since different repairs cost different amounts
+     (I-069).
+   - **Audit log made readable** — a filterable "Audit log" tab plus CSV export of
+     `fleetguard_audit_log`, which had recorded every launch/status-change/assignment/
+     cost-log since Phase 7 with zero consumers until now.
 
-   **Loose ends, in order of relevance:**
-   - A handful of test rows from live verification are sitting in Lakebase — one work order
-     cycled through every status (`WO-cf39b334b046`) and reassigned/unassigned a technician a
-     few times. Harmless (clearly attributable, fully audited) but worth clearing before a
-     real demo, same as the `SC-17V629000-*` test service campaigns from item 0.
-   - The broader "commercial fleet value" menu this came from still has 7 undecided items
-     (recent-service-campaigns view, cost/ROI framing, notification digest, depot risk
-     heatmap, trend charts, audit log export, role-based views) — nothing else has been
-     started; pick the next one when ready rather than assuming an order.
-   - Everything is committed on `feature/console-refresh-2026-09`, **not merged to `main`**.
-     The branch now covers three logically separate pieces of work (layout/approval/chat
-     refresh, work-order tracking, technician assignment) — squash-merge when ready, per the
-     standing convention, but decide then whether that's one squash commit or a few.
+   All writes stay gated by `FLEETGUARD_APPROVERS` regardless of auth source; all reads follow
+   the existing open-to-any-signed-in-identity asymmetry. **Merged to `main` as one squash
+   commit (`ab554f2`) and pushed to `origin/main`** — the branch is no longer ahead of main.
+
+   **Remaining, not started:** notification digest (needs a new email-sending dependency —
+   biggest new-infra lift), depot-level risk heatmap, historical trend charts (first charting
+   anything in this app — would mean hand-rolling SVG, matching the no-new-dependency
+   precedent set by `markdown.tsx`), role-based views (biggest structural question — needs its
+   own design conversation on what each role should and shouldn't see before any code).
+
+   **Test-data hygiene:** live Lakebase was cleaned once mid-session (6 test service
+   campaigns + ~150 work orders + audit rows removed, `SC-17V629000-b3b9dfbd` preserved as
+   pre-existing). Further verification after that point created one more test campaign
+   (`SC-17V629000-64c4958b`) that is still live — clean it the same way before a real demo.
+   CDF history in `bootcamp_cdc.lb_fleetguard_*_history` is append-only and was never and can
+   never be scrubbed; cleanup only ever affects live/current Postgres state.
 1. **Databricks App (~20 Sept).** Still the one thing that makes queue, assistant and
    Emerging live for a real user, via OBO. The auth seam means it is an afternoon. Keep it
    `STOPPED` between sessions — `apps create` provisions billing compute on *create*.
