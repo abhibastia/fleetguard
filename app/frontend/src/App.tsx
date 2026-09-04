@@ -10,6 +10,7 @@ import { Queue } from "./views/Queue";
 import { ServiceCampaigns } from "./views/ServiceCampaigns";
 import { SignIn } from "./views/SignIn";
 import { Signals } from "./views/Signals";
+import { Trends } from "./views/Trends";
 import { WorkOrders } from "./views/WorkOrders";
 
 type View =
@@ -20,7 +21,8 @@ type View =
   | { name: "work-orders"; serviceCampaignId?: string }
   | { name: "launched" }
   | { name: "audit-log" }
-  | { name: "depot-risk" };
+  | { name: "depot-risk" }
+  | { name: "trends" };
 
 /**
  * The console is a single page, but its tabs are addressable.
@@ -41,6 +43,7 @@ function viewFromHash(): View {
   if (h === "launched") return { name: "launched" };
   if (h === "audit-log") return { name: "audit-log" };
   if (h === "depot-risk") return { name: "depot-risk" };
+  if (h === "trends") return { name: "trends" };
   return { name: "queue" };
 }
 
@@ -56,6 +59,7 @@ function hashForView(v: View): string {
   if (v.name === "launched") return "#/launched";
   if (v.name === "audit-log") return "#/audit-log";
   if (v.name === "depot-risk") return "#/depot-risk";
+  if (v.name === "trends") return "#/trends";
   return "#/queue";
 }
 
@@ -256,6 +260,12 @@ export function App() {
           >
             Depots
           </button>
+          <button
+            onClick={() => setView({ name: "trends" })}
+            aria-current={tab === "trends" ? "page" : undefined}
+          >
+            Trends
+          </button>
         </nav>
 
         <span className="who">
@@ -332,6 +342,7 @@ export function App() {
         )}
         {!gateClosed && view.name === "audit-log" && <AuditLog />}
         {!gateClosed && view.name === "depot-risk" && <DepotRisk />}
+        {!gateClosed && view.name === "trends" && <Trends />}
         {view.name === "evidence" && <Evidence />}
       </main>
     </>

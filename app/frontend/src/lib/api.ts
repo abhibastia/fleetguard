@@ -205,6 +205,18 @@ export interface ServiceCampaign {
   costed_count: number;
 }
 
+export interface RecallTrendPoint {
+  year: number;
+  campaigns: number;
+  urgent_campaigns: number;
+  vehicles_exposed: number;
+}
+
+export interface RecallTrend {
+  points: RecallTrendPoint[];
+  latest_issued_at: string | null;
+}
+
 export interface DepotRisk {
   depot_id: string;
   depot_name: string;
@@ -287,4 +299,5 @@ export const api = {
   costBreakdown: () => request<CostBreakdown>("/cost-breakdown"),
   auditLog: (limit = 200) => request<AuditLogEntry[]>(`/audit-log?limit=${limit}`),
   depotRisk: () => request<DepotRisk[]>("/depot-risk"),
+  recallTrend: () => request<RecallTrend>("/recall-trend"),
 };

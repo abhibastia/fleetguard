@@ -486,6 +486,18 @@ tint on the "Urgent" and "Overdue" cells, tiered by `urgent_vehicles_exposed ÷ 
 plain ratio, not a formula) so a depot with a small fleet and a few urgent vehicles isn't
 ranked the same as a large depot with the same raw count.
 
+**Recall trend — this app's first chart (added 2026-09-04).** `fleetguard_recall_campaign.
+issued_at` is the real NHTSA filing date (not a demo timestamp), and joined to the fleet's own
+exposure match it turns out to hold 13 years of real history (2014–2026) already sitting in
+Lakebase — no SQL Warehouse call needed. `GET /api/recall-trend` (`routers/trends.py`) groups
+by year; `Trends.tsx` renders it as two small bar charts (campaigns per year, with a red
+sub-segment for the Park It/Do Not Drive portion; vehicles exposed per year, kept separate
+because the two don't always move together). The chart itself is hand-rolled inline SVG
+(`lib/BarChart.tsx`) rather than a charting dependency — same precedent as `markdown.tsx`
+(hand-rolled instead of `react-markdown`) and the hand-rolled SVG icons already in `App.tsx`.
+Years with zero fleet-relevant campaigns are simply absent from the response rather than
+zero-filled, so the endpoint never asserts a count for a year it didn't actually find data for.
+
 **The "no shared identity on Render" rule stands, and has been satisfied rather than
 waived.** Its stated reason was that the URL is public and the API has a write path, so one
 shared identity would let anyone approve service campaigns. Both halves are now addressed:
