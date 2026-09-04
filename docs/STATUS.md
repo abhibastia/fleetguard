@@ -608,12 +608,14 @@ edge, not an oracle."* v2 dropped after verification (I-052); one entity billing
    precedent set by `markdown.tsx`), role-based views (biggest structural question — needs its
    own design conversation on what each role should and shouldn't see before any code).
 
-   **Test-data hygiene:** live Lakebase was cleaned once mid-session (6 test service
-   campaigns + ~150 work orders + audit rows removed, `SC-17V629000-b3b9dfbd` preserved as
-   pre-existing). Further verification after that point created one more test campaign
-   (`SC-17V629000-64c4958b`) that is still live — clean it the same way before a real demo.
-   CDF history in `bootcamp_cdc.lb_fleetguard_*_history` is append-only and was never and can
-   never be scrubbed; cleanup only ever affects live/current Postgres state.
+   **Test-data hygiene — clean as of 2026-09-04.** Live Lakebase was cleaned twice this
+   session: 6 test service campaigns + ~150 work orders + audit rows removed mid-session, then
+   one more leftover (`SC-17V629000-64c4958b`, from the round of verification right after)
+   removed at session end. Only `SC-17V629000-b3b9dfbd` (pre-existing, 2026-09-01) remains —
+   confirmed via a live `GET /api/service-campaigns` call, 1 row. CDF history in
+   `bootcamp_cdc.lb_fleetguard_*_history` is append-only and was never and can never be
+   scrubbed; cleanup only ever affects live/current Postgres state. Any *new* test campaigns
+   created by a future verification round will need the same treatment again before a demo.
 1. **Databricks App (~20 Sept).** Still the one thing that makes queue, assistant and
    Emerging live for a real user, via OBO. The auth seam means it is an afternoon. Keep it
    `STOPPED` between sessions — `apps create` provisions billing compute on *create*.
