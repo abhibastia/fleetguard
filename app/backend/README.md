@@ -22,13 +22,20 @@ would silently select the wrong trust model.
 ## Run locally
 
 ```bash
-pip install -r requirements.txt
-export FLEETGUARD_AUTH_MODE=static-dev
-export FLEETGUARD_DEV_TOKEN="$(databricks auth token --profile abhi | python3 -c 'import json,sys;print(json.load(sys.stdin)["access_token"])')"
-uvicorn fleetguard_api.main:app --reload --port 8000
+scripts/run_local_static_dev.sh          # port 8811 by default, or pass one: ... 8000
 ```
 
-`GET /healthz` is unauthenticated. `GET /me` proves the seam resolves an identity.
+This is the whole local setup, checked in rather than reconstructed from memory each
+session (the previous version of this snippet only set `FLEETGUARD_AUTH_MODE` and
+`FLEETGUARD_DEV_TOKEN` — enough for `/healthz` and `/me`, but every Lakebase-backed
+endpoint needs `DATABRICKS_HOST`, and every write-path test needs `FLEETGUARD_DEV_USER` +
+`FLEETGUARD_APPROVERS` too, or `may_approve` never returns `true`). Read the script if you
+need a different profile or user — it's short and everything is inline, no hidden config.
+
+`GET /healthz` is unauthenticated. `GET /me` proves the seam resolves an identity, and now
+also reports `may_approve` and `assigned_depot_id` (role-based views, 2026-09-05).
+
+After a frontend change, rebuild the console it serves: `scripts/build_console.sh`.
 
 ## Rules
 
