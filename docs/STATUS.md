@@ -543,19 +543,33 @@ edge, not an oracle."* v2 dropped after verification (I-052); one entity billing
 
 ### Next, in priority order
 
-0. **Verify the `render-u2m` live flip end to end.** The account-admin OAuth registration
-   landed 2026-09-03 (E-14's blocker resolved); `DATABRICKS_CLIENT_ID`/`DATABRICKS_CLIENT_SECRET`
-   are set in Render, and `render.yaml` now runs `FLEETGUARD_AUTH_MODE=render-u2m` +
-   `FLEETGUARD_DATA_MODE=lakebase` on `main` (pushed, deploy pending/in progress). **Not yet
-   confirmed live:** a real browser completing the Databricks login round-trip
-   (authorize -> Databricks login -> callback -> session -> a live Lakebase query
-   succeeding). Still needed: set `FLEETGUARD_APPROVERS=abhisek.bastia17@gmail.com` in the
-   Render dashboard (sync:false, not committed) — the allowlist is enforced unconditionally
-   now (`tests/test_approval_gate.py`), so leaving it unset means nobody, including the
-   owner, can approve. Check after deploy: `/healthz` reports `auth_mode: render-u2m,
-   data_mode: lakebase`; `/api/auth/status` reports `provider: databricks`; a completed
-   login shows a real `user_name` at `/api/me` with `token_source: render-u2m` and the
-   queue view shows real (not snapshot) fleet data.
+0. **`render-u2m` login is still blocked; the pipeline it would exercise is independently
+   confirmed live end to end (2026-09-04).** The account-admin OAuth registration landed
+   2026-09-03 (E-14's blocker resolved), but the app was registered without the `all-apis`
+   scope (`access_denied: Scopes 'all-apis' are not assigned to the client ...`), and the
+   admin pushed back on granting it — reasonably: verified against Databricks' own API
+   reference that `all-apis`/`sql`/`offline_access`/`openid`/`profile`/`email` is the
+   *entire* assignable scope set for a custom app integration, so there is no narrower
+   combination that covers both Lakebase and Model Serving (the two APIs this app needs
+   beyond `sql`). Awaiting the admin's decision.
+
+   **Rather than wait, the whole pipeline the login would unlock was verified separately,
+   with zero new exposure:** ran the backend locally in `static-dev` mode using the owner's
+   own `databricks auth token --profile abhi` (a token from Databricks' own first-party CLI
+   OAuth client — no custom app, no scope question, nothing shared with anyone). Confirmed
+   live: `/api/queue` and `/api/campaigns/17V629000` return real Lakebase data matching the
+   pinned values above; `POST .../service-campaign` created a real service campaign
+   (`SC-17V629000-6082d04b`, 25 work orders) in one transaction; all of it — service
+   campaign, all 25 work orders, and the audit log row — confirmed present in
+   `bootcamp_students.bootcamp_cdc.lb_fleetguard_*_history` via CDF. Read, write, and CDF
+   propagation are all proven; only the browser-based OAuth login itself remains blocked.
+   (Test row left in place, clearly titled "TEST - end-to-end verification (static-dev)" —
+   flag for cleanup before the demo.)
+
+   If the admin doesn't grant `all-apis`: revisit Databricks Apps instead of narrowing
+   further — a `sql`-only re-scope would still permanently lose the write path and chat
+   feature (neither has an assignable scope short of `all-apis`), landing worse than Apps
+   for comparable rework.
 1. **Databricks App (~20 Sept).** Still the one thing that makes queue, assistant and
    Emerging live for a real user, via OBO. The auth seam means it is an afternoon. Keep it
    `STOPPED` between sessions — `apps create` provisions billing compute on *create*.
