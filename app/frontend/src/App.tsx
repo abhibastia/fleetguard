@@ -4,6 +4,7 @@ import { applyTheme, currentTheme, type Theme } from "./lib/theme";
 import { AuditLog } from "./views/AuditLog";
 import { Assistant } from "./views/Assistant";
 import { Campaign } from "./views/Campaign";
+import { DepotRisk } from "./views/DepotRisk";
 import { Evidence } from "./views/Evidence";
 import { Queue } from "./views/Queue";
 import { ServiceCampaigns } from "./views/ServiceCampaigns";
@@ -18,7 +19,8 @@ type View =
   | { name: "evidence" }
   | { name: "work-orders"; serviceCampaignId?: string }
   | { name: "launched" }
-  | { name: "audit-log" };
+  | { name: "audit-log" }
+  | { name: "depot-risk" };
 
 /**
  * The console is a single page, but its tabs are addressable.
@@ -38,6 +40,7 @@ function viewFromHash(): View {
   if (h === "work-orders") return { name: "work-orders" };
   if (h === "launched") return { name: "launched" };
   if (h === "audit-log") return { name: "audit-log" };
+  if (h === "depot-risk") return { name: "depot-risk" };
   return { name: "queue" };
 }
 
@@ -52,6 +55,7 @@ function hashForView(v: View): string {
   }
   if (v.name === "launched") return "#/launched";
   if (v.name === "audit-log") return "#/audit-log";
+  if (v.name === "depot-risk") return "#/depot-risk";
   return "#/queue";
 }
 
@@ -246,6 +250,12 @@ export function App() {
           >
             Audit log
           </button>
+          <button
+            onClick={() => setView({ name: "depot-risk" })}
+            aria-current={tab === "depot-risk" ? "page" : undefined}
+          >
+            Depots
+          </button>
         </nav>
 
         <span className="who">
@@ -321,6 +331,7 @@ export function App() {
           />
         )}
         {!gateClosed && view.name === "audit-log" && <AuditLog />}
+        {!gateClosed && view.name === "depot-risk" && <DepotRisk />}
         {view.name === "evidence" && <Evidence />}
       </main>
     </>

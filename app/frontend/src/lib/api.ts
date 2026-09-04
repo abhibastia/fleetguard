@@ -205,6 +205,20 @@ export interface ServiceCampaign {
   costed_count: number;
 }
 
+export interface DepotRisk {
+  depot_id: string;
+  depot_name: string;
+  region: string;
+  city: string;
+  state: string;
+  fleet_size: number;
+  urgent_vehicles_exposed: number;
+  total_vehicles_exposed: number;
+  distinct_campaigns: number;
+  outstanding_work_orders: number;
+  overdue_work_orders: number;
+}
+
 export interface AuditLogEntry {
   audit_id: number;
   entity_type: string;
@@ -272,4 +286,5 @@ export const api = {
     request<Technician[]>(`/technicians${depotId ? `?depot_id=${encodeURIComponent(depotId)}` : ""}`),
   costBreakdown: () => request<CostBreakdown>("/cost-breakdown"),
   auditLog: (limit = 200) => request<AuditLogEntry[]>(`/audit-log?limit=${limit}`),
+  depotRisk: () => request<DepotRisk[]>("/depot-risk"),
 };

@@ -27,6 +27,7 @@ from .routers import (
     auth_routes,
     chat,
     databricks_auth_routes,
+    depots,
     evidence,
     queue,
     signals,
@@ -102,6 +103,7 @@ api.include_router(signals.router)
 api.include_router(work_orders.router)
 api.include_router(technicians.router)
 api.include_router(audit_log.router)
+api.include_router(depots.router)
 api.include_router(auth_routes.router)
 api.include_router(databricks_auth_routes.router)
 app.include_router(api)

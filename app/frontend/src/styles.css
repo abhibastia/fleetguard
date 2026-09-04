@@ -596,6 +596,20 @@ thead th.sortable:hover {
   color: var(--text);
 }
 
+/* The heatmap tint on depot-risk's "Urgent" and "Overdue" columns — a plain ratio
+   (urgent vehicles ÷ fleet size), not a hidden composite score. Reuses the same danger/warn
+   tokens as `.stat.is-danger`/`.tag.dnd` rather than inventing a new color scale. */
+.risk-cell.risk-high {
+  background: var(--danger-bg);
+  color: var(--danger);
+  font-weight: 600;
+}
+.risk-cell.risk-medium {
+  background: var(--warn-bg);
+  color: var(--warn);
+  font-weight: 600;
+}
+
 /* Always visible, not just on hover — a control that only reveals itself after the first
    click is a control the user has to stumble into. Dimmed double-arrow when sortable-but-
    inactive, solid accent-colored arrow when it's the active sort. */

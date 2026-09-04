@@ -470,6 +470,22 @@ plain `<a href>` rather than a fetch-and-blob dance — the browser already carr
 cookie (or, on Databricks Apps, the platform-injected header) on a same-origin navigation, so no
 extra client code is needed to authenticate the download.
 
+**Depot risk has a home (added 2026-09-04).** `fleetguard_depot` (60 rows, Phase 2) had nothing
+reading it beyond `resolve_scope`'s depot-narrowing predicate — no view showed which depots
+actually carry the most exposure. `GET /api/depot-risk` (`routers/depots.py`) joins three
+independent aggregates per depot — fleet size (`fleetguard_vehicle`), exposure and urgency
+(`fleetguard_vehicle_exposure` joined to `fleetguard_recall_campaign`, split on
+`park_it OR do_not_drive`), and work-order backlog (`fleetguard_work_order`, outstanding vs.
+overdue) — merged in Python rather than one large multi-join `GROUP BY`, to avoid join fan-out
+across three independently-cardinal relationships. **Deliberately no single blended "risk
+score":** a composite index with hidden weights is the same mistake I-069 already caught once
+(a flat cost-per-vehicle multiplier that looked data-driven but wasn't) — this returns the real
+component numbers and lets `DepotRisk.tsx` sort/filter by whichever one matters, the same
+pattern as every other table added this session. The one visual shortcut taken is a heatmap
+tint on the "Urgent" and "Overdue" cells, tiered by `urgent_vehicles_exposed ÷ fleet_size` (a
+plain ratio, not a formula) so a depot with a small fleet and a few urgent vehicles isn't
+ranked the same as a large depot with the same raw count.
+
 **The "no shared identity on Render" rule stands, and has been satisfied rather than
 waived.** Its stated reason was that the URL is public and the API has a write path, so one
 shared identity would let anyone approve service campaigns. Both halves are now addressed:
