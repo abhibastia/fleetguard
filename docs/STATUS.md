@@ -1,6 +1,6 @@
 # FleetGuard — project status
 
-**Last updated:** 2026-09-04 (session end) · **MVP target: 7 September — MET** · **Demo: 25–30 September**
+**Last updated:** 2026-09-05 (session paused mid-task) · **MVP target: 7 September — MET** · **Demo: 25–30 September**
 
 > **MVP = one vertical slice working end to end:** recall lands → exposure ranked → human
 > approves → work orders written to Lakebase → visible in UC via CDF → visible in a browser.
@@ -648,6 +648,42 @@ edge, not an oracle."* v2 dropped after verification (I-052); one entity billing
    `bootcamp_cdc.lb_fleetguard_*_history` is append-only and was never and can never be
    scrubbed; cleanup only ever affects live/current Postgres state. Any *new* test campaigns
    created by a future verification round will need the same treatment again before a demo.
+0.6 **E-01 (AI Gateway PII guardrail) — picked up, paused mid live-verification
+   (2026-09-05).** After shelving role-based views, evaluated `docs/ENHANCEMENTS.md`'s
+   backlog honestly and picked E-01 as the highest-value item left: it's marked "ADOPT —
+   highest priority" there because it corrects an actual wrong claim already in the frozen
+   proposal (§4.5 claims AI Gateway PII guardrails protect the agent; agent endpoints
+   deployed via `agents.deploy()` don't support `guardrails` at all, only inference tables —
+   confirmed live via `databricks serving-endpoints put-ai-gateway -h`'s own text, which
+   states plainly that pay-per-token/external-model/provisioned-throughput endpoints are
+   fully supported and agent endpoints are not).
+
+   **Also confirmed live:** the agent currently calls `databricks-claude-opus-4-8` directly
+   (`src/agent/14_fleetguard_agent.py`'s `LLM_ENDPOINT`) — a shared, pre-provisioned
+   Foundation Model API endpoint. E-01's fix is a new wrapper endpoint (`fleetguard-llm`)
+   around the *same* model, with the `ai_gateway` guardrail block attached to the wrapper
+   instead — same model, same $/token rate, no new idle/reserved-compute cost (pay-per-token
+   endpoints don't bill while unused). The one open cost question — whether the guardrail
+   scan itself adds separate overhead — was never settled.
+
+   **Blocked while trying to verify that live:** creating even a *disposable test* wrapper
+   endpoint around a `system.ai.*` Foundation Model (tried both `databricks-claude-opus-4-8`
+   and `databricks-gpt-5-5`) fails with `Model version '1' does not exist`, and the correct
+   version string can't be discovered — `databricks model-versions list` against the
+   `system` catalog returns empty, most likely a genuine privilege gap (`EXECUTE` on the
+   model / `USE_CATALOG` on `system`) for a regular workspace identity, not a request-shape
+   mistake (several shapes were tried and ruled out first). **Nothing was left behind** —
+   every attempt failed before provisioning anything; `serving-endpoints list` confirms no
+   `fleetguard-llm-test` exists.
+
+   **Next steps, in order:** (a) try creating the *real* `fleetguard-llm` endpoint directly
+   rather than a throwaway test — if the same version error recurs there, it's clearly a
+   platform wall rather than a test-specific mistake; (b) if still blocked, ask whoever
+   administers this shared workspace whether regular users have `USE_CATALOG`/`EXECUTE` on
+   `system.ai` model versions; (c) failing both, drop the live cost-verification and build
+   E-01 against Databricks' published AI Gateway docs instead of a hands-on measurement,
+   clearly caveated as unverified against this workspace (matching this project's own
+   "prefer stating a number as estimated" discipline).
 1. **Databricks App (~20 Sept).** Still the one thing that makes queue, assistant and
    Emerging live for a real user, via OBO. The auth seam means it is an afternoon. Keep it
    `STOPPED` between sessions — `apps create` provisions billing compute on *create*.
