@@ -31,7 +31,7 @@ next-actions list in priority order.** Design lives in `FleetGuard_Proposal.md`,
 | **10 — Governance** | ✅ **Visible slice DONE** | Postgres RLS on `fleetguard_vehicle`, `ENABLE`+`FORCE`, proved under real toggled states including the exposure join. Fail-open, nobody enrolled yet — mechanism real, enrollment is future work. Not the full ABAC/DQ-monitor matrix, by design. |
 | **11 — Deployment hardening** | ⬜ Not started | |
 | **12 — Second connector** | ❌ **Cut** | Deliberately dropped for schedule. |
-| **13 — Commercial-fleet-value roadmap (work orders, cost, audit)** | ✅ **5/8 DONE (2026-09-04, post-MVP)** | Not in the original 12 phases — grew out of a session UX walkthrough plus a "does this give a commercial fleet real value" analysis. Work-order lifecycle + technician roster (`GET/PATCH /api/work-orders`, depot-consistency check, not free text); "Launched" campaigns view + table sort/filter; per-work-order actual-cost logging + component/depot breakdown (`GET /api/cost-breakdown`, replacing a same-day-rejected flat-multiplier design, I-069); audit log made readable (in-app view + CSV export of `fleetguard_audit_log`, unused since Phase 7). All writes gated by `FLEETGUARD_APPROVERS`, fully audited. Verified end to end against live Lakebase + CDF across several rounds, not just API responses. **Merged to `main` (`ab554f2`) and pushed.** Remaining: notification digest, depot risk heatmap, trend charts, role-based views — see "Next" item 0.5. |
+| **13 — Commercial-fleet-value roadmap (work orders, cost, audit, depots, trends)** | ✅ **6/8 DONE, 1 deliberately shelved (2026-09-04/05, post-MVP)** | Not in the original 12 phases — grew out of a session UX walkthrough plus a "does this give a commercial fleet real value" analysis. Work-order lifecycle + technician roster; "Launched" campaigns view + table sort/filter; per-work-order actual-cost logging + component/depot breakdown (I-069); audit log made readable; depot risk heatmap (no blended score, real component numbers); recall trend chart (this app's first chart, hand-rolled SVG). All writes gated by `FLEETGUARD_APPROVERS`, fully audited, verified end to end against live Lakebase + CDF, not just API responses. **All merged to `main` and pushed.** **Role-based views was built, verified live, then deliberately not merged** — see "Next" item 0.5 for the full reasoning (little new judging credit for re-proving Phase 10's RLS, zero visible footprint in the default demo state, and a real schema-migration cost to fix a live-discovered gap). Kept on `feature/role-based-views`, available later. Only its local `static-dev` setup script landed on `main` (`c5b3af0`). Remaining, not started: notification digest. |
 
 ---
 
@@ -602,11 +602,43 @@ edge, not an oracle."* v2 dropped after verification (I-052); one entity billing
    the existing open-to-any-signed-in-identity asymmetry. **Merged to `main` as one squash
    commit (`ab554f2`) and pushed to `origin/main`** — the branch is no longer ahead of main.
 
+   **Depot risk heatmap and recall trend chart: also done, also merged (2026-09-04/05).**
+   `GET /api/depot-risk` (new "Depots" tab, all 60 depots, deliberately no single blended
+   risk score — real component numbers instead, see I-069's lesson) and `GET /api/recall-trend`
+   (new "Trends" tab, this app's first chart, hand-rolled SVG per the no-new-dependency
+   precedent `markdown.tsx` set, 13 years of real NHTSA filing dates already in Lakebase).
+   That's 6 of the original 8 roadmap items done.
+
+   **Role-based views: attempted, then deliberately shelved — not merged, on purpose
+   (2026-09-05).** Built real depot-scoping enforcement (`fleetguard_depot_assignment`,
+   previously idle since Phase 10) rather than a cosmetic role picker, caught and fixed a
+   real precedence bug before merging (I-070), and verified it live end to end. Then, asked
+   directly whether it was worth finishing: **no.** Two reasons. First, it re-demonstrates a
+   capability (Postgres RLS) that Phase 10 already proved and already counted as done —
+   little new judging credit for the work involved. Second, and more concretely, live
+   testing surfaced that the "Depots/Trends/Audit log stay fleet-wide" decision is not
+   fully achievable without a real schema change: `fleetguard_vehicle_exposure` has no
+   `depot_id` of its own, so `depots.py`'s vehicle-derived columns (`fleet_size`,
+   `urgent_vehicles_exposed`, `total_vehicles_exposed`, `distinct_campaigns`) go through a
+   join to the RLS-protected `fleetguard_vehicle` table — meaning Postgres's own RLS policy
+   (not this app's code) silently zeroes those columns for every depot except the caller's
+   own the moment *any* real assignment exists anywhere, regardless of what `depots.py`
+   intended. Fixing it properly means denormalizing `depot_id` onto
+   `fleetguard_vehicle_exposure` plus a static `fleet_size` column on `fleetguard_depot` —
+   real scope, for a feature with **zero visible footprint in the default demo state**
+   (nobody is enrolled by default; the depot-scope banner never appears unless someone
+   deliberately sets up an assignment). Not a good trade this close to a fixed demo date.
+
+   **The branch (`feature/role-based-views`) is kept, not merged, not deleted** — three
+   commits, fully working and tested for what it does, available if this becomes worth
+   finishing later. Only one thing off that branch landed on `main`: the local `static-dev`
+   setup script (`scripts/run_local_static_dev.sh`, cherry-picked as `c5b3af0`) — useful
+   regardless of the feature's fate, since it replaces a command that had been reconstructed
+   from session memory every time rather than living anywhere checked in.
+
    **Remaining, not started:** notification digest (needs a new email-sending dependency —
-   biggest new-infra lift), depot-level risk heatmap, historical trend charts (first charting
-   anything in this app — would mean hand-rolling SVG, matching the no-new-dependency
-   precedent set by `markdown.tsx`), role-based views (biggest structural question — needs its
-   own design conversation on what each role should and shouldn't see before any code).
+   the biggest new-infra lift of what's left, and arguably not worth it for the same
+   "low visible footprint" reason role-based views was shelved).
 
    **Test-data hygiene — clean as of 2026-09-04.** Live Lakebase was cleaned twice this
    session: 6 test service campaigns + ~150 work orders + audit rows removed mid-session, then

@@ -27,6 +27,44 @@ no error and passed the obvious check.
 
 ## Tooling / process
 
+### I-070 — RLS on `fleetguard_vehicle` overrides app-level scoping intent, silently, for any identity with a real depot assignment
+*Date:* 2026-09-05 · *Status:* open (informs future work, not fixed)
+
+**Symptom.** While building (later shelved) role-based views, a depot-risk view explicitly
+designed to stay fleet-wide for every viewer — real component numbers across all 60 depots,
+no per-depot narrowing, by deliberate decision — started showing `fleet_size: 0` and
+`urgent_vehicles_exposed: 0` for every depot except the one identity that had a real row in
+`fleetguard_depot_assignment`. Caught via a screenshot review, not a test.
+
+**Root cause.** `fleetguard_vehicle` has had real Postgres RLS since Phase 10
+(`ENABLE` + `FORCE`, `src/lakebase/15_enable_depot_rls.py`) — a principal with a row in
+`fleetguard_depot_assignment` sees only that depot's vehicles, enforced *below* the
+application, for **every** query that touches the table, regardless of what the calling
+application code intended. `fleetguard_vehicle_exposure` (the table linking vehicles to
+recall campaigns) has no `depot_id` column of its own, so any depot-level rollup of
+exposure — vehicles exposed, campaigns affecting a depot, fleet size — has to join through
+`fleetguard_vehicle` to get there. The moment *any* identity anywhere has a real depot
+assignment, RLS silently narrows that join for that identity, even on an endpoint whose own
+code never asked for scoping and whose product decision was explicitly "stay fleet-wide."
+This is real enforcement working exactly as designed at the Postgres layer — the surprise is
+that it applies unconditionally, with no way for a specific query to opt out while connected
+as that identity.
+
+**Not fixed.** The clean fix is denormalizing `depot_id` onto `fleetguard_vehicle_exposure`
+(populated once from a privileged load connection, same pattern as the initial fleet-registry
+load) plus a static `fleet_size` column on `fleetguard_depot`, so a "stay fleet-wide" view
+never needs to touch the RLS-protected table at all. Not built — this finding is what
+convinced the project role-based views wasn't worth finishing right now (see `docs/STATUS.md`
+Phase 13 / "Next" item 0.5): the feature has zero visible footprint in the default demo state
+(nobody is enrolled by default), so paying for a real schema migration to fix a bug nobody
+will hit outside of deliberately demoing the feature itself was the wrong trade this close to
+a fixed demo date.
+
+**Lesson for whoever picks depot-scoping back up:** any new view or endpoint that claims to
+stay fleet-wide regardless of role must be checked against every RLS-protected table it
+touches, transitively through joins — "my code doesn't apply a depot filter" is not the same
+guarantee as "this data is fleet-wide," once RLS is live on any table in the join path.
+
 ### I-069 — A labeled assumption is still an assumption; the fix was real data, not a better disclaimer
 *Date:* 2026-09-04 · *Status:* resolved
 
