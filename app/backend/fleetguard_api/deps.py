@@ -7,13 +7,20 @@ on `CurrentPrincipal`; they never touch `request.headers` themselves (E-13).
 from __future__ import annotations
 
 import os
+import time
 from functools import lru_cache
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request, status
 
 from .auth import databricks_oauth
-from .auth.tokens import AuthError, Principal, TokenProvider, build_token_provider
+from .auth.tokens import (
+    AuthError,
+    Principal,
+    TokenProvider,
+    build_token_provider,
+    session_is_live,
+)
 
 # In-memory session store for the Render U2M flow. Deliberately trivial for MVP; swapping it
 # for Lakebase-backed sessions touches only this dict and the lookup below, because the seam
@@ -28,6 +35,30 @@ SESSIONS = _SESSIONS
 
 def session_lookup(session_id: str) -> dict | None:
     return _SESSIONS.get(session_id)
+
+
+def prune_sessions(now_fn=time.time) -> int:
+    """Drop sessions past their server-side TTL. Returns how many were removed.
+
+    Rejecting an expired session on read (`tokens.session_is_live`) keeps it from being
+    *honoured*, but does not remove it — so without this the dict only ever grows, and a
+    session nobody explicitly logs out of (the common case: people close the tab) stays
+    resident forever. I-062 named this unbounded-growth half of the problem explicitly; the
+    fix at the time only covered the access-control half, so it is closed here (I-071).
+
+    Called from `auth_status`, which the console hits on mount: frequent enough to keep the
+    dict bounded, and well off the hot path of every data request.
+
+    `list(...)` around `.items()` is load-bearing, not style. FastAPI runs sync endpoints in
+    a threadpool, so a login completing on another worker can insert into `_SESSIONS` while
+    this iterates — which raises `RuntimeError: dictionary changed size during iteration`.
+    Snapshotting the items first makes the read atomic with respect to that; `pop(..., None)`
+    then tolerates a key another thread removed first (a concurrent logout).
+    """
+    stale = [sid for sid, s in list(_SESSIONS.items()) if not session_is_live(s, now_fn=now_fn)]
+    for sid in stale:
+        _SESSIONS.pop(sid, None)
+    return len(stale)
 
 
 def _session_lookup_for(mode: str):

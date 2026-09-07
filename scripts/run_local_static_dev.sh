@@ -10,6 +10,14 @@
 # test approve/work-order-edit at all). Fixed here instead of leaving the gap for the next
 # session to rediscover the hard way.
 #
+# **The token is captured once, here, and Databricks access tokens live one hour.** After
+# that this server starts returning 500s from every Lakebase-backed endpoint, with
+# `PermissionDenied: ... Invalid Token` in its log — which looks exactly like a code
+# regression if you have been editing all afternoon (it was mistaken for one on 2026-09-07).
+# `static-dev` holds a *static* token by design, so the fix is to restart this script, not to
+# add refresh logic to StaticTokenProvider. If a long session keeps tripping over it, that is
+# the argument for using `render-u2m` locally instead, which does refresh in place.
+#
 # Usage: scripts/run_local_static_dev.sh [port]
 set -euo pipefail
 cd "$(dirname "$0")/.."

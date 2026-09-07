@@ -52,6 +52,14 @@ def _select_psycopg_impl() -> None:
 _select_psycopg_impl()
 import psycopg  # noqa: E402 - must follow _select_psycopg_impl()
 
+# Re-exported so routers can catch integrity errors *without* importing psycopg themselves.
+# A bare `import psycopg` in a router is sorted into the third-party block, above the
+# `from ..db import ...` line — so it would execute before `_select_psycopg_impl()` ever
+# runs, silently defeating the I-045 workaround (psycopg[binary] aborts on Databricks
+# serverless with a FIPS self-test failure). Importing the symbol from here makes the
+# ordering guarantee impossible to get wrong at the call site.
+UniqueViolation = psycopg.errors.UniqueViolation
+
 
 @dataclass(frozen=True)
 class _CachedCredential:

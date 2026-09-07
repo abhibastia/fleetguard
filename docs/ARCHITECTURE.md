@@ -302,31 +302,60 @@ Two surfaces, one codebase, decided 2026-09-01 (E-12/E-13).
 
 | Window | Surface | Auth mode | Data source |
 |---|---|---|---|
-| Now → demo | **Render** (free tier) — public evidence **+ signed-in console** | `app-login` — GitHub OAuth, app-owned session | **snapshot** (committed, captured from live Lakebase) |
+| Now → demo | **Render** (free tier) — public evidence **+ signed-in console** | `render-u2m` — Databricks U2M OAuth (PKCE), real per-user token | **live Lakebase** |
 | Local dev | developer machine | `static-dev` — developer's own token | live Lakebase |
 | ~20 Sept → demo | **Databricks App** in `abhi`, kept `STOPPED` between sessions — *the operator console* | `databricks-apps` — `X-Forwarded-Access-Token` (OBO) | live Lakebase |
 
-**Render runs on a snapshot because it can hold no Databricks credential.** Measured
-2026-09-02, every route is closed on this account: `service-principals create` →
-*"only accessible by admins"*; `tokens list` → *"User does not have permission to use
-tokens"*; Lakebase roles are all `LAKEBASE_OAUTH_V1` (no password auth, credentials are
-minted from a Databricks token and last an hour); and the account-level OAuth app needed for
-U2M requires account admin. Not a design preference — an enumerated dead end.
+**Render ran on a snapshot until 2026-09-03, and no longer does.** The original constraint was
+real and enumerated, not a preference: measured 2026-09-02, every machine-credential route was
+closed on this account — `service-principals create` → *"only accessible by admins"*;
+`tokens list` → *"User does not have permission to use tokens"*; Lakebase roles all
+`LAKEBASE_OAUTH_V1` (no password auth, credentials minted from a Databricks token, one-hour
+life). The account-level OAuth app that U2M needs required an account admin, which arrived on
+2026-09-03 (E-14's blocker), so `render.yaml` now sets `FLEETGUARD_AUTH_MODE=render-u2m` and
+`FLEETGUARD_DATA_MODE=lakebase`: the host holds real per-user Databricks credentials rather
+than none at all.
 
-So `app-login` is the one provider whose `Principal` carries **no** Databricks token, and
-that makes an invariant load-bearing: `build_token_provider` **refuses to start** unless
-`FLEETGUARD_DATA_MODE=snapshot`. The two settings cannot drift apart.
+`app-login` remains the one provider whose `Principal` carries **no** Databricks token, and
+that invariant is still load-bearing wherever it is selected: `build_token_provider` **refuses
+to start** unless `FLEETGUARD_DATA_MODE=snapshot`. The two settings cannot drift apart.
 
-**Authorization on Render is two-tier and app-enforced.** Signing in grants *read*.
-Approving requires membership of `FLEETGUARD_APPROVERS` — signing in proves who you are, not
-that you may dispatch work orders against a fleet. And the approval endpoint returns **501**
-in snapshot mode rather than simulating a write: a plausible service-campaign id for a
-campaign that was never created would be a lie told by the safety-critical path.
+**Snapshot mode is dormant, not removed — and is kept tested for that reason.** Nothing in
+production selects it today, but it is the fallback for any surface that cannot hold a
+credential, so it stays. Verified working end to end 2026-09-07: all eleven read endpoints
+return 200 with no Databricks credential present, and `/healthz` reports `data_mode:
+snapshot` with the capture date the console labels the data from.
+
+The committed `snapshot.json` covers only **queue, campaign detail and signals** — everything
+added later (work orders, service campaigns, cost breakdown, depot risk, recall trend, audit
+log, technicians) returns an empty list in snapshot mode. That is the truthful answer for a
+read-only surface where nothing has been approved, not a placeholder, and
+`tests/test_snapshot_mode.py` pins it so that fabricating plausible data there would have to
+break a test first. That file also enumerates every read endpoint explicitly: the failure it
+exists to catch is a *new* endpoint omitting its `if snapshot.is_snapshot()` branch, which
+would call `connect()` with no credential and 500 the public deployment — confirmed by
+deleting one guard and watching it fail.
+
+**Authorization on Render is two-tier.** Signing in grants *read*. Approving requires
+membership of `FLEETGUARD_APPROVERS` — signing in proves who you are, not that you may
+dispatch work orders against a fleet. That gate is checked unconditionally on
+`principal.source`, so it applies to a real-Databricks-token principal exactly as it does to
+an app-only one; it used to be skipped for the former, which mattered once the workspace
+turned out to be shared with the judging cohort (fixed 2026-09-03,
+`tests/test_approval_gate.py`). Where snapshot mode *is* selected, the approval endpoint
+returns **501** rather than simulating a write: a plausible service-campaign id for a campaign
+that was never created would be a lie told by the safety-critical path.
 
 §5.1's "identity determines both rows and columns, and the frontend cannot bypass it" is a
-statement about the **Databricks App** surface, where UC and Postgres enforce it. On Render
-it is app-enforced through `scoping.py`, over immutable data, with writes disabled. Stated
-here rather than implied.
+statement about the **Databricks App** surface, where UC and Postgres enforce it. **Since the
+2026-09-03 flip to `render-u2m` + live Lakebase, Render is materially closer to that than the
+paragraph here used to claim:** the caller's own Databricks token mints the Lakebase
+credential, so Postgres evaluates RLS under their identity, and the write path is genuinely
+live rather than disabled over immutable data. What remains app-enforced rather than
+database-enforced is `FLEETGUARD_APPROVERS` (an env-var allowlist, not a UC grant) and
+`scoping.py`'s depot predicate — the latter backed by real RLS on `fleetguard_vehicle`, though
+with nobody currently enrolled in `fleetguard_depot_assignment` every caller is on its
+fail-open path in practice (see §10 and I-070).
 
 **The Postgres half of that claim is now real, not aspirational (Phase 10's visible slice,
 2026-09-02).** `fleetguard_vehicle` has RLS **enabled and forced** — forced specifically so
@@ -387,6 +416,32 @@ stays open to any workspace identity while approval stays restricted to whoever
 `FLEETGUARD_APPROVERS` names. Unset means nobody can approve, on any surface, which is the
 same "no unset value silently picks a trust model" rule the auth modes already follow.
 Covered by `tests/test_approval_gate.py`, parametrized across all four principal sources.
+
+**One active service campaign per recall, enforced in Postgres (added 2026-09-07, I-063).**
+Approving the same recall twice used to create a second campaign and a second work order per
+exposed vehicle — observed for real in the 2026-09-04 test-data cleanup, which found six
+campaigns for one recall. The second approval now returns **409**, naming the campaign that
+already exists so the operator can go look at it.
+
+The enforcement point is a partial unique index — `ux_fg_service_campaign_active ON
+fleetguard_service_campaign (campaign_id) WHERE status = 'LAUNCHED'`
+(`src/lakebase/19_add_service_campaign_uniqueness.py`) — **not** the handler's `SELECT`. That
+distinction is the whole design: the realistic trigger is a double-click, two requests
+milliseconds apart, and a check-then-insert in application code is a TOCTOU race that both
+requests win under READ COMMITTED. The handler check exists for the error message; the index
+is what serialises them, and `approve_campaign` catches the resulting `UniqueViolation` and
+returns the same 409. Verified with five concurrent approvals: exactly one 201, four 409s,
+one campaign.
+
+Scoped to `LAUNCHED` rather than all rows so a cancelled campaign does not block relaunching
+the same recall — a real workflow. `campaign_id` is nullable (a campaign can be raised from a
+`signal_id`), and Postgres permits repeated NULLs in a unique index, so signal-driven
+campaigns are correctly unaffected.
+
+`UniqueViolation` is re-exported from `db.py` rather than imported from `psycopg` in the
+router. A bare `import psycopg` in a router sorts into the third-party block *above* the
+`from ..db import ...` line, so it would execute before `db.py`'s `_select_psycopg_impl()` and
+silently defeat the I-045 FIPS workaround on Databricks serverless.
 
 **Work orders don't end at `OPEN` (added 2026-09-04).** `approve_campaign` always created one
 `fleetguard_work_order` row per exposed vehicle, but until this session nothing ever read or
@@ -562,11 +617,31 @@ Three layers, deliberately separate:
 
 | Layer | Coverage | Run |
 |---|---|---|
-| Unit | 91 tests, no Databricks | `pytest` |
+| Unit | 276 tests, no Databricks | `pytest` |
 | Pipeline expectations | In-pipeline, `_dq_failures` quarantine split | With the pipeline |
-| Data quality | 21 tests against the live workspace | `pytest -m integration --run-integration` |
+| Data quality + live scoping | 21 tests against the live workspace | `pytest -m integration --run-integration` |
 
 Logic that has been wrong once lives in `src/fleetguard/` (`vin.py`, `chunking.py`,
 `naming.py`) so it is testable off-platform, with each past bug encoded as a named
 regression. The data-quality tests deliberately **do not trust `_rescued_data`** — they
 assert measured cardinalities instead.
+
+**Every router is covered as of 2026-09-07.** Six had none — `queue`, `depots`, `trends`,
+`audit_log`, `technicians`, `signals` — including `queue.py`, the operator's primary surface,
+which had never had a unit test. `tests/fakes.py` provides a shared fake cursor keyed by SQL
+substring, so a test states what the database contains rather than replaying a call order.
+
+These deliberately test the **Python around the SQL**, not the SQL: WHERE-clause assembly,
+merging several result sets, defaulting a depot that returned no rows, VIN masking, CSV
+serialisation, the snapshot short-circuit. Re-asserting query text through a fake would only
+prove the fake matches the string; the statements themselves are exercised for real by the
+integration tests and by live verification.
+
+Two habits this round established, both after a test passed when it should not have:
+
+- **Assert the message, not just the status code**, wherever several paths return the same
+  one. `approve_campaign` has two unrelated 409s, and a duplicate-approval test that checked
+  only the code passed with the duplicate check deleted (I-063).
+- **Verify a regression test fails against the unfixed code** before trusting it. Every fix in
+  the 2026-09-07 review batch (I-063, I-071, I-072) was confirmed this way; it is what caught
+  the above, and the `list()`-snapshot race in `prune_sessions`.

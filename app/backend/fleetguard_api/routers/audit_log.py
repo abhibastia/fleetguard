@@ -17,7 +17,7 @@ from __future__ import annotations
 import csv
 import io
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Query, Response
@@ -132,7 +132,10 @@ def export_audit_log_csv(
             ]
         )
 
-    filename = f"fleetguard_audit_log_{datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}.csv"
+    # datetime.now(UTC), not the deprecated utcnow() — the latter warns on 3.12+ and is
+    # scheduled for removal. Formatted with a literal Z since strftime has no offset
+    # directive that renders "Z" for UTC.
+    filename = f"fleetguard_audit_log_{datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')}.csv"
     return Response(
         content=buf.getvalue(),
         media_type="text/csv",

@@ -145,16 +145,25 @@ def cost_breakdown(principal: CurrentPrincipal) -> CostBreakdown:
     if snapshot.is_snapshot():
         return CostBreakdown(by_component=[], by_depot=[])
     with connect(principal) as conn, conn.cursor() as cur:
+        # LEFT JOIN, not JOIN. `fleetguard_work_order.service_campaign_id` is nullable, so an
+        # inner join silently drops any work order that cannot be traced to a component —
+        # while `by_depot` below counts every row. The two tables sit on the same page under
+        # the same "total_work_orders" heading, so a divergence reads as a data error with no
+        # way to tell which number is wrong. Unattributable rows now land in an explicit
+        # bucket instead, which keeps the totals reconcilable and surfaces the orphans rather
+        # than hiding them. Measured 2026-09-07: zero such rows today, so this is closing a
+        # latent gap the schema permits, not fixing an active discrepancy.
         cur.execute(
-            f"""SELECT rc.component AS key,
+            f"""SELECT COALESCE(rc.component, '(unattributed)') AS key,
                        COALESCE(SUM(w.actual_cost), 0) AS total_actual_cost,
                        COUNT(w.wo_id) FILTER (WHERE w.actual_cost IS NOT NULL) AS costed_count,
                        COUNT(w.wo_id) AS total_work_orders
                 FROM {PG_SCHEMA}.fleetguard_work_order w
-                JOIN {PG_SCHEMA}.fleetguard_service_campaign sc
+                LEFT JOIN {PG_SCHEMA}.fleetguard_service_campaign sc
                      ON sc.service_campaign_id = w.service_campaign_id
-                JOIN {PG_SCHEMA}.fleetguard_recall_campaign rc ON rc.campaign_id = sc.campaign_id
-                GROUP BY rc.component
+                LEFT JOIN {PG_SCHEMA}.fleetguard_recall_campaign rc
+                     ON rc.campaign_id = sc.campaign_id
+                GROUP BY COALESCE(rc.component, '(unattributed)')
                 ORDER BY total_actual_cost DESC"""
         )
         by_component = [CostBreakdownRow(**r) for r in rows_to_dicts(cur)]
@@ -236,8 +245,17 @@ def update_work_order(
 
                 if "status" in fields_set:
                     set_clauses.append("status = %(status)s")
+                    # COALESCE, not a bare now(): re-saving a work order that is *already*
+                    # COMPLETED must not overwrite when it was completed. The UI's status
+                    # control re-sends the current value on any change, so "COMPLETED ->
+                    # COMPLETED" is a normal event, and the original timestamp is the one the
+                    # audit trail depends on — the STATUS_CHANGE row would read
+                    # "COMPLETED -> COMPLETED", leaving no way to recover the real time.
+                    # Moving *out* of COMPLETED still clears it, and a genuine re-completion
+                    # later correctly stamps anew, because the field is NULL again by then.
                     set_clauses.append(
-                        "completed_at = CASE WHEN %(status)s = 'COMPLETED' THEN now() ELSE NULL END"
+                        "completed_at = CASE WHEN %(status)s = 'COMPLETED' "
+                        "THEN COALESCE(completed_at, now()) ELSE NULL END"
                     )
                     params["status"] = body.status
 

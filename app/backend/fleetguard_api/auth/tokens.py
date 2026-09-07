@@ -202,9 +202,22 @@ class StaticTokenProvider:
         return self._principal
 
 
-def _check_not_expired(session: dict, ttl_s: float, now_fn) -> None:
-    """Enforce server-side session lifetime — the cookie's `max_age` only controls when the
-    browser stops sending it, not how long the server honours it.
+def session_is_live(
+    session: dict | None,
+    ttl_s: float = DEFAULT_SESSION_TTL_S,
+    now_fn=time.time,
+) -> bool:
+    """Is this session still within its server-side lifetime?
+
+    The predicate form of `_check_not_expired`, for callers that need to *report* session
+    state rather than refuse a request — `routers/auth_routes.py::auth_status` is the one
+    that matters: it answers "should the console draw a signed-in header?", so an expired
+    session there is a `False`, not a 401.
+
+    Both live here so there is exactly one definition of "still valid". Splitting them
+    is how `auth_status` drifted out of sync with the token providers in the first place
+    (I-071): I-062's fix landed in the providers, and the one caller that reads `SESSIONS`
+    directly kept reporting expired sessions as signed in.
 
     Fails closed on a session with no `created` timestamp, rather than treating unknown age
     as valid. Every session this codebase creates (`routers/auth_routes.py::callback`)
@@ -212,8 +225,18 @@ def _check_not_expired(session: dict, ttl_s: float, now_fn) -> None:
     trusting it indefinitely would be exactly the "fall back to a broader principal" this
     module's own rules forbid.
     """
+    if not session:
+        return False
     created = session.get("created")
-    if created is None or (now_fn() - created) > ttl_s:
+    return created is not None and (now_fn() - created) <= ttl_s
+
+
+def _check_not_expired(session: dict, ttl_s: float, now_fn) -> None:
+    """Raising form of `session_is_live`, for the token providers — enforces server-side
+    session lifetime, since the cookie's `max_age` only controls when the browser stops
+    sending it, not how long the server honours it.
+    """
+    if not session_is_live(session, ttl_s, now_fn):
         raise AuthError("session expired; sign in again")
 
 

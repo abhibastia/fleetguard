@@ -18,7 +18,7 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 
 from .. import snapshot
-from ..db import PG_SCHEMA, connect, rows_to_dicts
+from ..db import PG_SCHEMA, UniqueViolation, connect, rows_to_dicts
 from ..deps import CurrentPrincipal
 from ..scoping import resolve_scope
 from . import auth_routes
@@ -115,6 +115,30 @@ def approve_campaign(
                         status.HTTP_404_NOT_FOUND, f"unknown campaign {campaign_id}"
                     )
 
+                # I-063: one *active* service campaign per recall. This check is for the
+                # error message — it names what already exists so the operator can go look
+                # at it — not for enforcement. Enforcement is the partial unique index
+                # (`ux_fg_service_campaign_active`, src/lakebase/
+                # 19_add_service_campaign_uniqueness.py), because the case being defended
+                # against is a double-click: two requests milliseconds apart, where both
+                # would read "nothing there" before either inserts. See the UniqueViolation
+                # handler below, which is what actually catches that.
+                cur.execute(
+                    f"""SELECT service_campaign_id, approved_at
+                        FROM {PG_SCHEMA}.fleetguard_service_campaign
+                        WHERE campaign_id = %(cid)s AND status = 'LAUNCHED'""",
+                    {"cid": campaign_id},
+                )
+                active = rows_to_dicts(cur)
+                if active:
+                    raise HTTPException(
+                        status.HTTP_409_CONFLICT,
+                        f"{campaign_id} already has an active service campaign "
+                        f"({active[0]['service_campaign_id']}, launched "
+                        f"{active[0]['approved_at']:%Y-%m-%d %H:%M} UTC). Cancel it before "
+                        f"launching another, or open it to see its work orders.",
+                    )
+
                 cur.execute(
                     f"""SELECT DISTINCT e.vin, v.depot_id
                         FROM {PG_SCHEMA}.fleetguard_vehicle_exposure e
@@ -130,20 +154,31 @@ def approve_campaign(
                         f"campaign {campaign_id} exposes no vehicles in scope — nothing to do",
                     )
 
-                cur.execute(
-                    f"""INSERT INTO {PG_SCHEMA}.fleetguard_service_campaign
-                        (service_campaign_id, campaign_id, title, vehicle_count, status,
-                         created_by, approved_by, approved_at, launched_at)
-                        VALUES (%(sc)s, %(cid)s, %(title)s, %(n)s, 'LAUNCHED',
-                                %(who)s, %(who)s, now(), now())""",
-                    {
-                        "sc": sc_id,
-                        "cid": campaign_id,
-                        "title": body.title,
-                        "n": len(exposed),
-                        "who": approver,
-                    },
-                )
+                try:
+                    cur.execute(
+                        f"""INSERT INTO {PG_SCHEMA}.fleetguard_service_campaign
+                            (service_campaign_id, campaign_id, title, vehicle_count, status,
+                             created_by, approved_by, approved_at, launched_at)
+                            VALUES (%(sc)s, %(cid)s, %(title)s, %(n)s, 'LAUNCHED',
+                                    %(who)s, %(who)s, now(), now())""",
+                        {
+                            "sc": sc_id,
+                            "cid": campaign_id,
+                            "title": body.title,
+                            "n": len(exposed),
+                            "who": approver,
+                        },
+                    )
+                except UniqueViolation as exc:
+                    # The double-click actually landing. The pre-check above passed because a
+                    # concurrent request had not committed yet; the index is what serialises
+                    # them. Same 409 as the pre-check — from the caller's side these are the
+                    # same refusal, and which one fired is a timing detail they cannot act on.
+                    raise HTTPException(
+                        status.HTTP_409_CONFLICT,
+                        f"{campaign_id} was approved concurrently by another request. "
+                        f"Reload to see the service campaign that was created.",
+                    ) from exc
 
                 cur.executemany(
                     f"""INSERT INTO {PG_SCHEMA}.fleetguard_work_order

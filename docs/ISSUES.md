@@ -20,12 +20,151 @@ no error and passed the obvious check.
 | I-016 | Platform | Table properties (retention, `VACUUM`) on Lakebase CDF sync-managed destination tables are undocumented — may not be settable. Fallback is a downstream Delta copy under our own retention. Confirm during Phase 5. | **open** |
 | I-015 | Platform | Unity AI Gateway **output** guardrails (incl. PII detection on responses) do not apply to streaming responses. If the console streams agent output, the §4.5 PII second layer silently does not exist. Decide: no streaming, or drop the claim. | **open** |
 | I-014 | Demo | `DO_NOT_DRIVE` (Park It) covers only 211 of 15,211 campaigns and is **zero for 2010–2011** — field added May 2025, backfilled unevenly. Seed demo data from 2015+ or the Park It path demos empty. | **watch** |
-| I-063 | Approval | No idempotency check on `POST /campaigns/{id}/service-campaign`. Nothing stops the same campaign being approved twice — two concurrent or sequential approvals would create two `fleetguard_service_campaign` rows and a full duplicate set of work orders. Found in the 2026-09-02 repo review, deliberately **not** silently fixed: whether a second approval should be blocked, return the existing campaign, or something else is a product decision, not a code-review call. | **open** |
 | I-013 | Docs | Diagrams drift from prose. Happened twice. Diagrams are now HTML (`docs/fleetguard_*.html`) specifically so they diff in review rather than being opaque binaries. | **watch** |
 
 ---
 
 ## Tooling / process
+
+### I-073 — A "cleaned up" test-data delete was verified from its own connection and had not committed
+*Date:* 2026-09-07 · *Status:* resolved
+
+**Symptom.** After the I-063 concurrency verification, the two test campaigns it created were
+deleted and the cleanup reported success — it printed the deleted row counts and then a
+`SELECT` showing only the preserved `SC-17V629000-b3b9dfbd` remained. Half an hour later an
+unrelated query returned **614 work orders** instead of the expected 25, and both "deleted"
+campaigns were still present.
+
+**Root cause.** The verifying `SELECT` ran on **the same connection** as the deletes. A
+session always sees its own uncommitted writes, so the check could not have failed regardless
+of whether anything committed — it confirmed the statements had *executed*, not that they had
+*persisted*. The script also omitted an explicit `commit()`/`close()`, relying on
+`psycopg.Connection.transaction()`'s exit behaviour; whatever the precise interaction, the
+verification could never have detected the difference.
+
+**Resolution.** Re-ran with an explicit `commit()` and `close()`, then verified from **a fresh
+connection** and, separately, through the running API — three independent readers. Confirmed:
+one campaign, 25 work orders.
+
+**Lesson, and it generalises past this repo.** *Verifying a write from the connection that
+performed it proves nothing about durability.* Any cleanup or migration whose success is
+reported to a human must be confirmed by a reader that could observe the failure — a new
+connection, a different process, or the application itself. This is the same failure shape as
+I-050 and I-012: a check that cannot fail is not a check, and it is more dangerous than no
+check because it manufactures confidence. Cheap to get right; it was believed for half an hour
+that the demo database was clean when it was not.
+
+### I-063 — Approving the same recall twice created a duplicate campaign and a full duplicate set of work orders
+*Date:* 2026-09-02 (found) · 2026-09-07 (resolved) · *Status:* resolved
+
+**Symptom.** `POST /campaigns/{id}/service-campaign` had no idempotency check. A second
+approval of the same recall created a second `fleetguard_service_campaign` row and a second
+work order per exposed vehicle. **Observed in practice, not just in review:** the 2026-09-04
+test-data cleanup turned up six campaigns for recall `17V629000`, several with an identical
+auto-generated title minutes apart — repeated approvals during manual testing.
+
+**Held open deliberately for five days.** Whether a second approval should be blocked, return
+the existing campaign, or something else is a product decision, not a code-review call. Decided
+2026-09-07: **block it, 409.** It matches how the rest of this app behaves — refuse plainly
+rather than silently no-op — and the realistic trigger is a demo viewer double-clicking
+Approve.
+
+**Why the handler check alone would not have been a fix.** The case being defended against is
+a double-click: two requests milliseconds apart. `SELECT`-then-`INSERT` in the handler is a
+textbook TOCTOU race, and under Postgres READ COMMITTED both requests reading "nothing there"
+before either commits is not an unlucky edge case — for simultaneous requests it is the
+*expected* interleaving. Enforcement therefore lives in a **partial unique index**,
+`ux_fg_service_campaign_active ON fleetguard_service_campaign (campaign_id) WHERE status =
+'LAUNCHED'` (`src/lakebase/19_add_service_campaign_uniqueness.py`). The handler's `SELECT`
+remains, but only to produce an error message that names the campaign already running; the
+index is what actually serialises the requests.
+
+**Partial, on `status = 'LAUNCHED'`, deliberately.** A cancelled campaign must not block
+relaunching the same recall later — launch, cancel because the remedy changed, relaunch is a
+real workflow. The migration proves *both* directions against live Postgres, because a test
+that only proves rejection would pass just as happily against a plain (wrong) unique index on
+`campaign_id`.
+
+**Verified end to end, 2026-09-07.** Sequentially: second approval returns 409 naming the
+existing campaign. Concurrently: five simultaneous approvals of one recall yielded **exactly
+one 201, four 409s, and one campaign row** with its single set of 384 work orders. Pre-fix
+that same input produced five campaigns and 1,920 work orders.
+
+**A test-quality note worth keeping.** The first draft of `tests/test_approval_idempotency.py`
+asserted only `status_code == 409` for the duplicate case — and passed with the duplicate
+check deleted, because `approve_campaign` has an unrelated 409 ("exposes no vehicles in
+scope") that fired instead when the fake returned no exposure rows. Caught by re-running the
+new tests against the pre-fix handler, which is the only way that class of false confidence
+shows up. **When several code paths return the same status, assert on the message too, and
+supply enough fixture data that the other paths cannot fire.**
+
+### I-072 — `datetime.utcnow()` in the audit-log CSV filename is deprecated and scheduled for removal
+*Date:* 2026-09-07 · *Status:* resolved
+
+**Symptom.** Trivial, but certain: `audit_log.py`'s CSV export built its filename with
+`datetime.utcnow()`, which emits `DeprecationWarning` on Python 3.12+ (confirmed under
+`-W error::DeprecationWarning` on this project's 3.14.7) and is scheduled for removal. It
+would go from a silent warning to an outright `AttributeError` on a future interpreter — the
+kind of thing that surfaces during a version bump rather than in review.
+
+**Resolution.** `datetime.now(UTC)`. The literal `Z` in the format string is kept
+deliberately: `strftime` has no directive that renders `Z` for a UTC offset, and the filename
+is a display string, not a parsed timestamp. Verified the output format is unchanged
+(`fleetguard_audit_log_20260907T144851Z.csv`) rather than only that the lint went quiet.
+
+### I-071 — I-062's fix landed in the providers only; the one caller that bypasses them kept reporting expired sessions as signed in
+*Date:* 2026-09-07 · *Status:* resolved
+
+**Symptom.** Found in an end-to-end repo review, not from an incident. `/api/auth/status`
+reported `signed_in: true` — and, for a login in `FLEETGUARD_APPROVERS`, `may_approve: true`
+— for a session well past its 8-hour TTL. The console draws its signed-in header and its
+Approve affordance from exactly this response, so the visible result was a console that
+looked fully authenticated while every data request underneath it returned 401.
+
+**Not an access-control hole, and worth being precise about that.** Enforcement was always
+correct: every data endpoint resolves through `deps.current_principal` → a token provider →
+`_check_not_expired`, all of which honoured the TTL. No expired session ever read fleet data.
+What leaked was *UI state*, not data — but "signed in, may approve, everything fails" is a
+genuinely confusing state to hand an operator, and the `may_approve: true` half is the kind
+of thing that looks like a security finding at a glance even though it isn't one.
+
+**Root cause — the interesting part.** I-062 added server-side expiry after the same class of
+review. That fix was correct but incomplete in a specific way: it landed in `auth/tokens.py`,
+where the *providers* live, because that is where authorisation happens. `auth_status` is the
+one caller that deliberately does **not** go through a provider — it must answer for
+unauthenticated callers too, so it reads `deps.SESSIONS` directly. It therefore kept its own,
+now-divergent notion of "is this session valid": `if session` — mere existence. Two
+definitions of validity, one updated, one not.
+
+**Also closed here: I-062's unbounded-growth half.** Rejecting an expired session on read
+never *removed* it, and `SESSIONS` only shrank on explicit logout — which most users never do,
+they close the tab. I-062's own writeup named this ("also an unbounded-growth issue on a
+long-running Render process") but its resolution only covered the access-control half.
+
+**Resolution.** `tokens.session_is_live()` is now the single predicate; `_check_not_expired`
+is its raising twin and delegates to it, so the two cannot drift again — a parametrized test
+asserts they agree on the same inputs, which is the actual guard against recurrence.
+`auth_status` uses the predicate and drives `deps.prune_sessions()`, which evicts expired
+entries (chosen over `current_principal` as the call site: frequent enough to keep the dict
+bounded, well off the hot path of every data request). 17 tests in
+`tests/test_session_lifecycle.py`, four of which were **verified to fail against the pre-fix
+code** before being committed — `signed_in` true, `may_approve` true, the store not
+shrinking, and the race below.
+
+**Caught while writing the fix, not after:** the first draft of `prune_sessions` iterated
+`_SESSIONS.items()` directly. FastAPI runs sync endpoints in a threadpool, so a login
+completing on another worker can insert mid-iteration — `RuntimeError: dictionary changed
+size during iteration`, on the endpoint the console calls on every mount. Fixed with a
+`list(...)` snapshot and pinned by a test that drives the insert from inside the
+comprehension (via `now_fn`) rather than hoping for a real thread collision; that test was
+confirmed to fail on the unguarded version. A fix for an unbounded-growth bug that
+intermittently 500s the auth endpoint would have been a poor trade.
+
+**Lesson.** When a fix is described as "added to the providers", check for callers that
+deliberately bypass the providers — they are usually bypassing them for a good reason
+(`auth_status` must serve unauthenticated callers) and are therefore exactly the ones a
+provider-level fix cannot reach. The durable repair is one shared predicate, not two correct
+implementations.
 
 ### I-070 — RLS on `fleetguard_vehicle` overrides app-level scoping intent, silently, for any identity with a real depot assignment
 *Date:* 2026-09-05 · *Status:* open (informs future work, not fixed)

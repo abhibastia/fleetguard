@@ -32,7 +32,8 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
 from ..auth import databricks_oauth as dbx
-from ..deps import SESSIONS
+from ..auth.tokens import session_is_live
+from ..deps import SESSIONS, prune_sessions
 
 router = APIRouter(tags=["auth"])
 
@@ -98,10 +99,21 @@ def _active_provider() -> tuple[bool, str, str | None]:
 
 @router.get("/auth/status", response_model=AuthStatus)
 def auth_status(request: Request) -> AuthStatus:
-    """Unauthenticated: the console needs to know whether to render a sign-in button."""
+    """Unauthenticated: the console needs to know whether to render a sign-in button.
+
+    **Session age is checked here, via the same predicate the token providers use.** This
+    endpoint reads `SESSIONS` directly rather than going through a provider, so when I-062
+    added server-side expiry it added it to the providers and this caller kept reporting
+    expired sessions as signed in — the console would draw a signed-in header, and even a
+    "you may approve" state, while every actual data request 401'd (I-071). Not an
+    access-control hole (enforcement was always correct) but a genuinely confusing
+    everything-is-broken state, and exactly the kind of drift that follows from two
+    definitions of "still valid".
+    """
+    prune_sessions()
     sid = request.cookies.get(COOKIE)
     session = SESSIONS.get(sid) if sid else None
-    user = session.get("user_name") if session else None
+    user = session.get("user_name") if session_is_live(session) else None
     is_enabled, provider, login_url = _active_provider()
     return AuthStatus(
         enabled=is_enabled,
