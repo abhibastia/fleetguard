@@ -131,7 +131,16 @@ export function Signals() {
                     <strong>
                       {s.make} {s.model}
                     </strong>
-                    {s.is_live ? (
+                    {/* An agent-opened signal has no detector run behind it, so LIVE/QUIET
+                        — which describe whether an anomaly run reaches the latest month —
+                        would be meaningless. Badging it by origin says what it actually is;
+                        rendering NULL is_live as "QUIET" would have claimed a measurement
+                        that was never taken. */}
+                    {s.source === "AGENT" ? (
+                      <span className="tag agent" style={{ marginLeft: 8 }}>
+                        AGENT
+                      </span>
+                    ) : s.is_live ? (
                       <span className="tag live" style={{ marginLeft: 8 }}>
                         LIVE
                       </span>
@@ -140,9 +149,26 @@ export function Signals() {
                         QUIET
                       </span>
                     )}
+                    {/* The write path's central claim, shown where the claim is made. The
+                        agent holds no database access; the console performs its write under
+                        the caller's own OBO token, so this is a real person, and Postgres RLS
+                        applied to that write exactly as it does to a UI click. It was already
+                        recorded correctly — but only visible in the Audit log a tab away,
+                        which made the strongest property of the write path effectively
+                        invisible. Detector rows have no opener and render nothing. */}
+                    {s.source === "AGENT" && s.opened_by && (
+                      <div className="muted" style={{ fontSize: "0.78rem", marginTop: 2 }}>
+                        opened by {s.opened_by}
+                      </div>
+                    )}
                   </td>
                   <td className="muted">{s.component}</td>
-                  <td className="num">{s.max_z?.toFixed(1)}</td>
+                  {/* No z-score on an agent-opened signal: it did not run the detector.
+                      An em-dash reads as "not measured"; a 0 would read as "measured, and
+                      found nothing". */}
+                  <td className="num">
+                    {s.max_z != null ? s.max_z.toFixed(1) : <span className="muted">—</span>}
+                  </td>
                   <td className="num">{s.complaint_count}</td>
                   {/* Harm share is triage context. It plays no part in whether a signal fires —
                     the detector is pure volume anomaly (I-051) — so it must never be styled

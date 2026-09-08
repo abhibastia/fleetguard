@@ -1,6 +1,6 @@
 # FleetGuard — project status
 
-**Last updated:** 2026-09-05 (session paused mid-task) · **MVP target: 7 September — MET** · **Demo: 25–30 September**
+**Last updated:** 2026-09-08 · **MVP target: 7 September — MET** · **Demo: 25–30 September**
 
 > **MVP = one vertical slice working end to end:** recall lands → exposure ranked → human
 > approves → work orders written to Lakebase → visible in UC via CDF → visible in a browser.
@@ -25,11 +25,11 @@ next-actions list in priority order.** Design lives in `FleetGuard_Proposal.md`,
 | **4 — Model B + golden set** | ✅ **DONE** | 765-pair golden set from NHTSA's own recall text (real, not synthetic, E-08). Precision **83.7%**, recall **96.3%**, ROC-AUC 0.925 — published on the evidence page. Caught and fixed its own training-feature leakage before reporting (I-060). |
 | **5 — Lakebase + CDF** | ✅ **DONE** | 11 tables, all `REPLICA IDENTITY FULL`; **all 11 CDF history tables exist with exact names, no `_1` suffixes** (I-044 — CDF replicates DDL, correcting an earlier wrong claim). Reference data loaded: depot 60, vehicle 20,000, campaigns 592. **Capture latency measured: 7.1–15.6 s** (I-046). **Exposure loaded** — `EXACT` scope, 263,686 rows deduplicated to **118,323** distinct (vin, campaign) pairs. |
 | **6 — OAuth wiring** | ✅ **DONE — with a login** | Auth seam (E-13) tested on both surfaces, 401 on failure, never an SP fallback. **U2M retired (E-14)** — needs an account-admin OAuth registration we do not have, and OBO on Databricks Apps is stronger with less setup. **Render now has a working sign-in (2026-09-02): GitHub OAuth, `app-login` mode, two-tier authorization (read for anyone signed in; approve only for `FLEETGUARD_APPROVERS`).** Verified end to end in a browser. **U2M code built and flipped live 2026-09-03** (`auth/databricks_oauth.py` + `routers/databricks_auth_routes.py`) — the account-admin OAuth registration landed the same day, closing E-14's blocker, so `render.yaml` on `main` now runs `FLEETGUARD_AUTH_MODE=render-u2m` instead of `app-login`. **The judges have Databricks identities in this shared workspace**, so this is the strong path for them: sign in as themselves, UC/Postgres enforce for real, not simulated. Found and closed the same day, before flipping: the approver allowlist was silently skipped for any real-Databricks-token principal, which would have let any workspace identity (judges included) approve, not just view — `approval.py`'s gate is now unconditional on `FLEETGUARD_APPROVERS`, tested across all four principal sources (`tests/test_approval_gate.py`). **Not yet confirmed:** a real browser completing the login round-trip live — see "Next" item 0. |
-| **7 — Agent tools + write path** | ✅ **DONE** | Write path end to end: `POST /campaigns/{id}/service-campaign` → 1 service campaign + N work orders + audit row in **one transaction** → CDF → UC. Agent: `ResponsesAgent`, **4 tools** (complaint search · fleet exposure · **emerging signals** · propose campaign), MLflow tracing, smoke tests pass against live index + warehouse. **The agent proposes, never launches** — asserted in the build, so a change that lets it self-launch fails. **Logged, validated, registered and DEPLOYED** 2026-09-02: endpoint `agents_bootcamp_students-fleetguard-fleetguard_agent`, inference tables on (`fleetguard_agent_payload`). Console chat panel wired (`POST /api/chat`, caller's token, non-streaming). **The first deployed version answered a 25-vehicle recall with "no vehicles affected" (I-050)** — undeclared table resource plus an unchecked statement status. **Fixed in version 2, verified live:** returns 25 vehicles / 22 depots / EXACT with the tier stated, and a nonexistent campaign returns a distinguishable "the lookup ran and found zero". |
+| **7 — Agent tools + write path** | ✅ **DONE** | Write path end to end: `POST /campaigns/{id}/service-campaign` → 1 service campaign + N work orders + audit row in **one transaction** → CDF → UC. Agent: `ResponsesAgent`, **6 tools** (complaint search · fleet exposure · **fleet models** · **emerging signals** · propose campaign · **open defect signal — the write**), MLflow tracing, smoke tests pass against live index + warehouse. *(The sixth, `lookup_fleet_models`, is written and live-verified but **not yet deployed** — the endpoint still serves v5; see "Next" item 0.)* **The agent proposes, never launches** — asserted in the build, so a change that lets it self-launch fails. **The agent now performs a real business write (v5, 2026-09-08):** `open_defect_signal` returns an action envelope; the FastAPI app validates it and executes the insert under the **caller's own OBO token** (the serving endpoint has no Postgres path, and all three routes to giving it one are closed on this account). Verified live from the browser: question → complaint retrieval → agent decision → Lakebase insert + audit row + the first-ever `fleetguard_agent_action` row in one transaction → CDF → UC → Emerging tab. See `ARCHITECTURE.md` §7.1. **Logged, validated, registered and DEPLOYED** 2026-09-02: endpoint `agents_bootcamp_students-fleetguard-fleetguard_agent`, inference tables on (`fleetguard_agent_payload`). Console chat panel wired (`POST /api/chat`, caller's token, non-streaming). **The first deployed version answered a 25-vehicle recall with "no vehicles affected" (I-050)** — undeclared table resource plus an unchecked statement status. **Fixed in version 2, verified live:** returns 25 vehicles / 22 depots / EXACT with the tier stated, and a nonexistent campaign returns a distinguishable "the lookup ran and found zero". |
 | **8 — App + external surface** | 🟡 **Public surface live** | FastAPI serves `/api/*` **and** the built React console from one service — no CORS, SPA deep-link fallback. Four views: queue (+ assistant panel), campaign approval, **Emerging signals**, evidence. Verified end to end against live Lakebase. **Deployed to Render 2026-09-02** — https://fleetguard-console-abhi.onrender.com, chat panel included. **End-to-end review + visual redesign, 2026-09-03** — 8 bugs found and fixed, 49 new tests, console restyled (same colour-rationing rule, more depth/craft); verified against a live headless-browser check of both the local build and the redeployed Render site. **Auth mode flipped 2026-09-03** from `app-login`+snapshot to `render-u2m`+live Lakebase (E-14's account-admin blocker resolved) — the host now holds real per-user Databricks credentials via U2M OAuth rather than none at all. Anonymous visitors still land on Evidence, not a login wall (I-057) — that route is unauthenticated regardless of mode. **Not yet confirmed live end to end** — see STATUS "Next" item 0. **Outstanding:** the Databricks App (~20 Sept), where OBO supplies a real Databricks identity as a second surface alongside Render. |
 | **9 — Model A + backtest** | ✅ **DONE — result is negative** | **The semantic hypothesis is falsified (I-049).** Subdivision *lowered* detection 13.3% → 11.2%, left lift flat (1.24× → 1.26×), and gave **0.0 days** extra lead on shared detections. Published result stays the volume-anomaly measurement: **16.0% vs 11.1%, 1.44×, p≈0.009**. Done-when explicitly required publishing a possibly-negative number as-is; met. |
 | **10 — Governance** | ✅ **Visible slice DONE** | Postgres RLS on `fleetguard_vehicle`, `ENABLE`+`FORCE`, proved under real toggled states including the exposure join. Fail-open, nobody enrolled yet — mechanism real, enrollment is future work. Not the full ABAC/DQ-monitor matrix, by design. |
-| **11 — Deployment hardening** | ⬜ Not started | |
+| **11 — Deployment hardening** | 🟡 **Rescoped 2026-09-08** | **Hosting direction changed: Render is no longer the assumed demo surface.** Near-term verification is the **local browser** against live Lakebase (`scripts/run_local_static_dev.sh`); the eventual target is **Databricks Apps**. **Render integration is deliberately KEPT, not removed** — `render.yaml`, the GitHub-OAuth `app-login` path and `render-u2m` all stay in the tree and working, because the cost of keeping them is zero and re-adding them later is not. This removes "Render always-on + pinger" from the phase. **The `table_update` trigger is BUILT** (`fleetguard-cdf-to-gold`, job `851598550157757`, notebook `src/lakebase/14_cdf_to_gold_facts.py`) — the last unbuilt link in the data loop. It derives `gold_agent_action` and `gold_defect_signal_current` from the CDF history tables and reconciles exactly against live Postgres (**2 = 2**, **50 = 50**). **UNPAUSED and verified firing on its own, 2026-09-08** — the project's first non-manual job, and the done-when is now met by observation rather than by construction: a real agent write and a real delete each propagated to UC **with no manual intervention**. Two documented "facts" turned out to be wrong on contact (**I-080**, **I-081**). **Measured commit→gold-fact: 155 s and 269 s (n=2, report as ≈2.5–4.5 min).** Still outstanding: **seeded demo state**. |
 | **12 — Second connector** | ❌ **Cut** | Deliberately dropped for schedule. |
 | **13 — Commercial-fleet-value roadmap (work orders, cost, audit, depots, trends)** | ✅ **6/8 DONE, 1 deliberately shelved (2026-09-04/05, post-MVP)** | Not in the original 12 phases — grew out of a session UX walkthrough plus a "does this give a commercial fleet real value" analysis. Work-order lifecycle + technician roster; "Launched" campaigns view + table sort/filter; per-work-order actual-cost logging + component/depot breakdown (I-069); audit log made readable; depot risk heatmap (no blended score, real component numbers); recall trend chart (this app's first chart, hand-rolled SVG). All writes gated by `FLEETGUARD_APPROVERS`, fully audited, verified end to end against live Lakebase + CDF, not just API responses. **All merged to `main` and pushed.** **Role-based views was built, verified live, then deliberately not merged** — see "Next" item 0.5 for the full reasoning (little new judging credit for re-proving Phase 10's RLS, zero visible footprint in the default demo state, and a real schema-migration cost to fix a live-discovered gap). Kept on `feature/role-based-views`, available later. Only its local `static-dev` setup script landed on `main` (`c5b3af0`). Remaining, not started: notification digest. |
 
@@ -39,17 +39,24 @@ next-actions list in priority order.** Design lives in `FleetGuard_Proposal.md`,
 
 **Schema:** `bootcamp_students.fleetguard` (owned by `abhisek.bastia17@gmail.com`, inside a
 *shared* bootcamp metastore — never write outside it).
-**34 tables** (excluding pipeline materialisations and event logs).
+**46 objects**, counted 2026-09-08 from `databricks tables list` — *everything* the schema
+holds, including the two materialized views, the metric view and the foreign vector index.
+The previous figure ("34 tables, excluding pipeline materialisations and event logs") named an
+exclusion it never listed, so it could not be reproduced; the table below now sums to the
+live count exactly.
 
 | Layer | Tables | Rows |
 |---|---|---|
 | bronze (4) | `bronze_complaints` · `bronze_recalls` · `bronze_investigations` · `bronze_tsbs` | 2,240,289 · 244,925 · 154,367 · 5,801,279 |
-| silver (10) | `silver_complaint` (+quarantine, +`_chunk`, +`_chunk_indexed`) · `silver_recall` (+q) · `silver_investigation` (+q, +`_case`) · `silver_tsb` (+`_bulletin`) | 2,209,123 · **1,746,601 chunks** · 244,701 · 154,191 · 5,801,279 |
+| silver (11) | `silver_complaint` (+quarantine, +`_chunk`, +`_chunk_indexed`) · `silver_recall` (+q) · `silver_investigation` (+q, +`_case`) · `silver_tsb` (+`_bulletin`) | 2,209,123 · **1,746,601 chunks** · 244,701 · 154,191 · 5,801,279 |
 | gold — fleet (3) | `gold_fleet_vehicle` · `gold_fleet_depot` · `gold_fleet_exposure` | 20,000 · 60 · 989,042 |
-| gold — backtest (6) | `gold_lead_time_backtest` · `_control` · `_summary` · `gold_backtest_scope` · `_complaint` · `_embedding` | 777 · 67 · 2 · 6,649 · 205,219 · **205,219 vectors** |
+| gold — backtest (10) | `gold_lead_time_backtest` · `_control` · `_summary` · `gold_backtest_scope` · `_complaint` · `_embedding` · **plus the falsified semantic arm** `gold_lead_time_v3` · `_v3_summary` · `gold_backtest_subcluster` · `gold_backtest_cluster` | 777 · 67 · 2 · 6,649 · 205,219 · **205,219 vectors**; the v3/cluster tables back the *published negative* (I-049) and are kept deliberately |
 | gold — signals (1) | `gold_emerging_signal` — live detector output, same rule as the backtest | **48** (9 live · 2 fleet-relevant) |
-| ops (7) | `ops_ingest_watermark` · `ops_recall_poll_state` · `ops_hybrid_query_test` · `ops_lakebase_load` · `ops_cdf_latency` · `ops_psycopg_probe` · `ops_pg_privilege_diagnostic` | measurement + cursor state |
+| gold — CDF facts (2) | `gold_agent_action` · `gold_defect_signal_current` — current state derived from the Lakebase CDF history by `fleetguard-cdf-to-gold` | 2 · 50, reconciling exactly with live Postgres |
+| gold — model B (1) | `gold_model_b_golden_set` | 765 pairs |
+| ops (9) | `ops_ingest_watermark` · `ops_recall_poll_state` · `ops_hybrid_query_test` · `ops_lakebase_load` · `ops_cdf_latency` · `ops_cdf_fact_refresh` · `ops_psycopg_probe` · `ops_pg_privilege_diagnostic` · `ops_hdbscan_sweep` | measurement + cursor state; each is the evidence behind a numbered issue |
 | api (2) | `bronze_recall_api` · `gold_recall_alert` | 2,117 rows / 653 campaigns · 0 alerts (correct — nothing novel) |
+| not tables (3) | `complaint_chunk_idx` (foreign — the AI Search index) · `evidence_metrics` (metric view) · `fleetguard_agent_payload` (inference table, auto-created by `agents.deploy()`) | — |
 
 **Lakebase** (`databricks_postgres.bootcamp_students`): 12 `fleetguard_*` tables, **139,000+ rows**
 (`fleetguard_defect_signal` populated 2026-09-02 — 48 signals; empty since Phase 5 until then)
@@ -62,9 +69,11 @@ depot, real roster backing work-order assignment) — picked up by CDF automatic
 `fleetguard_work_order.status` also gained a real `CHECK` constraint the same day (previously bare
 `TEXT`, only `'OPEN'` ever written) — see I-066.
 
-**Models:** `bootcamp_students.fleetguard.fleetguard_agent` — **3 registered versions**, v3 serving (v1 superseded by I-050's fix, v2 by the signals tool).
+**Models:** `bootcamp_students.fleetguard.fleetguard_agent` — **6 registered versions**, **v6 serving** (v1 superseded by I-050's fix, v2 by the signals tool, v3 by the write action, v4 by I-075's match tiers, v5 by the fleet-vocabulary tool + prompt split, I-076/I-077). Only v6 is provisioned; the rest are registered but not served.
 
-**Compute:** 1 pipeline (`fleetguard-bronze-silver`, IDLE) · **19 jobs, all manual** (+`fleetguard-deploy-agent`, `-emerging-signals`, `-load-signals`) ·
+**Compute:** 1 pipeline (`fleetguard-bronze-silver`, IDLE) · **24 `fleetguard-*` jobs — 23
+manual, 1 event-triggered** (`fleetguard-cdf-to-gold`, `table_update`, UNPAUSED 2026-09-08;
+"all manual" stopped being true then) ·
 1 serverless SQL warehouse · 1 AI Search endpoint.
 
 **AI/BI Dashboard & metric view (added 2026-09-03):** `FleetGuard — Fleet & Recall Overview`
@@ -83,9 +92,10 @@ recalls (`recallsByVehicle`, 200/200 combos, 100 s sweep) · `static.nhtsa.gov` 
 ⚠️ **Now billing — two things:**
 1. AI Search endpoint `fleetguard-vs` (STANDARD, 1 unit) — **~$6.72/day**, started 2026-08-31.
 2. Model Serving endpoint `agents_bootcamp_students-fleetguard-fleetguard_agent` (Small CPU),
-   started 2026-09-02. **`scale_to_zero_enabled` is `False`** — `agents.deploy()` did not
-   enable it — so this bills continuously, not per query. Enabling scale-to-zero would trade
-   idle cost for a cold start on the first demo question.
+   started 2026-09-02, serving **v6**. **`scale_to_zero_enabled` is `True`** as of 2026-09-08,
+   so it bills per use rather than continuously and the first question after an idle period
+   pays a cold start. **This has to be re-asserted after every deploy:** `agents.deploy()`
+   set it back to `False` on both v5 and v6, silently reverting the decision.
    **The rate cannot be self-served from this workspace:** `system.billing` requires
    `USE SCHEMA`, which a non-admin on a shared metastore does not have, and the public
    pricing pages publish GPU serving DBU rates only — there is no CPU workload-size table.
@@ -93,9 +103,19 @@ recalls (`recallsByVehicle`, 200/200 combos, 100 s sweep) · `static.nhtsa.gov` 
    **Redeploying does not retire the old version.** `agents.deploy()` of v2 left v1
    `DEPLOYMENT_READY` at 0% traffic — two containers billing for one agent. Removed
    2026-09-02 via `serving-endpoints update-config`; endpoint re-verified afterwards
-   (25 vehicles / 22 depots / EXACT). Check for this after every redeploy.
+   (25 vehicles / 22 depots / EXACT). Check for this after every redeploy. **It has now
+   happened three times** (v1, v4, v5) — assume it, do not check for it hopefully.
 
-Nothing else recurs: no Lakebase tables, no schedules.
+3. **`fleetguard-cdf-to-gold` (job `851598550157757`) is the first job that runs without being
+   asked** — `table_update` trigger, UNPAUSED 2026-09-08. It is **event-driven, not scheduled**:
+   it fires only when `fleetguard_agent_action` or `fleetguard_defect_signal` change, i.e. on an
+   agent write or a signals load, never on browsing, approvals or work-order edits.
+   `min_time_between_triggers_seconds: 60` caps it at one run/minute and each run is ~55 s of
+   serverless. Two runs observed across a full verification cycle. **To stop it:**
+   `databricks jobs update --json '{"job_id":851598550157757,"new_settings":{"trigger":{"pause_status":"PAUSED",...}}}'`
+   — pass the whole `table_update` block, `new_settings` replaces the trigger wholesale.
+
+Nothing else is scheduled: no cron, no Lakebase-side jobs.
 Stop it with `databricks vector-search-indexes delete-index bootcamp_students.fleetguard.complaint_chunk_idx`
 then `databricks vector-search-endpoints delete-endpoint fleetguard-vs` — billing ends 24h
 after the last index is deleted.
@@ -217,7 +237,7 @@ failed during the build or exists because something adjacent to it failed silent
 | # | Decision | Blocks |
 |---|---|---|
 | ~~NEW~~ | ~~**Exposure load scope.**~~ **Resolved 2026-09-01 — `EXACT`-only**, 263,686 source rows deduplicated to 118,323 distinct (vin, campaign). Deduplication was mandatory: raw loading would have inflated the queue 2.2×. | — |
-| ~~NEW~~ | ~~**Agent endpoint lifecycle.**~~ **Decided 2026-09-02: keep it running.** Detail retained below for when it is revisited. `agents_bootcamp_students-fleetguard-fleetguard_agent` runs with `scale_to_zero_enabled: False`, so it bills continuously. Three options: leave hot to the demo, enable scale-to-zero (idle cost → cold start on the first demo question), or delete it and redeploy nearer the 25th (version 2 stays registered; redeploy is one job run). **The rate cannot be measured from this workspace** — `system.billing` needs `USE SCHEMA` we do not have, and the public pricing pages publish GPU rates only. | Cost |
+| ~~NEW~~ | ~~**Agent endpoint lifecycle.**~~ **REVISED 2026-09-08: scale-to-zero is now ON.** The 2026-09-02 decision was "keep it running hot"; after the v5 write-action testing the user asked for billing to stop, so `scale_to_zero_enabled` was flipped to `True` via `serving-endpoints update-config` (single entity, v5, polled to `READY`/`NOT_UPDATING`). **This is not instant** — it stops billing once the endpoint actually scales down after its idle window, and the first demo question then pays a cold start. Delete + redeploy remains the only guaranteed-immediate zero (v5 stays registered in UC; redeploy is one job run). There is **no `stop` subcommand** — Model Serving offers only scale-to-zero or delete. **The rate still cannot be measured from this workspace** — `system.billing` needs `USE SCHEMA` we do not have, and the public pricing pages publish GPU rates only. | Cost |
 | **NEW** | **Should the public chat panel answer?** `/api/chat` uses the caller's token, so it 401s on Render. Making it work needs a service identity there — an **amendment** to §8a's "no PAT or SP on Render", not an exception. That rule's stated reason is the write path and `/api/chat` has none, but it would expose workspace-billed LLM inference and complaint retrieval to anyone with the URL. | Demo polish only |
 | **I-018** | **Index lifecycle.** How long to leave the AI Search endpoint up: ~$6.72/day, ~23 days to demo ⇒ ~$155 if left running throughout. No longer the *only* recurring cost — the agent serving endpoint now runs alongside it. | Cost |
 | ~~I-015~~ | ~~**Streaming vs PII guardrail.**~~ **Resolved by choosing not to stream.** `/api/chat` is non-streaming, so the §4.5 output guardrail claim stays available. Cost: answers appear all at once after a few seconds. | — |
@@ -546,7 +566,72 @@ cannot be read as "2 recalls", and the prompt carries the **three-state distinct
 emerging signals … not recalls, not open investigations, not confirmed defects … a modest
 edge, not an oracle."* v2 dropped after verification (I-052); one entity billing, not two.
 
+**Closed 2026-09-08 — the agent performs a real write.** This answers the question "is this
+repo actually doing agentic action?", where the honest answer had been *no*: all four tools
+were reads, and `propose_service_campaign` returns a dict. The chain now runs
+**user → agent → complaint retrieval → decision → `open_defect_signal` → Lakebase insert →
+CDF → Delta → console**, verified end to end from a browser. The model never executes the
+write and cannot — the app does, under the caller's identity, so `opened_by` is a genuine
+human and RLS applies exactly as it does to a UI click. v5 serving; v4 dropped after
+verification (I-052 again — it was still `DEPLOYMENT_READY` at 0% traffic).
+
+**The first live run was silently wrong, and that is the more useful finding.** It reported
+`fleet_vehicles = 0` for a real brake defect on **2,116** F-250s: the agent names models the
+way NHTSA does (`F-250 SD`), the fleet registry uses vPIC's (`F-250`). That is **I-030 —
+already measured, documented and correctly handled in `gold_fleet_exposure` — reintroduced
+months later by new code joining the same two vocabularies.** Zero is the worst possible
+value, because the Emerging tab orders by that column. Fixed with the gold layer's own match
+tiers (`EXACT → MODEL_VARIANT → MAKE_ONLY → NONE`), reported rather than blended. **I-075.**
+
 ### Next, in priority order
+
+0. ~~**The agent cannot see the fleet's make/model vocabulary**~~ and ~~**rule 6 reads as a
+   permission gate**~~ — **both fixed, deployed and verified against the live endpoint
+   2026-09-08. v6 is serving, single entity, scale-to-zero ON.**
+
+   `lookup_fleet_models(make=None)` (I-076) is the sixth tool: it reads `gold_fleet_vehicle`
+   — the same table Lakebase's `fleetguard_vehicle` is loaded from, so its spellings are
+   exactly what the write path matches on — and returns the make roster whether or not a make
+   was supplied, so a model asking about a make the fleet does not own sees the alternatives
+   in the same result. `SYSTEM_PROMPT` rule 6 was split into three (I-077): rule 6 now says
+   explicitly that it governs *description, not permission*; rule 7 says being asked to open a
+   signal **is** the authorization and to state an assumption rather than stall; rule 8 says
+   to check make/model with `lookup_fleet_models` and pass the *fleet's* spelling.
+
+   **Verified live against the warehouse before packaging** — the tool's exact SQL and its
+   parameter binding, not a literal-substituted approximation (I-056 was a binding that worked
+   in one shape and not another): 15 makes · 47 make/model combos · 20,000 vehicles ·
+   `FORD`/`F-250` = 2,116 with no `F-250 SD` · `make='ford'` case-insensitive ·
+   `make='DODGE'` → `make_in_fleet=False`, empty models, full roster still returned. The
+   RAM 2500 the agent was asked about is **1,256 vehicles** — the answer it stalled instead of
+   giving. `gold_fleet_vehicle` added to `resources` in the logging cell; omitting it would
+   fail only at demo time (I-050's shape).
+
+   **Deployed and verified end to end.** Notebook synced to the workspace,
+   `fleetguard-agent-build` run with `deploy=false` (`result_state: SUCCESS`, so the new
+   smoke-test assertions passed — they raise), v6 registered `READY`, then
+   `fleetguard-deploy-agent` with `model_version=6`. Live endpoint verified twice: asked what
+   the fleet operates it returned Ford 8,619 / RAM 4,304 / F-250 2,116 / RAM 2500 1,256,
+   every figure matching the warehouse; replaying the original failure it **acted instead of
+   stalling**, scoped to `RAM`/`2500` in the fleet's spelling, quoted the 1,256-vehicle count,
+   and still said "requested", not "saved".
+
+   **I-052 fired again, and worse.** After `agents.deploy()`: v5 was still
+   `DEPLOYMENT_READY` at 0% traffic (third occurrence), **and v6 came back with
+   `scale_to_zero_enabled: False`** — silently reverting the cost decision made earlier the
+   same day. Both fixed in one `update_config`, payload built programmatically from the live
+   entity so `MLFLOW_EXPERIMENT_ID` survived. Endpoint is now one entity, v6, scale-to-zero
+   **on**, `NOT_UPDATING`/`READY`. **`agents.deploy()` resets scale-to-zero every time — treat
+   re-enabling it as part of the deploy, not an optional follow-up.**
+
+   Two test-method findings, both worth keeping: the SDK's `serving_endpoints.query()`
+   silently drops a `ResponsesAgent`'s entire `output` and returns HTTP 200 with an
+   almost-empty object (**I-078** — query `/invocations` raw, as the console does). And the
+   first regression check asserted `"dodge" not in answer`, which **failed on correct
+   behaviour**: the agent named a 2008 Dodge Ram recall only to reject it as too old. Assert
+   on the action envelope, which is what reaches the database — the prose check was I-058's
+   naive-scorer mistake repeated.
+
 
 0. **`render-u2m` login is still blocked; the pipeline it would exercise is independently
    confirmed live end to end (2026-09-04).** The account-admin OAuth registration landed
@@ -684,9 +769,30 @@ edge, not an oracle."* v2 dropped after verification (I-052); one entity billing
    E-01 against Databricks' published AI Gateway docs instead of a hands-on measurement,
    clearly caveated as unverified against this workspace (matching this project's own
    "prefer stating a number as estimated" discipline).
-1. **Databricks App (~20 Sept).** Still the one thing that makes queue, assistant and
-   Emerging live for a real user, via OBO. The auth seam means it is an afternoon. Keep it
-   `STOPPED` between sessions — `apps create` provisions billing compute on *create*.
+1. **Databricks App (~20 Sept)** — now the **primary** hosting target, not a second surface
+   alongside Render (decision 2026-09-08). It makes queue, assistant and Emerging live for a
+   real user via OBO. The auth seam means it is an afternoon. Keep it `STOPPED` between
+   sessions — `apps create` provisions billing compute on *create*.
+
+   **Verified working locally in a browser, 2026-09-08**, before any of that:
+   `scripts/run_local_static_dev.sh` against **live Lakebase**, screenshotted headless.
+   All 8 tabs render; `/api/queue` 50 campaigns, `/api/depot-risk` 60 depots,
+   `/api/service-campaigns` 1 (test data still clean — the day's agent probes called the
+   serving endpoint directly, which cannot write, and correctly wrote nothing). The Emerging
+   tab shows both agent-opened signals badged **AGENT**, ordered to the top by fleet size
+   (F-250 2,116 · RAM 2500 1,256), with the detector-only columns blank rather than
+   fabricated. Attribution checks out: `fleetguard_audit_log` carries `SIGNAL_OPENED` for both
+   with the real human principal.
+
+   ~~**Small gap found, not a bug:** the signals router selects 15 columns and `opened_by` is
+   not one of them.~~ **Closed 2026-09-08.** The identity was written and correct but only
+   visible one tab away in the Audit log — the write path's strongest claim, true and
+   invisible at the same time. `opened_by` is now selected and rendered under `source='AGENT'`
+   rows as "opened by …"; detector rows have no opener and render nothing. Verified in the
+   browser against live Lakebase. Two tests, and the SQL assertion was **checked against the
+   pre-fix code first** — a `Signal` field with a default validates perfectly against a query
+   that never returned the column, so asserting the response alone would have passed against
+   exactly the bug it closes.
 2. ~~**Re-run the evaluation with the corrected scorers.**~~ **Done 2026-09-02 — agent v3
    passes both hard gates**, 10 cases:
 
@@ -706,6 +812,42 @@ edge, not an oracle."* v2 dropped after verification (I-052); one entity billing
    **The evaluation is ~25 seconds, not 90 minutes.** The MLflow run duration is 0.4 min for
    every run; the 90 minutes was `%pip install` + `%restart_python` + `load_model` building the
    agent's environment. Re-running is a 3-minute job.
+
+   **Re-run against v6, 2026-09-08 — both hard gates still 1.000**, 12 cases (v4 was also
+   evaluated on 2026-09-04; v5 never was):
+
+   | scorer | v3 (10 cases) | v4 (12) | **v6 (12)** |
+   |---|---|---|---|
+   | `never_claims_launched` · `never_invents_a_recall` | 1.000 | 1.000 | **1.000** |
+   | `fleetguard_rules` (LLM judge) | 0.800 | 0.727 | **0.636** |
+   | `relevance_to_query` | 1.000 | 1.000 | **0.909** |
+   | `grounded_numbers` · `states_match_tier` · `safety` · `answer_not_empty` | 1.000 | 1.000 | **1.000** |
+
+   **The launch trap did not regress** — the concern going in was that I-077's "being asked is
+   the authorization" would leak from signals to campaigns. It did not: rule 7 is scoped to
+   signals, rule 4 still forbids launching, and the deterministic gate holds at 1.000.
+
+   Only compare v4→v6 — v3 ran on 10 cases, before the multi-turn regression case was added,
+   so its 0.800 has a different denominator. v4 failed 3 cases; v6 fails **the same 3 plus
+   one**, and the new one fails for the *same reason* as an existing failure (an emerging-signal
+   fleet count quoted without a tier). One case of an already-known complaint, not a new
+   behaviour class.
+
+   Of the 4 `fleetguard_rules` failures, two are judge artefacts of a kind already recorded:
+   a **complaint** count judged against the vehicle match-tier rule, and *proposing* a campaign
+   read as *launching* one — which the deterministic `never_claims_launched` scorer correctly
+   passed on the same case. The `relevance_to_query` failure is the same shape: the agent was
+   marked down for **declining to invent remedy text**, which is exactly what that case exists
+   to require. Three scorers punishing correct behaviour is I-058's lesson recurring.
+
+   **The other two failures were real, and found a bug (I-079).** They complained that fleet
+   counts were quoted without a match tier; chasing why turned up that
+   `gold_emerging_signal.fleet_vehicles` has no tier because the detector joins the fleet on
+   **exact** make/model — I-030's third appearance, after `gold_fleet_exposure` (handled) and
+   `agent_actions` (I-075). Two signals report 0 against 2,418 and 766 real vehicles, so
+   "2 fleet-relevant" is really **4 of 48**. **No live signal is affected under either
+   matching**, so nothing on screen is currently wrong; the fix is folded into the pre-demo
+   refresh below, because it breaks the pinned 48/2/1,256 assertions on purpose.
 3. ~~**Refresh discipline for the THREE snapshots.**~~ **Checked 2026-09-02, deliberately
    NOT refreshed — the decision, not the chore, was the point.** Corpus check first:
    `silver_complaint` latest complaint is 2026-08-27 (ingested 08-31), unchanged since the
@@ -721,8 +863,10 @@ edge, not an oracle."* v2 dropped after verification (I-052); one entity billing
    at the UI layer this time.
 
    **Do the real refresh once, the day before the demo, not now**: ingest → bronze/silver →
-   rebuild `gold_emerging_signal` → load Lakebase → `export_evidence.py` +
-   `export_demo_snapshot.py` → commit → Render deploy. Expect it to break the pinned numbers
+   **fix the detector's exact make/model join first (I-079)** → rebuild `gold_emerging_signal`
+   → load Lakebase → `export_evidence.py` + `export_demo_snapshot.py` → commit → Render deploy.
+   The I-079 fix must land *before* the rebuild, or the refresh bakes the undercount in for
+   another cycle; reuse the gold layer's tier expression rather than writing a third copy. Expect it to break the pinned numbers
    in the agent smoke test (25 vehicles / 22 depots) and the signals build assertions — that
    breakage is intentional, it forces a look rather than a silent pass, but budget time to
    update the pins afterward. Doing this today would mean doing it twice.
@@ -784,9 +928,17 @@ Three env vars live only in the Render dashboard, never committed: `GITHUB_CLIEN
 
 ### Things that are true and easy to forget
 
-- **The endpoint bills continuously** (`scale_to_zero_enabled: False`), serving **version 3**,
-  one entity. Kept up by decision 2026-09-02. To retire it: delete the endpoint; to bring it
-  back, `fleetguard-deploy-agent` (job `602170435434673`) with `model_version=3`.
+- **The endpoint serves version 6, one entity, `scale_to_zero_enabled: True`** (2026-09-08).
+  To retire it: delete the endpoint; to bring it back, `fleetguard-deploy-agent`
+  (job `602170435434673`) with `model_version=6`. The build job is
+  `fleetguard-agent-build` (`702635705382`), and it runs a **workspace notebook** — a local
+  commit changes nothing until `databricks workspace import ... --overwrite` syncs it.
+- **`agents.deploy()` resets `scale_to_zero_enabled` to `False` on every deploy**, whatever it
+  was before. Observed twice. Re-enabling it is part of deploying, not a follow-up — otherwise
+  a redeploy silently restarts continuous billing.
+- **`serving_endpoints.query()` cannot read this agent** (I-078). It parses into a
+  chat/completions dataclass, so a `ResponsesAgent`'s `output` items are dropped and a healthy
+  endpoint looks like it returned nothing. `POST /serving-endpoints/<name>/invocations`.
 - **`/` on Render is cached** — it served a stale `index.html` for minutes after a successful
   deploy (I-054). Probe an API route to confirm a deploy, not the console page. A 401 from a
   gated route proves it exists; an unknown path returns **200 HTML** via the SPA catch-all.

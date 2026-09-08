@@ -42,6 +42,23 @@ class Signal(BaseModel):
     fleet_vehicles: int | None
     is_live: bool | None
     status: str
+    # 'DETECTOR' (batch z-score run) or 'AGENT' (opened by the assistant, see
+    # agent_actions.py). The console badges these differently because a NULL max_z on an
+    # agent row is an absence of measurement, not a quiet detector run.
+    #
+    # Defaulted so the committed snapshot.json — captured 2026-09-02, before this column
+    # existed — still validates. That default is correct rather than merely convenient:
+    # every row in that file came from the detector.
+    source: str = "DETECTOR"
+    # Who opened it. Meaningful only on AGENT rows: the agent has no database access, so the
+    # console performs its write under the *caller's own* OBO token and records the human
+    # here. That is the write path's central claim (ARCHITECTURE §7.1), and until now it was
+    # true but invisible — recorded correctly, shown only in the Audit log a tab away.
+    # A detector row has no opener and correctly stays NULL.
+    #
+    # Defaulted for the same snapshot reason as `source`, and correct for the same reason:
+    # every row in that file is DETECTOR-sourced, so none of them has an opener.
+    opened_by: str | None = None
 
 
 class SignalSummary(BaseModel):
@@ -81,7 +98,7 @@ def get_signals(
         cur.execute(
             f"""SELECT signal_id, series_key, make, model, component,
                        run_start, run_end, run_len, max_z, complaint_count,
-                       harm_share, fleet_vehicles, is_live, status
+                       harm_share, fleet_vehicles, is_live, status, source, opened_by
                 FROM {PG_SCHEMA}.fleetguard_defect_signal
                 {where}
                 ORDER BY fleet_vehicles DESC NULLS LAST, run_end DESC NULLS LAST, max_z DESC

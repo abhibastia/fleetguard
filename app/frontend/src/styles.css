@@ -743,6 +743,34 @@ thead th.sortable:hover {
   color: var(--ok);
   border: 1px solid var(--ok-line);
 }
+/* Agent-opened signals. Accent rather than a semantic colour: this marks *origin*, not
+   severity, and the palette's danger/warn/ok are rationed for urgency. */
+.tag.agent {
+  background: var(--accent-bg);
+  color: var(--accent);
+  border: 1px solid var(--accent-line);
+}
+
+/* The console's receipt for a write the agent requested. Deliberately styled as a record
+   rather than a chat bubble — it is the authoritative account of what happened, and must not
+   be mistaken for something the model said. */
+.action-receipt {
+  margin: 10px 0;
+  padding: 10px 12px;
+  border-radius: var(--r-sm);
+  background: var(--ok-bg);
+  border: 1px solid var(--ok-line);
+  border-left: 3px solid var(--ok);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.action-receipt strong {
+  color: var(--ok);
+}
+.action-receipt code {
+  font-size: 12px;
+}
+
 .tag.quiet {
   background: var(--surface-2);
   color: var(--faint);

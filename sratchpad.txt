@@ -44,3 +44,81 @@ guardrails-PII detection, topic restriction, safety filter.
 LLM as judge in MLflow 3
 
 responsesAgent
+
+
+lakebase cache
+mlflow trace
+github action- CI/CD
+DAB
+Assistance activity in dashbaord
+
+row level security
+
+SCD write to another table from lakebase
+
+timezone of date columns
+any case of lakehouse to lakebase flow ?
+Activity log
+search bar/filter
+
+keeplocalserver
+list of apis to use ;get/post
+may be change claude opus use
+feedback loop
+llm endpoint
+
+chat or agent ? what it does ?
+genie as lakeflow job ?
+
+with wha ttool agent is calling with
+
+UC function implemented ?
+
+mlflow 1-2-3?
+
+genie agent? from outside
+do we need sync table for fleetguard ?
+extra tools like/whatsapp api/email
+
+ai_extract/ai_parse_document
+semantic search
+
+
+
+
+Is Rag used?
+Which chunking strategy used?
+how did you build agent ? is it agentbricks/langchain/
+
+-----
+User: "Open this emerging defect signal for investigation."
+
+           ↓
+
+FleetGuard Agent
+           ↓
+open_defect_signal()
+           ↓
+Lakebase INSERT
+           ↓
+CDF
+           ↓
+Delta analytics
+           ↓
+UI: "Signal opened by FleetGuard AI"
+
+-------
+snapshot mode ?
+
+
+Which day teaches chunking strategies ? Which one is the best for HTML docs ?
+
+other sources ?
+multi persona agent
+making agent production ready
+Loop engineering
+Ai generated columns /tags
+
+conversation with agent
+
+save history of conevrsation in lakebase

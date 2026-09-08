@@ -143,6 +143,46 @@ class TestSignals:
 
         assert "fleet_vehicles > 0" not in cur.sql_for(SIGNAL_ROWS_Q)
 
+    def test_agent_signals_carry_their_human_opener(self, monkeypatch):
+        """The write path's central claim, asserted at the layer that serves it.
+
+        The agent has no database access; the console performs its write under the caller's
+        own token, so `opened_by` is a real person and RLS applied to that write as it would
+        to a UI click. The column was populated correctly from the start but never SELECTed,
+        so the console could not show it — true and invisible at the same time, which is the
+        one combination that earns no credit.
+
+        Asserting the SQL *and* the model here is deliberate: a `Signal` field with a default
+        validates perfectly against a query that never returned the column, so checking the
+        response alone would pass against exactly the bug this closes.
+        """
+        agent_row = {**self.ROW, "signal_id": "AGENT-1", "source": "AGENT"}
+        agent_row["opened_by"] = "ops@example.com"
+        cur = FakeCursor({SIGNAL_SUMMARY_Q: self.SUMMARY, SIGNAL_ROWS_Q: [agent_row]})
+        install(monkeypatch, signals_mod, cur)
+
+        out = get_signals(USER, fleet_only=False, limit=50)
+
+        assert "opened_by" in cur.sql_for(SIGNAL_ROWS_Q), "the column is not being selected"
+        assert out.signals[0].opened_by == "ops@example.com"
+        assert out.signals[0].source == "AGENT"
+
+    def test_detector_signals_have_no_opener(self, monkeypatch):
+        """A batch-detected row has no human behind it and must not borrow one.
+
+        `self.ROW` carries neither `source` nor `opened_by`, so this also pins the defaults
+        that keep the pre-2026-09-02 committed snapshot valid — every row in that file came
+        from the detector, so DETECTOR/None is the correct reading of a missing column, not
+        merely a convenient one.
+        """
+        cur = FakeCursor({SIGNAL_SUMMARY_Q: self.SUMMARY, SIGNAL_ROWS_Q: [self.ROW]})
+        install(monkeypatch, signals_mod, cur)
+
+        out = get_signals(USER, fleet_only=False, limit=50)
+
+        assert out.signals[0].source == "DETECTOR"
+        assert out.signals[0].opened_by is None
+
 
 class TestTrends:
     POINTS = [

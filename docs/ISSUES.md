@@ -26,6 +26,370 @@ no error and passed the obvious check.
 
 ## Tooling / process
 
+### I-081 — The `table_update` trigger config recorded as spec could not be created, and its stated rationale was false
+*Date:* 2026-09-08 · *Status:* resolved
+
+**Symptom.** `jobs create` rejected the §8.3 trigger config that had been sitting in
+`CLAUDE.md` as project spec since before the build:
+`Invalid trigger minTimeBetweenTriggersSeconds: it must be greater than 60 seconds`, then the
+same for `waitAfterLastChangeSeconds`. The recorded values were `15` and `5`.
+
+**Three things were wrong, and the third matters most.**
+
+1. **Both intervals are below a hard platform floor of 60 s.** Not tight — impossible.
+2. **The table paths were wrong on both axes.**
+   `bootcamp_students.fleetguard.lb_agent_action_history` has the wrong schema *and* the wrong
+   table name; CDF writes `lb_fleetguard_*_history` into `bootcamp_cdc`. STATUS had already
+   recorded the correct path separately, so the two documents disagreed and neither knew.
+3. **The rationale attached to the values was false, and it defended a claim.** The note read:
+   *"Both are tight in this project by design — a longer settle window would push worst-case
+   latency past the sub-minute velocity claim."* The platform **forces** a settle window over
+   a minute. So the design could never have been what the note said, and §8.3's sub-minute
+   Postgres→UC claim **cannot be met through a `table_update` trigger**.
+
+**What survives, stated precisely.** The sub-minute number is real for the leg it was measured
+on: Postgres → `bootcamp_cdc` CDF replication, **7.1–15.6 s** (I-046). Two legs, two numbers;
+quoting the CDF figure for the whole chain would be the same conflation §3 keeps three
+lead-time intervals apart to avoid.
+
+**Then the second leg was measured too, and it corrected this entry's own estimate.** This
+issue originally reasoned "about `61 s + job duration` — 2–3 minutes" from the config. Two
+live cycles on 2026-09-08 gave **155 s and 269 s** commit-to-fact — the low end below that
+estimate, the high end well above it. The variable part is trigger *detection* (102 s and
+213 s to run start); the job itself is steady at 54–56 s. Report **≈2.5–4.5 minutes, n=2**, as
+a range. Reasoning from a config is not a measurement, even when the config is finally correct
+— which is the same mistake as the rationale this issue exists to retract, made one level up.
+
+**Also corrected: `ALL_UPDATED` → `ANY_UPDATED`.** `ALL_UPDATED` fires only once *every* named
+table has changed. `fleetguard_defect_signal` is also written by the batch signals loader,
+which writes no `fleetguard_agent_action` row — so under `ALL_UPDATED` a batch-only refresh
+would wait indefinitely for a write that never comes. Not a syntax error; a deadlock that
+would have looked like "the trigger just doesn't fire sometimes".
+
+**Lesson.** A config snippet in a document is **not** a verified fact until something has
+accepted it. This one lived in the "do not re-derive" section — the part explicitly reserved
+for things checked against a live system — and had never been submitted to an API. Worse, it
+carried a *rationale*, which is what made it credible: the reasoning was internally coherent
+and entirely fictional. **A number with an explanation attached is harder to doubt than a bare
+number, so it deserves more scrutiny, not less.** Same family as I-051.
+
+---
+
+### I-080 — The recorded "latest per key" CDF pattern resurrects deleted rows — **SILENT**
+*Date:* 2026-09-08 · *Status:* resolved
+
+**Symptom.** None, until it was tested. That is the point.
+
+**Cause.** The pattern in `CLAUDE.md` filtered the change stream **before** ranking:
+
+```sql
+WHERE _pg_change_type NOT IN ('delete', 'update_preimage')   -- inner WHERE
+... ROW_NUMBER() OVER (PARTITION BY key ORDER BY _sort_by DESC) ... WHERE rn = 1
+```
+
+Removing `delete` from the window removes the **tombstone that proves the key is gone**. The
+last surviving event for a deleted key is then its own `insert`, which ranks first — so the
+row is reported as current. Deletes are not merely ignored; they are *inverted*.
+
+**Measured before writing the derivation.** `lb_fleetguard_agent_action_history`: 4 inserts,
+2 deletes, and **2** rows actually live in Postgres. The recorded pattern returned **4**. The
+corrected pattern returns **2**, reconciling exactly with live Postgres and with the console's
+own audit view.
+
+**Fix** — rank over the tombstones, drop them after:
+```sql
+SELECT * FROM (
+  SELECT *, ROW_NUMBER() OVER (PARTITION BY key ORDER BY _sort_by DESC) AS rn
+  FROM lb_<t>_history WHERE _pg_change_type <> 'update_preimage'
+) WHERE rn = 1 AND _pg_change_type <> 'delete'
+```
+`_sort_by` is `BIGINT`, so the ordering is numeric — worth confirming rather than assuming,
+since a `STRING` sort key would put `"10"` before `"9"` and silently mis-rank any table past
+its ninth change.
+
+**Why this one would have been especially bad here.** The rows it resurrects are exactly the
+**test data deliberately cleaned out of live Lakebase on 2026-09-04**. The gold layer would
+have quietly re-asserted service campaigns and agent actions the operator had verified as
+gone — and CDF history is append-only, so the tombstones would keep re-resurrecting them on
+every refresh. Cousin of I-073, where a cleanup was verified from its own connection and had
+not committed: both are *deletes that did not take effect where it counted*.
+
+**Proved live, end to end, on the real thing.** A defect signal was opened through the console
+by the agent (`AGENT-e525ef828d4b`, FORD TRANSIT, 2,456 vehicles, `EXACT`), the trigger fired
+by itself and the fact tables went 2→3 and 50→51. The row was then deleted from Lakebase as
+test-data cleanup, the trigger fired again, and the fact tables went back to **2 and 50**.
+CDF history holds **2** rows for that signal — the insert and its tombstone, permanently — and
+the fact table holds **0**. Under the superseded pattern it would have stayed at 3 and 51 with
+the deleted row presented as current, for as long as the table existed.
+
+**Encoded as a regression**, not just fixed: `14_cdf_to_gold_facts` asserts
+`live_keys + deleted_keys == distinct_keys`, asserts the fact row count equals the live-key
+count, and — while any delete exists — asserts the **superseded pattern still over-counts**.
+If that last assertion ever stops firing, the check has gone blind and says so.
+
+---
+
+### I-079 — I-030, third appearance: the **batch detector** joins the fleet on exact make/model, so 2 of 48 signals report 0 fleet vehicles against thousands of real trucks — **SILENT**
+*Date:* 2026-09-08 · *Status:* open (fix deferred to the pre-demo refresh)
+
+**How it surfaced.** Not from a test — from reading the *rationales* of an LLM judge that
+"failed" the v6 evaluation. Three `fleetguard_rules` failures complained that the agent quoted
+fleet counts (232, 1,256) without a match tier. Chasing whether that was a judge artefact
+turned up the reason there is no tier to quote: `gold_emerging_signal.fleet_vehicles` is not
+computed with tiers at all.
+
+**Cause.** `src/backtest/10_emerging_signals.py` joins the detector output to the fleet with
+`f.make = r.make AND f.model = r.model` — exact, both sides. But `r.make`/`r.model` come from
+**complaint data** (NHTSA's spelling) and `f` is built from `gold_fleet_vehicle` (**vPIC's**).
+This is I-030 again, in a third code path, after `gold_fleet_exposure` handled it correctly in
+Phase 2 (I-030) and `agent_actions.execute` reintroduced it in Phase 7 (I-075).
+
+**Measured.** Two signals report `fleet_vehicles = 0` while the fleet demonstrably holds the
+vehicles:
+
+| signal | reported | fleet actually holds |
+|---|---:|---:|
+| `RAM` / `PROMASTER` — engine and engine cooling | **0** | **2,418** |
+| `CHEVROLET` / `SILVERADO 1500` — forward collision avoidance | **0** | 766 |
+
+NHTSA writes `PROMASTER`; the registry writes `PROMASTER 1500` / `2500` / `3500`. So the
+published **"2 fleet-relevant"** is really **4 of 48** under the same variant rule the gold
+layer already uses.
+
+**Do not confuse this 4 with the console's 4.** The Emerging tab currently shows
+"**4** affecting your fleet" out of **50** — that is 48 batch signals plus **2 agent-opened
+ones**, of which 2 batch + 2 agent have `fleet_vehicles > 0`. Same digit, different
+population, arrived at a different way. If I-079 is fixed the tile becomes **6 of 50**, not 4.
+Two numbers this easy to conflate are worth stating together every time either is quoted.
+
+**Read the 2,418 with the caution the tier exists to carry.** It includes 315 `PROMASTER CITY`
+— a small van, arguably not the same vehicle as a full-size ProMaster. That is precisely why
+`MODEL_VARIANT` is reported rather than blended into an unlabelled count (I-075): the variant
+tier is probabilistic, and this is a case where a human should confirm before acting. The
+right fix reports 4 signals with their tiers, not a bigger number presented as certain.
+
+**Blast radius is smaller than it looks, which is why it survived.** `live_relevant` is
+**0 under both matchings** — neither affected signal is still firing, so nothing in the demo's
+live set changes and no screen currently shows a wrong number. The error is confined to the
+historical 48 and to the aggregate "N affecting your fleet".
+
+**Deferred, deliberately.** Fixing it means rebuilding `gold_emerging_signal` and reloading
+Lakebase, which breaks the pinned assertions in the agent smoke test (48 / 2 / RAM 2500 first
+at 1,256) and in the signals build. STATUS already schedules exactly that chain for the day
+before the demo, and doing it twice is the thing that policy exists to prevent. Fold this in
+there: reuse the gold layer's tier expression rather than writing a third variant of it.
+
+**Lesson — the one from I-076, now demonstrated twice in a day.** I wrote that morning that
+"when a corpus mismatch is recorded, the question is not *is this path fixed* but *which other
+paths join these two things*." I then fixed two paths and did not grep for the third. A search
+for `f.make = r.make` would have found it in seconds. **The lesson is only worth what the
+search after it is worth.**
+
+Second lesson: **a "failing" LLM judge is evidence about the system, not just about the
+judge.** The instinct was to dismiss these as artefacts — and two of the four genuinely are
+(a complaint count read as a vehicle count; proposing read as launching, which the
+deterministic scorer correctly passed). Reading the rationale of the other two found a real
+bug that no deterministic scorer in the suite was looking for.
+
+---
+
+### I-078 — The SDK's `serving_endpoints.query()` silently drops a `ResponsesAgent`'s entire answer — **SILENT**
+*Date:* 2026-09-08 · *Status:* resolved
+
+**Symptom.** Verifying the freshly-deployed v6, the endpoint returned **HTTP 200** and a
+well-formed object — with no answer in it:
+`{"id": "...", "served-model-name": "bootcamp_students-fleetguard-fleetguard_agent_6"}`.
+The first read of that was "the agent came back empty", i.e. the deploy is broken.
+
+**Cause.** `WorkspaceClient.serving_endpoints.query()` parses the response into
+`QueryEndpointResponse`, a dataclass modelled on chat/completions (`choices`, `predictions`,
+…). A `ResponsesAgent` replies with `output` items, which is not a field on that dataclass,
+so `as_dict()` returns only the keys that happened to match. **Nothing raised, nothing
+warned, and the status code was 200.** The agent was fine the whole time.
+
+**Fix.** Query the way the console already does — a raw `POST` to
+`/serving-endpoints/<name>/invocations` — and read `output` off the JSON directly. This is
+not a workaround so much as using the same path the product uses; `routers/chat.py` never had
+this bug because it never used the typed helper.
+
+**Lesson.** This is the *tooling-lies-about-success* pattern (STATUS risk 4) in a new place:
+previously it was exit codes and `result_state`. Here it is a **typed client silently
+discarding fields it does not model** — a shape where the transport succeeded, the parse
+"succeeded", and the payload was quietly thinned. When a response object comes back suspiciously
+small, print the raw body before concluding anything about the service that produced it.
+
+---
+
+### I-077 — A *description* rule was read as a *permission* rule, and the agent stopped asking to be allowed to do what it had just been told to do
+*Date:* 2026-09-08 · *Status:* resolved
+
+**Symptom.** Told plainly to open a defect signal, the agent replied with a bulleted summary
+of the request-versus-save mechanism and waited for approval. The user had already authorized
+the action; the agent asked for it again, in the words of the rule meant to govern how it
+*describes* the write.
+
+**Cause.** `SYSTEM_PROMPT` rule 6 says `open_defect_signal` "is a REQUEST, not a save" and
+enumerates phrasings to avoid. That is a claim about **vocabulary** — do not say "saved" when
+the console has not yet written — but it reads equally well as a claim about **authority**,
+and the model took the stronger reading. Nothing in the prompt said which it was.
+
+**Fix.** Split the one rule into three, and say explicitly what rule 6 is *not*: it "governs
+how you DESCRIBE the action — it is NOT a permission gate." New rule 7 states that being asked
+to open a signal **is** the authorization, forbids reciting rule 6 back as something to
+approve, and gives the model somewhere to go instead of stalling: call `lookup_fleet_models`
+(I-076), act on the most defensible reading, and **state the assumption**. Clarifying
+questions are reserved for genuinely unanswerable requests, not merely underspecified ones.
+
+**Lesson — new in kind, and the mirror of I-051.** I-051 was a spec that accumulated
+*intentions that read as descriptions*. This is a prompt whose *description* read as a
+*prohibition*. Both are invisible to tests: the agent's behaviour was safe, well-phrased and
+fully compliant with every rule as written — it was just useless. A safety rule that does not
+say which of "how to speak" and "what you may do" it constrains will be read as the more
+restrictive of the two, because that is the safer guess for the model to make.
+
+---
+
+### I-076 — Every read tool was keyed by `campaign_id`, so the agent was asked to name a fleet scope in a vocabulary it could not inspect
+*Date:* 2026-09-08 · *Status:* resolved
+
+**Symptom.** Asked to open a steering signal for the RAM 2500, the agent stalled to ask
+whether it should instead scope to the "Dodge 2500/3500 cluster". **This fleet holds zero
+Dodge vehicles** — verified live, 0 of 20,000 — so that scope would have written a signal
+recorded against nobody.
+
+**Cause.** The agent had five tools and none of them answered *"what does this fleet
+operate?"*. `lookup_fleet_exposure` is keyed by `campaign_id`, `lookup_emerging_signals`
+returns whatever the detector already found. So the make and model reaching
+`open_defect_signal` came from **complaint narratives** — NHTSA's vocabulary — while the
+count is computed against `fleetguard_vehicle`, which is vPIC's. The agent could not check
+its own scope before committing to it, and only learned the fleet count *after* the console
+had written the row.
+
+**Fix.** `lookup_fleet_models(make=None)` reads `gold_fleet_vehicle` — deliberately, not
+incidentally: Lakebase's `fleetguard_vehicle` is loaded from that table column-for-column, so
+the spellings it returns are exactly the strings `agent_actions.execute` will match on. It
+returns the make roster **whether or not a make was supplied**, so a model asking about a make
+the fleet does not own sees the real alternatives in the same result rather than guessing
+twice. `make_in_fleet` is `True`/`False`/`None` (no filter), keeping "I looked and this make
+is absent" distinguishable from "I could not look" — `_run_sql` still raises on failure.
+
+**Relationship to I-075.** Same root vocabulary gap, opposite end of the pipe. I-075's
+`match_basis` is a **backstop**: it repairs a count after the model has already chosen a
+spelling, and states which tier produced it. I-076 fixes it at the **source**, so the model
+chooses the fleet's spelling in the first place. Both are wanted — the backstop still covers
+the case where the model skips the lookup.
+
+**Verified live before packaging**, against the warehouse with the tool's exact SQL and
+parameter binding: 15 makes · 47 make/model combos (46 distinct model names — `SPRINTER` runs
+under two makes, so a model name alone does not identify a series) · 20,000 vehicles ·
+`FORD`/`F-250` = 2,116 and no `F-250 SD` · `make='ford'` resolves case-insensitively ·
+`make='DODGE'` returns `make_in_fleet=False` with an empty model list **and** the full roster.
+
+**Verified again after deploying v6**, against the live endpoint: asked what the fleet
+operates, it returned Ford 8,619 / RAM 4,304 / Freightliner 1,676 / F-250 2,116 / RAM 2500
+1,256 — every figure matching the warehouse. Replaying the original failure, it scoped to
+`RAM` / `2500` and reported the 1,256-vehicle count in the answer, where v5 had offered to
+widen to a make the fleet does not own.
+The CLI check used a literal make; the parameterised path was exercised separately, because
+I-056 was exactly a `StatementParameterListItem` binding that worked in one shape and not
+another.
+
+**The resource declaration is the part most likely to be forgotten.**
+`gold_fleet_vehicle` had to be added to `resources` in the logging cell. Omitting it breaks
+nothing at build or deploy time — it produces a `FAILED` statement at demo time, which is
+I-050's exact shape, in a tool added to prevent a different silent-zero bug.
+
+---
+
+### I-075 — I-030 reached the agent path: exact-only model matching reported **0** fleet vehicles for 2,116 real trucks — **SILENT**
+*Date:* 2026-09-08 · *Status:* resolved
+
+**Symptom.** The first live end-to-end test of `open_defect_signal` produced a well-formed,
+correctly-attributed, fully-committed signal — for a genuine corroded-brake-line pattern on
+the Ford F-250 — reporting `fleet_vehicles = 0`.
+
+**Cause.** `agent_actions.execute` matched the fleet registry on `make = X AND model = Y`
+exactly. But the two sides spell models differently, and the agent sits on the wrong side of
+that difference: its evidence is **complaint text**, so it names models the way **NHTSA**
+does (`F-250 SD`), while `fleetguard_vehicle` is built from **vPIC** (`F-250`). This is
+exactly I-030, which was measured back in Phase 2 for *recall* matching — the same root
+cause resurfacing on a new code path that was written without it in mind. Measured live:
+`exact = 0`, `variant = 2116`.
+
+**Why it is worse than a normal off-by-something.** Zero is the most damaging value this
+column can take. The Emerging tab **orders by `fleet_vehicles DESC`**, so a real brake defect
+on 2,116 trucks sorted to the bottom of the operator's page looking like it touched nobody.
+Nothing errored, the row was valid, the audit trail was complete, and CDF replicated it
+faithfully — the number was simply wrong, and every surrounding signal of correctness said
+it was fine.
+
+**It was also non-deterministic**, which is what makes it a trap. Two runs against the same
+endpoint, same defect, same trucks: one emitted `F-250 SD` → **0**, the next emitted `F-250`
+→ **2,116**. Whether a signal looked urgent or irrelevant depended on the model's spelling
+that turn. A single test run — in either direction — proves nothing here.
+
+**Fix.** Match in the same tiers the gold layer already uses, and *report which tier
+answered* rather than blending them: `EXACT` → `MODEL_VARIANT` → `MAKE_ONLY` → `NONE`. The
+variant test is anchored to a word boundary in both directions
+(`%(model)s LIKE model || ' %'` / the reverse), so `F-250` matches `F-250 SD` while `F-2`
+does not — verified live. The tier is returned in `ActionResult.match_basis` and persisted
+into `fleetguard_agent_action.tool_output`, because the count alone cannot be audited later:
+2,116 means "these exact rows" under `EXACT` and "these rows, across a spelling difference"
+under `MODEL_VARIANT`. The UI annotates only the variant tier — labelling every count would
+train the operator to skip the label.
+
+**Deliberately not widened.** A make with no model match at any tier stays **0**; it does not
+fall back to the make-wide count. `MAKE_ONLY` applies only when no model was *supplied*.
+Falling back there would manufacture exposure that does not exist — the mirror of the bug.
+
+**Lessons.**
+1. **A known data-quality finding does not stay contained to the code path that discovered
+   it.** I-030 was measured, documented, and correctly handled in `gold_fleet_exposure` — and
+   then silently reintroduced months later by new code joining the same two vocabularies.
+   When a corpus mismatch is recorded, the question is not "is this path fixed" but "which
+   *other* paths join these two things".
+2. **Test the tier logic, not the fixture shape.** The first version of the new tests failed
+   against the old code with `KeyError: 'n'` — a fixture mismatch, which proves only that the
+   query changed. Re-verified by mutating the *selection logic* while keeping the new SQL:
+   the variant test then failed with `assert 0 == 2116`, the actual defect.
+3. Same reinforcement as I-074: the SQL was executed against the live database before being
+   trusted, because a fake cursor cannot type-check or evaluate it.
+
+---
+
+### I-074 — A bare `%(p)s IS NULL` gives Postgres no type to infer, and no fake-cursor test can catch it
+*Date:* 2026-09-08 · *Status:* resolved
+
+**Symptom.** `agent_actions.execute` computes a signal's fleet relevance with an optional
+model filter:
+
+```sql
+WHERE make = %(make)s AND (%(model)s IS NULL OR model = %(model)s)
+```
+
+Every unit test passed. The first live execution failed immediately:
+`psycopg.errors.AmbiguousParameter: could not determine data type of parameter $2`.
+
+**Root cause.** psycopg binds parameters **server-side**. Postgres infers each parameter's
+type from its first use — and the first use of `$2` here is a bare `$2 IS NULL`, which is
+type-agnostic, so there is nothing to infer from. psycopg2's client-side interpolation would
+have substituted a literal and never hit this; psycopg3 does not (the same family of
+difference as I-066, where `IN %s` stopped expanding tuples).
+
+**Resolution.** Cast at the first appearance: `(%(model)s::text IS NULL OR model = %(model)s)`.
+
+**The part worth keeping.** The router tests added on 2026-09-07 use a fake cursor keyed by
+SQL substring — deliberately, because they exist to test *the Python around the SQL*. That
+design has a blind spot this bug landed squarely in: **a fake cursor never parses, plans or
+type-checks a statement**, so any SQL that is syntactically fine but semantically invalid
+passes every one of them. No amount of additional fake-based testing would have caught it;
+only executing against a real Postgres did.
+
+So the rule is not "write more unit tests" — it is: **any new SQL must be executed against the
+live database at least once before it is trusted**, however well covered its surrounding
+Python is. The existing integration suite (`pytest -m integration --run-integration`) is where
+that belongs.
+
 ### I-073 — A "cleaned up" test-data delete was verified from its own connection and had not committed
 *Date:* 2026-09-07 · *Status:* resolved
 

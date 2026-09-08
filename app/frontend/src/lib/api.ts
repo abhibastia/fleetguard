@@ -83,9 +83,24 @@ export interface ChatTurn {
   content: string;
 }
 
+/** What the console actually did when the agent requested a write. Distinct from `reply`
+ *  on purpose: this is the committed row, whereas `reply` is the model's prose about it. */
+export interface AgentActionResult {
+  action: string;
+  signal_id: string;
+  component: string;
+  make: string | null;
+  model: string | null;
+  fleet_vehicles: number;
+  /** 'EXACT' | 'MODEL_VARIANT' | 'MAKE_ONLY' | 'NONE' — how fleet_vehicles was matched. */
+  match_basis: string;
+  opened_by: string;
+}
+
 export interface ChatReply {
   reply: string;
   endpoint: string;
+  action_result: AgentActionResult | null;
 }
 
 export interface Signal {
@@ -103,6 +118,14 @@ export interface Signal {
   fleet_vehicles: number;
   is_live: boolean;
   status: string;
+  /** 'DETECTOR' (batch z-score run) or 'AGENT' (opened by the assistant). */
+  source: string;
+  /**
+   * The human the write was attributed to. Only AGENT rows have one: the agent cannot reach
+   * the database, so the console performs its write under the caller's own token. Null on
+   * detector rows, which have no opener.
+   */
+  opened_by: string | null;
 }
 
 export interface SignalSummary {

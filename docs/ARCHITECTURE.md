@@ -51,7 +51,7 @@ against 11.1% on a volume-matched placebo** (1.44×, z ≈ 2.62, p ≈ 0.009).
 | 4 Model B + golden set | ✅ Done — precision 83.7% / recall 96.3%, real numbers on the evidence page |
 | 5 Lakebase + CDF | ✅ Done — loaded and latency-measured |
 | 6 OAuth wiring | ⬜ Not started |
-| 7 Agent tools + write path | ⬜ Not started |
+| 7 Agent tools + write path | ✅ Done — six tools; the write (`open_defect_signal`) executes in the app under the caller's identity, see §7.1 |
 | 8 App + external surface | ⬜ Not started |
 | 9 Model A + backtest | ✅ Done — **result is negative**, see §6 |
 | 10 Governance | ✅ Visible slice — Postgres RLS on depot scoping, proved live |
@@ -277,6 +277,57 @@ and each was violated at least once.
 | Project tables are `fleetguard_`-prefixed | Name guard; shared schema |
 | Backtest population is exactly **777** investigations | Assertion in scope build |
 | No detection dated on or after its investigation opened | Integration test |
+| The agent can open a defect signal, but **never** reaches `fleetguard_work_order` | Build assertion on `propose_service_campaign`; dispatch is behind `FLEETGUARD_APPROVERS` |
+| An agent write is attributed to a **real human**, never a service principal | `agent_actions.execute` refuses (403) a token carrying no identity |
+| Fleet counts joining NHTSA and vPIC model strings state their **match tier** | `ActionResult.match_basis`; I-075 |
+
+---
+
+### 7.1 The agent's write path
+
+The agent has six tools; five read, and one — `open_defect_signal` — writes a business
+record that appears in the operator's **Emerging** tab beside the batch detector's rows.
+
+**The model does not perform the write, and cannot.** Its serving endpoint has no Postgres
+path, and giving it one is closed on this account (all three routes — the `DatabricksLakebase`
+resource, a secret-backed service principal, and OBO for Model Serving — were checked and
+none are available; see `docs/ISSUES.md`). So the tool returns a deterministic *action
+envelope*, the FastAPI app validates it against a Pydantic model, and **the app** executes the
+insert through the existing `connect(principal)` path — under the caller's own OBO token.
+
+This is a stronger property than it looks like a workaround for: the write lands as the
+signed-in human, so `opened_by` is a genuine identity and Postgres RLS applies to the agent's
+write exactly as it does to a click in the UI. Nothing an LLM emits can widen its own reach.
+**The Emerging tab shows that identity on the row itself** ("opened by …", `source='AGENT'`
+only) — until 2026-09-08 it was recorded correctly and visible only in the Audit log, which
+made the property real but unevidenced at the point where it is claimed.
+
+Three consequences the code enforces rather than assumes:
+
+- **The envelope is constructed in Python from the tool's return value, never formatted by
+  the model**, and the sentinel must *start* the output item. Prose that merely mentions the
+  sentinel is not an envelope.
+- **Facts are recomputed, not accepted.** `fleet_vehicles` is counted from real rows; the
+  model's own estimate is never persisted. It orders the Emerging tab, so a hallucinated
+  count would reorder the operator's page.
+- **The model is prompted to say it *requested* a signal, never that it saved one.** The
+  committed row is reported by a separate UI element — the one place entitled to claim a
+  signal exists. Verified live: the agent said *"I can't confirm it's saved or tracked yet,
+  and no signal ID has been assigned to me."*
+
+**The agent can read the fleet's own vocabulary before it writes.** `lookup_fleet_models`
+returns the makes and models the fleet actually operates, in the registry's spelling, from
+`gold_fleet_vehicle` — the same table Lakebase's `fleetguard_vehicle` is loaded from, so the
+strings it hands back are exactly the ones the write path matches on. Without it, every read
+tool was keyed by `campaign_id` and the model was asked to name a scope in a vocabulary it
+could not inspect: live on 2026-09-08 it offered to widen a RAM 2500 signal to the "Dodge
+2500/3500 cluster", and this fleet holds no Dodge at all. That closes the NHTSA-vs-vPIC gap
+(I-030) at the source; `ActionResult.match_basis` (I-075) remains the backstop that repairs a
+count afterwards and states which tier produced it.
+
+Verified end to end 2026-09-08: user question → complaint retrieval → agent decision →
+envelope → app executes under OBO → Lakebase insert (+ audit row + `fleetguard_agent_action`,
+one transaction) → CDF → `bootcamp_cdc.lb_fleetguard_defect_signal_history` → Emerging tab.
 
 ---
 

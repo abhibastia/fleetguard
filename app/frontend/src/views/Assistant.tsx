@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { api, ApiError, type ChatTurn } from "../lib/api";
+import { api, ApiError, type AgentActionResult, type ChatTurn } from "../lib/api";
 import { renderMarkdownLite } from "../lib/markdown";
 
 /**
@@ -16,6 +16,7 @@ export function Assistant() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [gated, setGated] = useState(false);
+  const [lastAction, setLastAction] = useState<AgentActionResult | null>(null);
 
   async function send() {
     const question = draft.trim();
@@ -28,8 +29,13 @@ export function Assistant() {
     setError(null);
 
     try {
-      const { reply } = await api.chat(next);
+      const { reply, action_result } = await api.chat(next);
+      // `reply` is already stripped of the action envelope server-side, so replaying these
+      // turns as history cannot feed an envelope back into the model's context.
       setTurns([...next, { role: "assistant", content: reply }]);
+      // The console's own record of what it wrote — kept out of `turns` because it is not
+      // conversation, and because the model must never be able to author it.
+      if (action_result) setLastAction(action_result);
     } catch (e) {
       const err = e as ApiError;
       if (err.status === 401) {
@@ -56,8 +62,8 @@ export function Assistant() {
     <div className="panel assistant">
       <h3>Assistant</h3>
       <p className="muted" style={{ marginTop: 0, fontSize: 12.5 }}>
-        Searches 1.75M complaint narratives and fleet exposure. It can <em>propose</em> a service
-        campaign; only you can approve one.
+        Searches 1.75M complaint narratives and fleet exposure, and can open a defect signal
+        for tracking. It can <em>propose</em> a service campaign; only you can approve one.
       </p>
 
       {gated && (
@@ -82,6 +88,34 @@ export function Assistant() {
             {t.role === "assistant" ? renderMarkdownLite(t.content) : t.content}
           </div>
         ))}
+        {lastAction && (
+          /* Rendered from the console's committed row, never from the model's text. The
+             agent is prompted to say it *requested* a signal; this is the only element on
+             the page entitled to say one exists. */
+          <div className="action-receipt">
+            <strong>Defect signal opened</strong>
+            <div>
+              <code>{lastAction.signal_id}</code> · {lastAction.component}
+              {lastAction.make ? ` · ${lastAction.make}` : ""}
+              {lastAction.model ? ` ${lastAction.model}` : ""}
+            </div>
+            <div className="muted">
+              {lastAction.fleet_vehicles.toLocaleString()} fleet vehicle
+              {lastAction.fleet_vehicles === 1 ? "" : "s"} match · opened by{" "}
+              {lastAction.opened_by} · visible in <strong>Emerging</strong>
+            </div>
+            {lastAction.match_basis === "MODEL_VARIANT" && (
+              /* Only annotated for the variant tier. An exact match needs no caveat, and
+                 labelling every count would train the operator to skip the label — which is
+                 exactly when it would matter. NHTSA and vPIC spell models differently
+                 (`F-250 SD` vs `F-250`), so silently reporting 0 here was the original bug. */
+              <div className="muted">
+                Matched on a model-name variant — the fleet registry spells this model
+                differently from the complaint record.
+              </div>
+            )}
+          </div>
+        )}
         {busy && (
           <p className="thinking">
             <i />

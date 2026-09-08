@@ -23,6 +23,7 @@ import httpx
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 
+from .. import agent_actions
 from ..deps import CurrentPrincipal
 
 router = APIRouter(tags=["agent"])
@@ -52,21 +53,35 @@ class ChatRequest(BaseModel):
 class ChatReply(BaseModel):
     reply: str
     endpoint: str
+    # Present only when the agent requested a write and this console performed it. The UI
+    # renders this separately from `reply`, because the committed row — not the model's
+    # prose — is what actually happened.
+    action_result: agent_actions.ActionResult | None = None
 
 
-def _extract_text(payload: dict) -> str:
-    """Pull assistant text out of a Responses-API payload.
+def _extract(payload: dict) -> tuple[str, list[dict]]:
+    """Split a Responses-API payload into (visible text, requested actions).
 
-    A `ResponsesAgent` returns `output` — a list of items, which for a tool-using turn
-    includes tool calls as well as the final message. Only `output_text` content is shown;
-    tool-call plumbing is not something an operator should have to read.
+    A `ResponsesAgent` returns `output` — a list of items. Ordinary items are prose. Items
+    whose text begins with `agent_actions.ACTION_SENTINEL` are machine-readable envelopes the
+    agent emitted for this console to execute (it has no Lakebase access itself); they are
+    **stripped from the reply**, never shown, and never left in the text the frontend replays
+    as conversation history — otherwise the envelope would re-enter the model's context on the
+    next turn and could be acted on twice.
     """
     parts: list[str] = []
+    actions: list[dict] = []
     for item in payload.get("output", []):
         for chunk in item.get("content", []) or []:
-            if chunk.get("type") == "output_text":
-                parts.append(chunk.get("text", ""))
-    return "".join(parts).strip()
+            if chunk.get("type") != "output_text":
+                continue
+            text = chunk.get("text", "")
+            envelope = agent_actions.parse_envelope(text)
+            if envelope is not None:
+                actions.append(envelope)
+            else:
+                parts.append(text)
+    return "".join(parts).strip(), actions
 
 
 @router.post("/chat", response_model=ChatReply)
@@ -132,10 +147,23 @@ def chat(principal: CurrentPrincipal, req: ChatRequest) -> ChatReply:
             detail += f": {reason}"
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=detail)
 
-    text = _extract_text(resp.json())
+    text, actions = _extract(resp.json())
     if not text:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Agent returned no answer.",
         )
-    return ChatReply(reply=text, endpoint=AGENT_ENDPOINT)
+
+    # Execute at most one action per turn. The agent's loop could in principle emit several,
+    # but a chat turn that silently performs a batch of writes is not something an operator
+    # can review — and nothing in the prompt asks for more than one. Extra envelopes are
+    # dropped rather than executed; if that ever becomes a real pattern it should be a
+    # deliberate design, not an emergent one.
+    action_result = None
+    if actions:
+        # Deliberately NOT wrapped in a try/except that degrades to a plain reply: a failed
+        # write must surface as an error status, not as the agent's prose saying it asked for
+        # something while the console quietly did nothing.
+        action_result = agent_actions.execute(principal, actions[0])
+
+    return ChatReply(reply=text, endpoint=AGENT_ENDPOINT, action_result=action_result)

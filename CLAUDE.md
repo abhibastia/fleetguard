@@ -142,14 +142,21 @@ post-routing invariants — if one fires, the split logic is broken, not the sou
   the destination.
 - Configurable via UI **or** the Postgres REST API / Databricks SDKs. Asset Bundle
   support is **unconfirmed** — check before assuming `bundle deploy` covers it.
-- "Latest per key" derivation pattern from the history table:
+- "Latest per key" derivation pattern from the history table. **Corrected 2026-09-08 (I-080)
+  — the earlier version recorded here was wrong and silently resurrected deleted rows:**
   ```sql
   SELECT * FROM (
     SELECT *, ROW_NUMBER() OVER (PARTITION BY <key> ORDER BY _sort_by DESC) AS rn
     FROM lb_<table>_history
-    WHERE _pg_change_type NOT IN ('delete', 'update_preimage')
-  ) WHERE rn = 1
+    WHERE _pg_change_type <> 'update_preimage'   -- the BEFORE state, never current
+  ) WHERE rn = 1 AND _pg_change_type <> 'delete' -- drop keys whose LATEST event is a delete
   ```
+  **Filter deletes AFTER ranking, never before.** Excluding `'delete'` in the inner `WHERE`
+  (the previous form) removes the tombstone from the window, so the last *surviving* event for
+  a deleted key is its own `insert`, and the key comes back as current. Measured on
+  `lb_fleetguard_agent_action_history`: 4 inserts, 2 deletes, 2 rows actually live in
+  Postgres. The old pattern returned **4**, the corrected one returns **2**.
+  `_sort_by` is `BIGINT`, so `ORDER BY _sort_by DESC` is safe — no lexicographic hazard.
 
 **Databricks Apps OBO (on-behalf-of):**
 - User identity arrives via the `x-forwarded-access-token` request header (lowercase
@@ -216,18 +223,39 @@ post-routing invariants — if one fires, the split logic is broken, not the sou
 
 **Lakeflow Jobs `table_update` trigger** (used for the CDF→fact-table pipeline,
 §8.3 of the proposal):
+**CORRECTED 2026-09-08 (I-081) — the config previously recorded here could not be created.**
+Both intervals were below the platform floor and both table paths were wrong. As built and
+accepted (job `fleetguard-cdf-to-gold`, `851598550157757`):
 ```yaml
 trigger:
+  pause_status: PAUSED          # see STATUS — unpausing is a deliberate cost decision
   table_update:
-    condition: ALL_UPDATED
-    table_names: ["bootcamp_students.fleetguard.lb_agent_action_history", "..."]
-    min_time_between_triggers_seconds: 15
-    wait_after_last_change_seconds: 5
+    condition: ANY_UPDATED
+    table_names:
+      - "bootcamp_students.bootcamp_cdc.lb_fleetguard_agent_action_history"
+      - "bootcamp_students.bootcamp_cdc.lb_fleetguard_defect_signal_history"
+    min_time_between_triggers_seconds: 60   # 15 rejected: "must be greater than 60 seconds"
+    wait_after_last_change_seconds: 61      # 5 rejected, same message
 ```
-`wait_after_last_change_seconds` batches rapid writes into one run;
-`min_time_between_triggers_seconds` caps run frequency. Both are tight in this
-project by design — a longer settle window would push worst-case latency past the
-sub-minute velocity claim.
+Three corrections, each verified by the API rejecting the old value:
+- **Both intervals have a >60 s floor.** `15` and `5` are not merely tight, they are
+  **impossible** — `jobs create` refuses them.
+- **The old rationale was therefore false.** It claimed both were "tight by design" because a
+  longer settle window "would push worst-case latency past the sub-minute velocity claim".
+  The platform *forces* a settle window over a minute, so a `table_update` trigger cannot
+  deliver a sub-minute Postgres→gold-fact path at all. **§8.3's sub-minute claim survives only
+  for CDF replication itself** (measured 7.1–15.6 s, I-046) — Postgres→`bootcamp_cdc`.
+  **MEASURED end to end 2026-09-08, two live cycles (n=2): Postgres commit → gold fact
+  available = 155 s and 269 s.** Trigger detection is the variable part (102 s / 213 s to run
+  start); the job itself is steady at 54–56 s. State it as a **range of roughly 2.5–4.5
+  minutes**, never as one averaged number, and never quote the CDF figure for the whole chain.
+- **`ALL_UPDATED` is wrong for this table pair.** It fires only once *every* named table has
+  changed, and `fleetguard_defect_signal` is also written by the batch signals loader with no
+  matching `fleetguard_agent_action` write — so a batch-only change would wait forever.
+  `ANY_UPDATED` is correct here.
+- The old table paths (`bootcamp_students.fleetguard.lb_agent_action_history`) had both the
+  wrong schema and the wrong table name; CDF writes `lb_fleetguard_*_history` into
+  `bootcamp_cdc`.
 
 **Phase 2 fleet registry — DONE 2026-08-31.** `gold_fleet_vehicle` (20,000),
 `gold_fleet_depot` (60), `gold_fleet_exposure` (~989k rows). VIN prefixes come from real
@@ -290,6 +318,15 @@ need this, platform handles it):**
   (owner `zach@zachwilson.tech`) and `tabular` (owner `gudetayared@gmail.com`) belong to
   other people; `bootcamp_students` (owner `eumardassis@gmail.com`) holds ~296 schemas
   belonging to other students. **Never write outside the project's own schema.**
+- **The JOBS namespace is shared and flat — there is no per-user scoping.** Measured
+  2026-09-08: `databricks jobs list` returns **296 jobs, of which only 24 are FleetGuard's.**
+  The rest belong to other students, and several have names that read like ours —
+  `Lakebase-CDF` (sangwanrahul@icloud.com), `AgentTraceOps_Pipeline` (drajesh@hotmail.com),
+  `AgentTraceOps Pipeline` (bhargavilakshmi201@gmail.com) are **not ours**. Before deleting or
+  editing any job, check `creator_user_name` from `jobs get`. **Scope every destructive job
+  operation to the `fleetguard-` name prefix**; never act on a `jobs list` result set
+  unfiltered. The same applies to the ~250 `lb_*` tables in `bootcamp_students.bootcamp_cdc`,
+  which is a cohort-shared CDF destination, not ours.
 - **The project's schema is `bootcamp_students.fleetguard`** — created 2026-08-31, owned by
   `abhisek.bastia17@gmail.com`. Catalog creation is not available here, so all objects live
   in this one schema and medallion layers are **table-name prefixes** (`bronze_`, `silver_`,
