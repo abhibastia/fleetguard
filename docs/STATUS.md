@@ -1,6 +1,6 @@
 # FleetGuard — project status
 
-**Last updated:** 2026-09-08 · **MVP target: 7 September — MET** · **Demo: 25–30 September**
+**Last updated:** 2026-09-09 · **MVP target: 7 September — MET** · **Demo: 25–30 September**
 
 > **MVP = one vertical slice working end to end:** recall lands → exposure ranked → human
 > approves → work orders written to Lakebase → visible in UC via CDF → visible in a browser.
@@ -592,11 +592,38 @@ than discovering it mid-demo.
 
 ## Picking this up tomorrow
 
-**MVP is complete, five days early.** The vertical slice runs end to end — recall lands →
-exposure ranked → human approves → work orders → CDF → UC → browser — the agent is deployed
-and verified, the proactive half exists, and the evidence page serves generated figures. The
-7 September target is met; everything below is *improving a working system*, which was the
-point of landing early.
+### START HERE — state as of end of 2026-09-09
+
+**Everything is committed and pushed.** `main` == `origin/main`, working tree clean, CI green.
+Nothing is half-finished; there is no in-flight edit to reconstruct.
+
+**Nothing is running that needs attention.** The Databricks App is **STOPPED** (start it with
+`databricks apps start fleetguard-console`, ~2 min). The agent serving endpoint is on
+scale-to-zero. The only continuously-billing resource is the **AI Search endpoint at
+~$6.72/day** — a known, accepted cost (I-018), roughly $115 between now and the demo.
+
+**One thing is waiting on another person, and it is the only blocker of its kind:** TA Raghu
+(`raghavendra.yama@gmail.com`, who is **also one of the judges**) has `CAN_USE` on the App and
+has been asked to sign in and browse. See **A1** below for what his answer will and will not
+prove — he already has a Lakebase role, so his pass cannot close A1 on its own.
+
+**To pick up work, go straight to [WHAT IS LEFT BEFORE THE DEMO](#what-is-left-before-the-demo).**
+Everything between here and there is history, kept for the record.
+
+#### What changed on 2026-09-09
+
+| | |
+|---|---|
+| **I-086 resolved** | The App's Lakebase 403s were a **stale per-user OAuth consent grant** — a *third* config plane beyond the workspace allowlist and the app resource. Self-service to fix (`DELETE .../user-consent/me` + re-consent in a fresh browser). Two earlier claims were wrong and are corrected in place: it never needed account-admin, and it was never a regression. |
+| **CI added** | `.github/workflows/ci.yml` — ruff + pytest, and frontend typecheck/test/build, on every push and PR. Green on all four pushes so far. Touches no Databricks resource and never deploys. |
+| **B1 / I-079 fixed in code** | The detector's exact make/model join is now tiered, with `match_basis` carried to the UI. **The stored table is NOT rebuilt** — that is B3's job. |
+| **I-087 found and fixed** | Work orders due *today* rendered as OVERDUE for any viewer behind UTC. Correct in the author's timezone, wrong in the workspace's own region. |
+| **UC Functions + MCP — declined** | Investigated and **deliberately not built**. Reasoning recorded in **C4** so it is not re-proposed. |
+
+**MVP has been complete since 7 September, five days early.** The vertical slice runs end to
+end — recall lands → exposure ranked → human approves → work orders → CDF → UC → browser — the
+agent is deployed and verified, the proactive half exists, and the evidence page serves
+generated figures. Everything outstanding is *improving a working system*, not finishing one.
 
 Every item on yesterday's list is closed: the endpoint decision (keep), `/evidence` (built),
 and the proposal corrections (already discharged by the freeze header — the item should never
@@ -628,38 +655,15 @@ tiers (`EXACT → MODEL_VARIANT → MAKE_ONLY → NONE`), reported rather than b
 
 ### Next, in priority order
 
-**✅ I-086 — RESOLVED 2026-09-08, same evening it was found.** The App's Lakebase routes were
-403ing for the owner's own browser session (`Invalid scope, required scopes: postgres`) and
-surviving every fix. Root cause: **OBO scope lives in three planes, not two** — the workspace
-allowlist (`["*"]`, fine), the app resource (`postgres, sql, model-serving`, fine), and a
-**sticky per-user consent grant** that was captured before I-083's scope fix landed and never
-widened when the app's scope list did. Restart, sign-out/sign-in and re-applying
-`user_api_scopes` all failed because each targeted a plane that was already correct.
-Fixed self-service — `DELETE /api/2.0/oauth-app-integrations/<oauth2_app_client_id>/user-consent/me`,
-then reopen the app in a **fresh/incognito** session (revocation does not invalidate
-already-issued tokens for up to an hour, so a warm session imitates the bug after a correct
-fix). Verified: `user_consented_scopes` now carries all three, and the console works in a real
-browser. **The earlier "needs account-admin" conclusion was wrong** — `/user-consent/me` is
-deliberately self-service. Full write-up, including the two false claims it corrected, in
-`ISSUES.md` I-086.
+**There is one such list, and it is not here.** See
+[WHAT IS LEFT BEFORE THE DEMO](#what-is-left-before-the-demo) below — A1 (the second-identity
+sign-in) is the top item, followed by A2, then B2/B3.
 
-**This also retires one of I-084's three unknowns** — the browser OAuth-consent step, never
-previously exercised, has now been completed successfully by a real human in a browser.
-
-**I-084, still open and now unblocked:** the App has still only ever been verified end to
-end under the **owner's identity**. `db.py` connects to Postgres **as the caller**, and it is
-unknown whether Lakebase auto-provisions a login role on first connect: measured live,
-`zach@zachwilson.tech` has one, but `eumardassis@gmail.com` and `gudetayared@gmail.com` — both
-owners on this metastore — do **not**. "The judges are admins" does not settle it; admin
-clears the app ACL, Postgres roles are a separate namespace. **We cannot pre-create roles** (no
-`CREATEROLE`, Phase 10), so if auto-provisioning does not happen there is no fix from this
-account. **One sign-in by one real second identity settles this**, along with the untested
-browser OAuth-consent step. **Do not test with `zach@zachwilson.tech`** — he already has a
-role, so a pass proves nothing. Pick someone without one. Fallback if it fails: Render's
-`app-login` + snapshot needs no Databricks identity at all.
-
-Also decide before the demo: **judges are not in `FLEETGUARD_APPROVERS`**, so they can read
-everything and get 403 on approve. Admin does not bypass it — the gate is application logic.
+This heading previously carried its own copy of the next actions, which drifted out of sync and
+began contradicting the canonical list (it still asserted "judges are not in
+`FLEETGUARD_APPROVERS`" after one had been added). Commit `0cf9c8e` consolidated these once
+already and the duplicate re-grew, so it is now a pointer rather than a list. **Do not restore
+prose here** — add to section A/B/C instead.
 
 ---
 
@@ -753,6 +757,29 @@ its own admission. Write both decisions down and close them.
 
 **C3. Notification digest.** Last Phase 13 item, never started, needs a new email dependency.
 Lowest value of anything remaining.
+
+**C4. UC Functions + MCP — INVESTIGATED AND DECLINED 2026-09-09. Do not re-propose without
+reading this.** The idea is superficially strong and was ranked highly before the code was
+read: the agent's six tools are Python closures inside the model, so they are ungoverned,
+ungrantable and unreusable — an odd gap in a project whose thesis is governance. Exposing them
+as UC Functions over MCP would close it on paper.
+
+**It does not survive contact with the tools.** Their value is substantially in the *Python
+wrapper*, not the SQL. `lookup_fleet_exposure` returns "MODEL_VARIANT matches are probabilistic
+and require confirmation"; `lookup_emerging_signals` returns counts beside rows so "2 affecting
+your fleet" cannot be read as "2 recalls"; `lookup_fleet_models` returns the vPIC-vs-NHTSA
+vocabulary note. Those strings exist because of **I-050, I-051, I-075 and I-076** — four real
+incidents where a bare number was misread.
+
+A UC SQL function returns a table and cannot carry that framing. So the choice is: drop the
+guidance (regressing four fixes that cost real time), or keep the Python wrapper and expose only
+the bare SQL over MCP — which hands *external* consumers exactly the unqualified numbers the
+guidance exists to prevent, recreating I-075's failure mode for a new audience.
+
+**Conclusion:** the governance story is better told by what already exists — OBO, RLS, and the
+action-envelope write path where the agent cannot reach the database — than by converting tools
+whose safety lives in prose. Revisit only if UC Functions gain a way to return structured
+guidance alongside rows.
 
 ### D. Standing cost decisions
 

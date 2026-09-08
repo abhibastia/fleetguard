@@ -417,3 +417,18 @@ need this, platform handles it):**
   and latency sections follow this discipline — new additions should too.
 - `PLAN.md` is the source of truth for build sequencing and phase definitions of
   done. Keep it in sync with the proposal if either changes.
+- **CI runs on every push and PR** (`.github/workflows/ci.yml`, added 2026-09-09). Run the same
+  checks locally before committing — they take about two seconds:
+  ```bash
+  .venv/bin/python -m ruff check src tests app/backend scripts
+  .venv/bin/python -m pytest
+  npm --prefix app/frontend run typecheck && npm --prefix app/frontend run test
+  ```
+  Dev dependencies come from `requirements-dev.txt`, which sources runtime pins from
+  `app/backend/requirements.txt` so local and CI cannot drift. CI **never touches the
+  workspace** (no credentials; integration tests self-skip without `--run-integration`) and
+  **never deploys** — deploying restarts the App under whoever is using it, so it stays manual.
+- **After changing anything under `app/frontend/`, run `./scripts/build_console.sh`.** The
+  console bundle committed at `app/backend/fleetguard_api/console/` is what the Databricks App
+  actually serves — no Node runs on the Apps runtime — so an un-rebuilt bundle ships stale UI
+  while every test still passes.
