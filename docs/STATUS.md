@@ -612,6 +612,86 @@ snapshot needs no Databricks identity at all.
 Also decide before the demo: **judges are not in `FLEETGUARD_APPROVERS`**, so they can read
 everything and get 403 on approve. Admin does not bypass it — the gate is application logic.
 
+---
+
+## WHAT IS LEFT BEFORE THE DEMO
+
+**As of 2026-09-08. Demo 25–30 Sept (~17 days).** Every phase is done or deliberately cut; the
+list below is all that stands between here and the demo. Items are ordered by what would hurt
+most if skipped, not by effort.
+
+### A. Blocking — cannot be resolved from this account
+
+**A1. One second-identity sign-in on the Databricks App (I-084).** *The single highest-value
+action remaining.* The App is verified end to end under the **owner's identity only**. One
+sign-in by one other person retires three unknowns at once: whether Lakebase auto-provisions a
+Postgres login role, whether the browser OAuth-consent step for `postgres`/`sql`/`model-serving`
+is seamless (only a programmatic bearer token was ever used), and whether the ACL is right.
+**Pick a tester WITHOUT an existing Lakebase role — not `zach@zachwilson.tech`, who has one, so
+a pass would prove nothing.** No further owner-side testing can substitute.
+
+**A2. Decide whether judges can approve.** `FLEETGUARD_APPROVERS` holds the owner's email only,
+so a judge gets **403 on approve** — the approval gate is application logic and workspace admin
+does not bypass it. The approval flow is arguably the strongest thing in the demo; leaving it
+locked is a choice, not an oversight. One env-var change on whichever surface is used.
+
+### B. Build work still outstanding
+
+**B1. `I-079` — the detector's exact make/model join.** 2 of 48 signals report 0 fleet vehicles
+against 2,418 and 766 real ones (I-030's third appearance). **Must land BEFORE the signals
+rebuild in B3**, or the refresh bakes the undercount in for another cycle. Reuse the gold
+layer's existing tier expression rather than writing a fourth copy.
+
+**B2. Seeded demo state.** Phase 11's last remaining piece.
+
+**B3. The pre-demo data refresh — the day before, not the morning of.** Chain, in order:
+ingest → bronze/silver → **B1's fix** → rebuild `gold_emerging_signal` → load Lakebase →
+`export_evidence.py` + `export_demo_snapshot.py` → commit → deploy. **Expect this to break the
+pinned numbers** in the agent smoke test (25 vehicles / 22 depots; 48 signals / 2 fleet-relevant
+/ RAM 2500 at 1,256) and in the signals build assertions. That breakage is intentional — it
+forces a look rather than a silent pass — but budget time to update the pins afterwards.
+
+### C. Optional — decide rather than default into
+
+**C1. E-01, the AI Gateway PII guardrail.** Worth doing because it corrects a claim that is
+*wrong today* in the frozen proposal (§4.5 credits agent endpoints with guardrails they do not
+support). Blocked on a `system.ai` privilege wall; the honest path is option (c) — build from
+published docs, clearly caveated as unverified against this workspace.
+
+**C2. E-07 and E-09 — record the decision, do not build.** Both are marked ADOPT in
+`ENHANCEMENTS.md` with zero implementation and no logged reversal, which is I-051's pattern in
+the backlog. **E-09 (LangGraph) is arguably already satisfied**: it was adopted for
+suspend-and-resume on the write path, which the action-envelope pattern now does across a
+process boundary, under a different identity. E-07 (labeling) is a mechanism demo with n=1 by
+its own admission. Write both decisions down and close them.
+
+**C3. Notification digest.** Last Phase 13 item, never started, needs a new email dependency.
+Lowest value of anything remaining.
+
+### D. Standing cost decisions
+
+| item | state | note |
+|---|---|---|
+| AI Search `fleetguard-vs` | **running, ~$6.72/day** | ~17 days ⇒ **~$115** if left up to the demo (I-018). The only continuously-billing resource. **Do not rebuild the index inside the demo window** — it is most of a working day |
+| Agent serving endpoint | v6, **scale-to-zero ON** | `agents.deploy()` resets this to `False` on *every* deploy — re-assert it after any redeploy |
+| Databricks App | **STOPPED** | `databricks apps start fleetguard-console`, ~2 min. It will not answer a cold URL |
+| `fleetguard-cdf-to-gold` | **UNPAUSED** | Event-driven, not scheduled; fires only on agent writes or signal loads, capped at 1 run/min |
+
+### E. Demo-day mechanics, easy to forget
+
+- **Start the App first** (~2 min) — and the agent endpoint takes a **cold start** on the first
+  question, because scale-to-zero is on. Warm both before anyone is watching.
+- `/` on Render is cached and can serve a stale `index.html` for minutes after a deploy (I-054)
+  — probe an API route to confirm a deploy, never the console page.
+- The Emerging tab's "**4 affecting your fleet**" is 2 batch + 2 agent-opened of 50. If B1 lands
+  it becomes **6 of 50**. Do not confuse it with I-079's separate "2 → 4 of 48" (I-079).
+
+---
+
+### Historical detail — completed items, kept for the record
+
+*Everything below is done, superseded, or deliberately shelved. Retained because this project's
+argument depends on the record of what was tried, not only what shipped.*
 
 0. ~~**The agent cannot see the fleet's make/model vocabulary**~~ and ~~**rule 6 reads as a
    permission gate**~~ — **both fixed, deployed and verified against the live endpoint
