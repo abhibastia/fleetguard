@@ -696,19 +696,28 @@ locked is a choice, not an oversight. One env-var change on whichever surface is
 
 ### B. Build work still outstanding
 
-**B1. `I-079` — the detector's exact make/model join.** 2 of 48 signals report 0 fleet vehicles
-against 2,418 and 766 real ones (I-030's third appearance). **Must land BEFORE the signals
-rebuild in B3**, or the refresh bakes the undercount in for another cycle. Reuse the gold
-layer's existing tier expression rather than writing a fourth copy.
+**~~B1. `I-079`~~ — ✅ CODE FIXED 2026-09-09, rebuild still owed to B3.** The detector's exact
+make/model join (I-030's third appearance) is now tiered `EXACT`/`MODEL_VARIANT`, matching the
+gold layer and the agent write path rather than adding a fourth spelling of the rule. Verified
+read-only against live data before shipping: it reproduces the measured 2,418 and 766 exactly
+and changes **only those two of 48** rows. The tier travels with the count through the API and
+renders as a `VARIANT` badge, so the fix does not trade a wrong `0` for a falsely precise
+`2,418` — that number includes 315 `PROMASTER CITY` vans. 7 new tests
+(`tests/test_signals_routes.py`; the router had none). **The stored table still holds the old
+zeros** — B3 rebuilds it, and running it twice is what the deferral policy exists to prevent.
 
 **B2. Seeded demo state.** Phase 11's last remaining piece.
 
 **B3. The pre-demo data refresh — the day before, not the morning of.** Chain, in order:
-ingest → bronze/silver → **B1's fix** → rebuild `gold_emerging_signal` → load Lakebase →
+ingest → bronze/silver → rebuild `gold_emerging_signal` (**now carries B1's tiered join and a
+new `match_basis` column** — the loader adds it idempotently, so no manual migration) → load
+Lakebase → **expect "N affecting your fleet" to become 6 of 50, not 4** →
 `export_evidence.py` + `export_demo_snapshot.py` → commit → deploy. **Expect this to break the
 pinned numbers** in the agent smoke test (25 vehicles / 22 depots; 48 signals / 2 fleet-relevant
-/ RAM 2500 at 1,256) and in the signals build assertions. That breakage is intentional — it
-forces a look rather than a silent pass — but budget time to update the pins afterwards.
+/ RAM 2500 at 1,256). That breakage is intentional — it forces a look rather than a silent pass
+— but budget time to update the pins afterwards. **The signals build's own assertions will not
+fire**: checked 2026-09-09, they are range guards (`n > 0`, `n < 2000`), not pinned counts, so
+they neither catch nor complain about this change. Only the agent smoke test pins exact values.
 
 ### C. Optional — decide rather than default into
 

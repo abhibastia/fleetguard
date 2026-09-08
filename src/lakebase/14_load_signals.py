@@ -67,6 +67,12 @@ ALTERS = [
     "ADD COLUMN IF NOT EXISTS max_z NUMERIC(8,2)",
     "ADD COLUMN IF NOT EXISTS harm_share NUMERIC(5,3)",
     "ADD COLUMN IF NOT EXISTS fleet_vehicles INT",
+    # How `fleet_vehicles` was matched: 'EXACT' | 'MODEL_VARIANT' | 'NONE' (I-079). Without it
+    # the console shows a count whose strength it cannot state, and a MODEL_VARIANT number is
+    # genuinely weaker — the RAM PROMASTER match includes 315 PROMASTER CITY vans. Nullable on
+    # purpose: agent-opened rows are written by `agent_actions.py`, which computes the tier for
+    # its reply but does not persist it here, so those rows carry NULL rather than a wrong tier.
+    "ADD COLUMN IF NOT EXISTS match_basis TEXT",
     "ADD COLUMN IF NOT EXISTS is_live BOOLEAN",
     "ADD COLUMN IF NOT EXISTS as_of_month DATE",
 ]
@@ -85,7 +91,7 @@ SELECT CONCAT_WS(':', series_key, DATE_FORMAT(run_start, 'yyyy-MM')) AS signal_i
        CAST(max_z AS DECIMAL(8,2))       AS max_z,
        complaints_in_run                 AS complaint_count,
        CAST(harm_share AS DECIMAL(5,3))  AS harm_share,
-       fleet_vehicles, is_live, as_of_month
+       fleet_vehicles, match_basis, is_live, as_of_month
 FROM {UC}.gold_emerging_signal
 """
 

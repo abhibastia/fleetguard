@@ -176,9 +176,22 @@ export function Signals() {
                   <td className="num muted">
                     {s.harm_share != null ? `${Math.round(s.harm_share * 100)}%` : "—"}
                   </td>
+                  {/* The count carries its match tier, because the two are not equally strong.
+                    A MODEL_VARIANT match joins NHTSA's spelling to vPIC's across a word
+                    boundary — RAM `PROMASTER` matches 2,418 vehicles, 315 of them
+                    `PROMASTER CITY`, a different class of van. Presenting that as a bare
+                    number would trade I-079's wrong zero for a misleading precision, so
+                    variants are labelled and exact matches are left unadorned. */}
                   <td className="num">
                     {s.fleet_vehicles > 0 ? (
-                      <strong>{s.fleet_vehicles.toLocaleString()}</strong>
+                      <>
+                        <strong>{s.fleet_vehicles.toLocaleString()}</strong>
+                        {s.match_basis === "MODEL_VARIANT" && (
+                          <span className="tag quiet" title="Matched on a model variant (e.g. PROMASTER → PROMASTER 1500), not an exact model name. Confirm before acting.">
+                            VARIANT
+                          </span>
+                        )}
+                      </>
                     ) : (
                       <span className="muted">0</span>
                     )}

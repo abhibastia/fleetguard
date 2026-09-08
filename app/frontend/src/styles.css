@@ -611,6 +611,12 @@ table.rows tbody tr:hover {
   font-variant-numeric: tabular-nums;
 }
 
+/* A badge qualifying a number (the Emerging tab's VARIANT match tier) sits inline after it.
+   JSX strips the newline between the two elements, so without this they render touching. */
+.num .tag {
+  margin-left: 6px;
+}
+
 .wrap {
   overflow-x: auto;
   border-radius: var(--r);

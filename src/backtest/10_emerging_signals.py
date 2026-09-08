@@ -121,10 +121,45 @@ print("total sustained runs in corpus history:", spark.table("live_run").count()
 # Fleet relevance is a LEFT JOIN on make/model, not an inner one: a signal that touches no
 # fleet vehicle is still worth showing — "nothing emerging affects you" is a real answer, and
 # suppressing it would make an empty panel indistinguishable from a broken one.
+#
+# EXACT MODEL MATCHING ALONE IS WRONG HERE, and silently so — I-079, which is I-030's *third*
+# appearance. `r.make`/`r.model` come from complaint data and carry NHTSA's spelling; the fleet
+# registry is built from vPIC's. NHTSA writes `PROMASTER`; the registry writes
+# `PROMASTER 1500`/`2500`/`3500`. Same trucks, no exact match. Measured live 2026-09-08: two
+# signals reported **0** fleet vehicles against **2,418** and **766** real ones — and 0 is the
+# most damaging possible value here, because the Emerging tab ranks on this column, so a real
+# defect sorts to the bottom looking like it touches nobody.
+#
+# So match in the same tiers the gold layer (I-030) and the agent write path (I-075) already
+# use, and carry `match_basis` alongside the count so it is never read as more certain than it
+# is: that 2,418 includes 315 `PROMASTER CITY` — a small van, arguably not the same vehicle —
+# which is exactly why the tier is reported rather than blended into an unlabelled number. §7's
+# determinism guarantee covers `EXACT` only; `MODEL_VARIANT` is probabilistic and a human
+# should confirm it before acting.
+#
+# The variant test is anchored to a word boundary (`|| ' %'`) in both directions, so `F-250`
+# matches `F-250 SD` and `PROMASTER` matches `PROMASTER 1500`, while `F-2` matches neither.
+# `variant_n` deliberately *includes* the exact matches, mirroring `agent_actions.py`, so the
+# two tiers are nested rather than disjoint and `EXACT` simply wins when it is non-zero.
 spark.sql(f"""
 CREATE OR REPLACE TABLE gold_emerging_signal
 CLUSTER BY (comp_top)
 AS
+WITH fleet_match AS (
+  SELECT
+    d.make, d.model,
+    COUNT(DISTINCT CASE WHEN v.model = d.model THEN v.vin END) AS exact_n,
+    COUNT(DISTINCT v.vin)                                      AS variant_n
+  FROM (SELECT DISTINCT make, model FROM live_run) d
+  LEFT JOIN (
+    SELECT UPPER(make) AS make, UPPER(model) AS model, vin FROM gold_fleet_vehicle
+  ) v
+    ON v.make = d.make
+   AND (v.model = d.model
+        OR d.model LIKE v.model || ' %'
+        OR v.model LIKE d.model || ' %')
+  GROUP BY d.make, d.model
+)
 SELECT
   CONCAT_WS('|', r.make, r.model, r.comp_top) AS series_key,
   r.make, r.model, r.comp_top,
@@ -133,14 +168,16 @@ SELECT
   r.complaints_in_run,
   r.harm_in_run,
   ROUND(r.harm_in_run / r.complaints_in_run, 3) AS harm_share,
-  COALESCE(f.fleet_vehicles, 0) AS fleet_vehicles,
+  CASE WHEN COALESCE(f.exact_n, 0)   > 0 THEN f.exact_n
+       WHEN COALESCE(f.variant_n, 0) > 0 THEN f.variant_n
+       ELSE 0 END AS fleet_vehicles,
+  CASE WHEN COALESCE(f.exact_n, 0)   > 0 THEN 'EXACT'
+       WHEN COALESCE(f.variant_n, 0) > 0 THEN 'MODEL_VARIANT'
+       ELSE 'NONE' END AS match_basis,
   (r.run_end >= ADD_MONTHS(DATE'{AS_OF}', -{LIVE_WITHIN_MONTHS})) AS is_live,
   DATE'{AS_OF}' AS as_of_month
 FROM live_run r
-LEFT JOIN (
-  SELECT UPPER(make) AS make, UPPER(model) AS model, COUNT(DISTINCT vin) AS fleet_vehicles
-  FROM gold_fleet_vehicle GROUP BY 1,2
-) f ON f.make = r.make AND f.model = r.model
+LEFT JOIN fleet_match f ON f.make = r.make AND f.model = r.model
 WHERE r.run_end >= ADD_MONTHS(DATE'{AS_OF}', -{RECENT_WITHIN_MONTHS})
 """)
 
@@ -159,10 +196,20 @@ print(
         "FROM gold_emerging_signal"
     ).collect()[0]
 )
+# Print the tier split, not just the headline. `fleet_relevant` above is the number the console
+# shows, and after I-079 it is a sum across two tiers of very different strength — a run where
+# MODEL_VARIANT suddenly dominates is a signal that the two vocabularies have drifted again,
+# which is the failure this join has now had three times (I-030, I-075, I-079).
+print(
+    spark.sql("""
+      SELECT match_basis, COUNT(*) AS signals, SUM(fleet_vehicles) AS vehicles
+      FROM gold_emerging_signal GROUP BY match_basis ORDER BY signals DESC
+    """).collect()
+)
 display(
     spark.sql("""
       SELECT series_key, run_end, run_len, max_z, complaints_in_run,
-             harm_share, fleet_vehicles, is_live
+             harm_share, fleet_vehicles, match_basis, is_live
       FROM gold_emerging_signal
       ORDER BY fleet_vehicles DESC, run_end DESC, max_z DESC LIMIT 20
     """)

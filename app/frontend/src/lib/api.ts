@@ -119,6 +119,13 @@ export interface Signal {
   complaint_count: number | null;
   harm_share: number | null;
   fleet_vehicles: number;
+  /**
+   * 'EXACT' | 'MODEL_VARIANT' | 'NONE' — how `fleet_vehicles` was matched (I-079), or null on
+   * agent-opened rows, which compute the tier for their chat reply but do not persist it.
+   * Worth surfacing rather than hiding: most non-zero matches are variants, and a variant
+   * count is genuinely weaker than an exact one.
+   */
+  match_basis: string | null;
   is_live: boolean;
   status: string;
   /** 'DETECTOR' (batch z-score run) or 'AGENT' (opened by the assistant). */

@@ -393,7 +393,8 @@ If that last assertion ever stops firing, the check has gone blind and says so.
 ---
 
 ### I-079 — I-030, third appearance: the **batch detector** joins the fleet on exact make/model, so 2 of 48 signals report 0 fleet vehicles against thousands of real trucks — **SILENT**
-*Date:* 2026-09-08 · *Status:* open (fix deferred to the pre-demo refresh)
+*Date:* 2026-09-08 · *Status:* **code fixed 2026-09-09; the stored table still carries the old
+numbers until B3 rebuilds it** — see "Fixed" below for exactly what is and is not true yet
 
 **How it surfaced.** Not from a test — from reading the *rationales* of an LLM judge that
 "failed" the v6 evaluation. Three `fleetguard_rules` failures complained that the agent quoted
@@ -436,11 +437,45 @@ right fix reports 4 signals with their tiers, not a bigger number presented as c
 live set changes and no screen currently shows a wrong number. The error is confined to the
 historical 48 and to the aggregate "N affecting your fleet".
 
-**Deferred, deliberately.** Fixing it means rebuilding `gold_emerging_signal` and reloading
-Lakebase, which breaks the pinned assertions in the agent smoke test (48 / 2 / RAM 2500 first
-at 1,256) and in the signals build. STATUS already schedules exactly that chain for the day
-before the demo, and doing it twice is the thing that policy exists to prevent. Fold this in
-there: reuse the gold layer's tier expression rather than writing a third variant of it.
+**Fixed in code 2026-09-09 — but read what that does and does not mean.** The *build* is
+corrected and the *stored table is not yet rebuilt*, so *right now* `gold_emerging_signal` and
+Lakebase still hold the two zeros. Nothing is wrong with that: the rebuild belongs to B3, and
+running it twice is exactly what the deferral policy exists to prevent. Do not quote this issue
+as "the counts are right" until B3 has run.
+
+What changed:
+
+| file | change |
+|---|---|
+| `src/backtest/10_emerging_signals.py` | exact join → tiered `EXACT`/`MODEL_VARIANT` match, plus a `match_basis` column and a per-tier summary printed on each run |
+| `src/lakebase/14_load_signals.py` | `match_basis TEXT` added to the idempotent `ADD COLUMN IF NOT EXISTS` list and to the load `SELECT` |
+| `routers/signals.py`, `api.ts`, `Signals.tsx` | tier carried through the API and rendered as a `VARIANT` badge beside the count |
+| `tests/test_signals_routes.py` | new, 7 tests — the router had no dedicated test file before |
+
+**Verified before writing it, against live data.** The tiered expression was run read-only
+against the warehouse and reproduces this entry's measured numbers exactly — `RAM PROMASTER`
+2,418, `CHEVROLET SILVERADO 1500` 766 — and changes **only those two rows**; the other 46 are
+byte-identical. Both remain `is_live = false`, so the live set still moves by zero and no demo
+screen changes today. Confirming the blast radius was as small as claimed mattered more than
+confirming the two numbers, because "only these two change" is the part that was assumed.
+
+**The tier is reported, not blended, and that is the point.** Fixing the count alone would have
+traded a wrong `0` for a misleading `2,418` — that figure includes 315 `PROMASTER CITY`, a
+different class of van. `MODEL_VARIANT` is probabilistic; §7's determinism guarantee covers
+`EXACT` only. The console now shows the count with a `VARIANT` badge rather than a bare number.
+
+**Agent-opened rows carry NULL, deliberately.** `agent_actions.py` already computes the tier for
+its chat reply (I-075) but does not persist it to `fleetguard_defect_signal`. Adding that write
+would mean the column must exist in Postgres *before* the code ships, and the migration only
+runs in B3 — so persisting it now would break the live agent write path for a cosmetic gain.
+NULL reads as "not recorded", which is true, rather than `NONE`, which would falsely claim the
+fleet was checked and found empty. Worth folding into B3 once the column exists.
+
+**Still pinned to old numbers, and expected to break in B3:** the agent smoke test
+(48 / 2 / RAM 2500 first at 1,256) and the console's "N affecting your fleet" tile, which
+becomes **6 of 50**, not 4. Budget time to update the pins rather than treating the break as a
+regression — and see the paragraph above about not confusing that 6 with the console's current
+4, which is a different population.
 
 **Lesson — the one from I-076, now demonstrated twice in a day.** I wrote that morning that
 "when a corpus mismatch is recorded, the question is not *is this path fixed* but *which other

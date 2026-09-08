@@ -40,6 +40,19 @@ class Signal(BaseModel):
     complaint_count: int | None
     harm_share: float | None
     fleet_vehicles: int | None
+    # How `fleet_vehicles` was matched: 'EXACT' | 'MODEL_VARIANT' | 'NONE' (I-079). The count
+    # alone overstates its own certainty — the detector's make/model come from complaint text
+    # (NHTSA's spelling) and the fleet registry from vPIC's, so most non-zero matches are
+    # variants: RAM `PROMASTER` matches 2,418 vehicles, 315 of which are `PROMASTER CITY`, a
+    # different class of van. §7's determinism guarantee covers `EXACT` only, so the tier
+    # travels with the number rather than being flattened into it.
+    #
+    # NULL means "not recorded", not "no match" — agent-opened rows compute the tier in
+    # `agent_actions.py` for their reply but do not persist it here. Defaulted for the same
+    # reason as `source` and `opened_by` below: the committed snapshot.json predates the
+    # column, and defaulting keeps that file valid without backfilling a tier we did not
+    # measure at the time.
+    match_basis: str | None = None
     is_live: bool | None
     status: str
     # 'DETECTOR' (batch z-score run) or 'AGENT' (opened by the assistant, see
@@ -98,7 +111,8 @@ def get_signals(
         cur.execute(
             f"""SELECT signal_id, series_key, make, model, component,
                        run_start, run_end, run_len, max_z, complaint_count,
-                       harm_share, fleet_vehicles, is_live, status, source, opened_by
+                       harm_share, fleet_vehicles, match_basis, is_live, status,
+                       source, opened_by
                 FROM {PG_SCHEMA}.fleetguard_defect_signal
                 {where}
                 ORDER BY fleet_vehicles DESC NULLS LAST, run_end DESC NULLS LAST, max_z DESC
