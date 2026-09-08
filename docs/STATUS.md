@@ -206,10 +206,21 @@ Three layers, doing different jobs. Full rationale in `src/pipelines/expectation
 
 | Layer | What | Run |
 |---|---|---|
-| **Unit — backend** (`tests/*.py`, 10 files) | Pure logic, no Databricks: VIN/chunking/naming, the auth seam, scoping, db helpers, the evaluation scorer's negation logic. **161 tests.** | `pytest` |
-| **Unit — frontend** (`app/frontend/src/lib/*.test.ts`) | `api.ts`'s error handling, `theme.ts`. Zero frontend tests existed before 2026-09-02. **13 tests.** | `npm --prefix app/frontend run test` |
+| **Unit — backend** (`tests/*.py`, 23 files) | Pure logic, no Databricks: VIN/chunking/naming, the auth seam, scoping, db helpers, the evaluation scorer's negation logic. **341 tests, ~1 s.** | `pytest` |
+| **Unit — frontend** (`app/frontend/src/lib/*.test.ts`, 3 files) | `api.ts`'s error handling, `theme.ts`, `markdown.ts`. Zero frontend tests existed before 2026-09-02. **21 tests.** | `npm --prefix app/frontend run test` |
 | **LDP expectations** (`src/pipelines/**/*.sql`) | Row-level, in-pipeline. Post-routing invariants + explicit `_dq_failures` quarantine split. | runs with the pipeline |
 | **Data quality** (`tests/test_data_quality.py`) | Cross-table invariants against live tables. **21 tests, 73 s.** | `pytest -m integration --run-integration` |
+
+**CI added 2026-09-09** (`.github/workflows/ci.yml`): the first two layers now run on every push
+to `main` and every PR — `ruff check` + `pytest` on one job, frontend typecheck + tests + build
+on another. Until now a suite whose whole purpose is catching *silent* failures only ran when
+someone remembered to run it. It **never touches the workspace**: no credentials are configured,
+and the integration layer self-skips without `--run-integration` (`tests/conftest.py`), which is
+what makes it safe on every push. It does not deploy — deployment stays manual, because it
+restarts the app under whoever is using it. `requirements-dev.txt` pins what the checks need and
+sources runtime versions from `app/backend/requirements.txt`, so local and CI cannot drift.
+Immediate motivation is **B3**: the pre-demo refresh is expected to break pinned numbers, and
+that is only useful if it surfaces on the push rather than on demo morning.
 
 **End-to-end repo review, 2026-09-02.** Read every backend router, the auth seam, `db.py`,
 `scoping.py`, and every stateful frontend view, adversarially — not just "does it run" but

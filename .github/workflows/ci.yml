@@ -1,0 +1,102 @@
+# CI — run the checks that already exist, on every push, without being asked.
+#
+# WHY THIS EXISTS. This repo carries 341 backend and 21 frontend tests, and a large share of
+# them exist because something failed *silently* during the build (see docs/ISSUES.md: I-012's
+# mis-parsed rows with a clean `_rescued_data`, I-034's single-character chunks, I-030's
+# make/model vocabulary mismatch that has now reappeared three times). A suite that only runs
+# when someone remembers to run it is not a safety net for that class of bug.
+#
+# The immediate motivation is the pre-demo data refresh (STATUS.md B3), which is *expected* to
+# break pinned numbers in the agent smoke test and the signals build. That breakage is
+# deliberate — it forces a look — but it is only useful if it surfaces immediately rather than
+# on demo morning.
+#
+# WHAT THIS DELIBERATELY DOES NOT DO:
+#   - It does not touch the Databricks workspace. No credentials are configured here, and none
+#     should be. Integration tests (`-m integration`, tests/test_data_quality.py) require
+#     `--run-integration` and are skipped by default via tests/conftest.py — that default is
+#     what makes this workflow safe to run on every push.
+#   - It does not deploy. Deployment stays a deliberate manual act
+#     (`databricks apps deploy`), because deploying restarts the app under whoever is using it.
+#   - It does not run `ruff format --check`. Three notebook-style files under src/ are not
+#     format-clean today, and ruff also rewrites fenced code samples inside docs/ISSUES.md,
+#     where wrong-then-corrected snippets are preserved on purpose. Enforcing format would mean
+#     introducing a red build; `ruff check` (correctness lint) is green today and is enforced.
+#
+# Versions mirror the local environment these checks were verified green on, so a first run is
+# green for real reasons rather than by luck. Worth adding later: a second Python version
+# approximating the Databricks Apps runtime, which is older than the 3.14 used for development.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A superseded run tells you nothing useful; cancel it rather than pay for it.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: backend — ruff + pytest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: |
+            requirements-dev.txt
+            app/backend/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      # Correctness lint (pyflakes, bugbear, comprehensions), not formatting. Scoped to the
+      # Python trees so ruff does not try to reformat code fences inside docs/.
+      - name: Lint
+        run: ruff check src tests app/backend scripts
+
+      # Integration tests self-skip without --run-integration; expect "N passed, 21 skipped".
+      - name: Test
+        run: pytest
+
+  frontend:
+    name: frontend — typecheck + test + build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app/frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "26"
+          cache: npm
+          cache-dependency-path: app/frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm run test
+
+      # The build is a check in its own right: the console bundle committed under
+      # app/backend/fleetguard_api/console/ is what the Databricks App actually serves (no Node
+      # runs on the Apps runtime), so a source change that cannot build is a change that cannot
+      # ship. This proves it compiles; it does not yet prove the committed bundle is in sync
+      # with the source — see the note in the PR/commit for why that check is not enforced yet.
+      - name: Build
+        run: npm run build

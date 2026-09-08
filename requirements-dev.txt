@@ -1,0 +1,13 @@
+# Everything needed to run the checks locally that CI runs in .github/workflows/ci.yml.
+#
+#   python -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
+#   .venv/bin/python -m ruff check src tests app/backend scripts
+#   .venv/bin/python -m pytest
+#
+# The runtime dependencies come from the app's own file rather than being restated here, so
+# there is exactly one place to change a version and CI cannot drift from what is deployed.
+-r app/backend/requirements.txt
+
+# Test + lint only. Not installed on the Databricks Apps runtime.
+pytest>=9.1
+ruff>=0.16
