@@ -63,7 +63,14 @@ def enabled() -> bool:
 
 
 def approvers() -> set[str]:
-    """GitHub logins allowed to approve. Empty means nobody — read-only for everyone."""
+    """Identities allowed to approve. Empty means nobody — read-only for everyone.
+
+    Not GitHub logins any more: under `render-u2m` and `databricks-apps` these are Databricks
+    usernames (emails), and only under `app-login` are they GitHub logins. The comparison is a
+    case-insensitive string match against the authenticated principal, whatever produced it —
+    which is why an address that matches no real identity is a silently dead entry, and why
+    workspace admin does not bypass this gate.
+    """
     raw = os.getenv("FLEETGUARD_APPROVERS", "")
     return {p.strip().lower() for p in raw.split(",") if p.strip()}
 

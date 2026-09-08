@@ -45,8 +45,15 @@ env:
   # Who may APPROVE. Read access is open to any identity that can reach the app; dispatching
   # work orders against a fleet is restricted to this list, enforced unconditionally in
   # approval.py regardless of auth source. Empty would mean nobody, on every surface.
+  #
+  # Comma-separated. Workspace admin does NOT bypass this — the gate is application logic, so
+  # a judge with full admin rights still gets 403 on approve unless named here. Added
+  # 2026-09-08 so the approval flow (the human gate in §5.3, and the most demo-relevant write
+  # path) can actually be exercised rather than only described. Verified as a real, active
+  # workspace identity before adding: an address that matches nobody is a silently dead entry,
+  # since the check is a string comparison against the authenticated principal.
   - name: FLEETGUARD_APPROVERS
-    value: abhisek.bastia17@gmail.com
+    value: abhisek.bastia17@gmail.com,raghavendra.yama@gmail.com
 
 # OBO SCOPES ARE NOT CONFIGURED HERE — do not add them back to this file.
 #
