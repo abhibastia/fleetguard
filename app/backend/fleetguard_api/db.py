@@ -86,7 +86,20 @@ def _workspace_client(principal: Principal) -> WorkspaceClient:
     host = os.getenv("DATABRICKS_HOST")
     if not host:
         raise RuntimeError("DATABRICKS_HOST is required to mint a Lakebase credential")
-    return WorkspaceClient(host=host, token=principal.token)
+    # `auth_type="pat"` is required, not stylistic, and only matters on ONE of the three
+    # surfaces — which is why it survived local and Render testing.
+    #
+    # Databricks Apps auto-injects DATABRICKS_CLIENT_ID / DATABRICKS_CLIENT_SECRET for the
+    # app's own service principal. The SDK's Config then sees the ambient OAuth credentials
+    # AND the token passed here, and refuses to guess:
+    #   ValueError: validate: more than one authorization method configured: oauth and pat
+    # Locally and on Render those variables do not exist, so the same call succeeds there.
+    #
+    # Pinning the strategy says what this function already claims in its docstring: use the
+    # caller's token and nothing else. Falling back to the app's service principal would be
+    # the worst possible resolution — every write would silently land as the app instead of
+    # the human, and `opened_by` would stop meaning anything.
+    return WorkspaceClient(host=host, token=principal.token, auth_type="pat")
 
 
 def _credential(principal: Principal) -> _CachedCredential:

@@ -161,15 +161,37 @@ post-routing invariants — if one fires, the split logic is broken, not the sou
 **Databricks Apps OBO (on-behalf-of):**
 - User identity arrives via the `x-forwarded-access-token` request header (lowercase
   in docs; HTTP headers are case-insensitive).
-- Scopes are declared in `app.yaml`. **Corrected 2026-08-31** — the current scope
-  vocabulary is: `ai-gateway`, `apps`, `files`, `genie`, `model-serving`, `postgres`,
+- Scope **names**: `ai-gateway`, `apps`, `files`, `genie`, `model-serving`, `postgres`,
   `sql`, `vector-search`, `sql:restricted-query`, plus SDK scopes `catalog.catalogs`,
   `catalog.connections`, `catalog.schemas`, `catalog.tables`, `workspace.workspace`
-  (each supporting a `:read` modifier). The previously recorded `dashboards.genie`,
-  `files.files`, `iam.access-control:read`, `iam.current-user:read` were **wrong** —
-  `genie` and `files` are the real names and the `iam.*` ones don't exist here.
+  (each supporting a `:read` modifier). `dashboards.genie` and `files.files` are **wrong** —
+  `genie` and `files` are the real names.
+- **Scopes are NOT declared in `app.yaml` — that was wrong (I-083, deployed 2026-09-08).**
+  A `user_authorization: scopes:` block in `app.yaml` is silently ignored; the app keeps
+  default scopes only. They live on the **app resource**:
+  `databricks apps update <name> --json '{"name":"<name>","user_api_scopes":["postgres","sql","model-serving"]}'`
+  (or the UI). Verify with `apps get` → `user_api_scopes` / `effective_user_api_scopes`.
+- **`iam.access-control:read` and `iam.current-user:read` exist but are NOT assignable.**
+  They appear in `effective_user_api_scopes` as platform defaults, and the API **rejects**
+  them on write: *"The specified scope iam.access-control:read is not a valid scope."* So the
+  earlier note that they "don't exist here" was half wrong and the skill reference listing
+  them as selectable was also half wrong. List only assignable scopes; the defaults arrive
+  on their own.
+- **After changing scopes you MUST restart the app.** A granted-but-not-restarted app returns
+  the **identical** `403 Invalid scope, required scopes: postgres` as an ungranted one —
+  there is no signal distinguishing "never granted" from "granted, not yet live". Restart,
+  then re-test, before concluding a scope does not work.
+- **The SDK refuses to run inside an App if you also pass a token** (I-082). Apps injects
+  `DATABRICKS_CLIENT_ID`/`DATABRICKS_CLIENT_SECRET` for the app's own service principal, so
+  `WorkspaceClient(host=..., token=<user token>)` raises
+  *"validate: more than one authorization method configured: oauth and pat"*. Pass
+  **`auth_type="pat"`** to pin the caller's token. This fails **only** inside Apps — locally
+  and on Render those env vars are absent — so it cannot be caught before deploying.
 - Resource-bound credentials (SQL Warehouse, Model Serving, Lakebase, UC Volume) are
   rotated automatically by the platform — no refresh code needed in the App.
+- An app created with `--no-compute` reports `Error: failed to reach ACTIVE, got STOPPED`.
+  That is the **success** path for a deliberately-stopped create; read `apps get`, not the
+  exit code.
 
 **Databricks product-name drift (checked 2026-08-31):**
 - **Declarative Automation Bundles** (DABs) is current; "Databricks Asset Bundles" is the

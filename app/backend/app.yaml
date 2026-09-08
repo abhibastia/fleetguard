@@ -1,0 +1,73 @@
+# Databricks Apps configuration — the second deployment surface for the same FastAPI service.
+#
+# This file is the whole App-side cost of E-12/E-13. The auth seam already carries a
+# `databricks-apps` mode (`ForwardedHeaderTokenProvider`, reading `x-forwarded-access-token`),
+# so moving here needs configuration rather than code — which was the entire argument for
+# building the seam on day one instead of hardcoding one provider.
+#
+# **The App holds no privileges of its own.** `db.py` mints its Lakebase credential from the
+# *caller's* token (`WorkspaceClient(host, token=principal.token)` ->
+# `postgres.generate_database_credential`), and `chat.py` calls the serving endpoint with the
+# caller's token too. So the app's service principal needs no `database` or `serving-endpoint`
+# resource: every read and write runs as the signed-in human, and Postgres RLS applies to them
+# exactly as it does in the local and Render surfaces. That is why `user_authorization` below
+# is load-bearing and the `resources:` block is absent.
+#
+# Deployed as the `app/backend/` directory, so `fleetguard_api` is importable at the root and
+# no `--app-dir` is needed (unlike render.yaml, which runs from the repo root).
+
+command:
+  - "uvicorn"
+  - "fleetguard_api.main:app"
+  - "--host"
+  - "0.0.0.0"
+  - "--port"
+  - "8000"
+
+env:
+  # Required and never inferred — an unset value must not silently pick a trust model.
+  # `databricks-apps` selects ForwardedHeaderTokenProvider, which is only safe behind the
+  # Apps ingress that injects the header. That is exactly why the mode is explicit rather
+  # than sniffed from the environment.
+  - name: FLEETGUARD_AUTH_MODE
+    value: databricks-apps
+  # Live Lakebase, not the committed snapshot. Safe here because, unlike `app-login`, this
+  # mode really does carry a Databricks credential per request.
+  - name: FLEETGUARD_DATA_MODE
+    value: lakebase
+  - name: FLEETGUARD_PG_PROJECT
+    value: projects/summer-bootcamp-2026-v2
+  # db.py requires this to mint a Lakebase credential and raises without it. Apps injects a
+  # host of its own, but this is set explicitly so the value is the same one render.yaml and
+  # the local dev script use, rather than whatever the runtime happens to supply.
+  - name: DATABRICKS_HOST
+    value: https://dbc-7b106152-caf3.cloud.databricks.com
+  # Who may APPROVE. Read access is open to any identity that can reach the app; dispatching
+  # work orders against a fleet is restricted to this list, enforced unconditionally in
+  # approval.py regardless of auth source. Empty would mean nobody, on every surface.
+  - name: FLEETGUARD_APPROVERS
+    value: abhisek.bastia17@gmail.com
+
+# OBO SCOPES ARE NOT CONFIGURED HERE — do not add them back to this file.
+#
+# A `user_authorization: scopes:` block was tried here first and is **silently ignored**
+# (I-083): the app deployed cleanly, kept only its default scopes, and every Lakebase call
+# returned `403 Invalid scope, required scopes: postgres`. Nothing warns that the block had
+# no effect.
+#
+# Scopes live on the **app resource**, not in app.yaml:
+#
+#   databricks apps update fleetguard-console --json '{"name":"fleetguard-console",
+#     "user_api_scopes":["postgres","sql","model-serving"]}'
+#
+#   postgres       -> generate_database_credential + get_endpoint (all Lakebase reads/writes)
+#   sql            -> SQL warehouse, for routes that query UC rather than Postgres
+#   model-serving  -> POST /serving-endpoints/.../invocations from the chat panel
+#
+# Two things that cost real time and are invisible from the error message:
+#   1. `iam.access-control:read` / `iam.current-user:read` arrive as platform defaults and
+#      are REJECTED if you try to set them. List only the assignable scopes above.
+#   2. **The app must be restarted after a scope change.** Granted-but-not-restarted returns
+#      the identical 403 as never-granted, so the fix looks like it failed when it worked.
+#
+# Verify with: databricks apps get fleetguard-console -o json | grep user_api_scopes

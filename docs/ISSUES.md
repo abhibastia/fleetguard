@@ -26,6 +26,81 @@ no error and passed the obvious check.
 
 ## Tooling / process
 
+### I-083 — App OBO scopes are ignored in `app.yaml`, and a granted scope looks identical to a missing one until you restart — **SILENT**
+*Date:* 2026-09-08 · *Status:* resolved
+
+**Symptom.** The App deployed cleanly, `/api/me` correctly returned the caller's identity via
+`x-forwarded-access-token`, and **every** Lakebase route returned 500. The log showed
+`POST /api/2.0/postgres/credentials → 403 Invalid scope, required scopes: postgres` — against
+an `app.yaml` that declared exactly that scope.
+
+**Two independent causes, and the second is the nastier one.**
+
+1. **`user_authorization: scopes:` in `app.yaml` does nothing.** It is not rejected, not
+   warned about, not logged — the app simply keeps its defaults. `apps get` showed
+   `user_api_scopes: None` while the file plainly listed three. Scopes live on the **app
+   resource**: `apps update --json '{"name":..., "user_api_scopes":[...]}'`. The skill
+   reference says "add scopes in the UI", which is true but reads as one option among
+   several rather than as *app.yaml will not work*.
+2. **A granted scope is not a live scope until the app restarts.** After the grant,
+   `effective_user_api_scopes` correctly listed `postgres`, and the very same request still
+   returned the **identical** 403. There is no distinguishable signal between "never
+   granted", "granted but not restarted", and "grant genuinely rejected" — the failure looks
+   the same in all three states. Only `stop` + `start` made it work.
+
+**Also learned, correcting our own note.** `iam.access-control:read` and
+`iam.current-user:read` **do** exist — they appear in `effective_user_api_scopes` as platform
+defaults — but the API **rejects them on write**: *"The specified scope
+iam.access-control:read is not a valid scope."* `CLAUDE.md` had recorded that they "don't
+exist here" and the skill reference listed them as selectable; both were half right. Assignable
+and effective are different sets, and no document we had said so.
+
+**Verified working after the restart**, all against live Lakebase under the caller's token:
+`/api/queue` 50, `/api/signals` 50 (9 live, 4 fleet-relevant), `/api/service-campaigns` 1,
+`/api/depot-risk` 60, `/api/work-orders` 25, `/api/evidence` 1.44× / z 2.62 — matching the
+local surface exactly.
+
+**Lesson.** When a permission error survives the fix, the question is not only "is the grant
+right" but "**is the grant loaded**". A config that is correct in the control plane and stale
+in the running process produces an error message that accuses the config. Two of today's
+issues (this and I-052's served-entities) share that shape: the authoritative-looking read was
+of the wrong plane.
+
+---
+
+### I-082 — The SDK refuses to authenticate inside Databricks Apps if you pass a token, and only there
+*Date:* 2026-09-08 · *Status:* resolved
+
+**Symptom.** Every Lakebase route 500'd on the App with
+`ValueError: validate: more than one authorization method configured: oauth and pat`, raised
+from `WorkspaceClient(host=host, token=principal.token)` — a line that has worked unchanged
+for weeks locally and on Render.
+
+**Cause.** Databricks Apps auto-injects `DATABRICKS_CLIENT_ID` and `DATABRICKS_CLIENT_SECRET`
+for the app's **own service principal**. The SDK's `Config` discovers those ambient OAuth
+credentials, sees the explicit token as well, and refuses to choose between them. Locally and
+on Render those variables do not exist, so the identical call resolves to PAT and succeeds.
+**This class of bug cannot be caught before deploying** — the trigger is an environment
+variable the platform sets for you.
+
+**Fix.** `WorkspaceClient(host=host, token=principal.token, auth_type="pat")`. Pinning the
+strategy also states the intent the docstring already claimed: act as the caller, never as
+the app.
+
+**Reproduced locally before trusting it**, by setting fake `DATABRICKS_CLIENT_ID`/`_SECRET`
+and constructing a `Config` both ways: without `auth_type` it raises the exact production
+error; with `auth_type="pat"` it constructs cleanly. So the fix was verified in both
+directions rather than deployed hopefully.
+
+**Why the failure mode matters more than the fix.** The plausible "resolution" — letting the
+SDK fall back to the app's service principal — would have been the **worst** outcome
+available: every read would silently widen to the app's privileges and every write would land
+as the app instead of the human, making `opened_by` a decoration and Postgres RLS
+inapplicable. An error here was the correct behaviour; a silent fallback would have quietly
+destroyed the property the whole surface exists to demonstrate.
+
+---
+
 ### I-081 — The `table_update` trigger config recorded as spec could not be created, and its stated rationale was false
 *Date:* 2026-09-08 · *Status:* resolved
 
