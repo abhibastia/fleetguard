@@ -181,6 +181,27 @@ post-routing invariants — if one fires, the split logic is broken, not the sou
   the **identical** `403 Invalid scope, required scopes: postgres` as an ungranted one —
   there is no signal distinguishing "never granted" from "granted, not yet live". Restart,
   then re-test, before concluding a scope does not work.
+- **OBO scope lives in THREE planes, not two (I-086, measured 2026-09-08).** All three must
+  contain the scope or you get that same undifferentiated 403:
+  1. **Workspace allowlist** — `databricks workspace-settings-v2 get-public-workspace-setting
+     allowedAppsUserApiScopes` (ours: `["*"]`).
+  2. **App resource** — `apps get` → `user_api_scopes` (the I-083 fix above).
+  3. **Per-user consent grant** — `GET /api/2.0/oauth-app-integrations/<oauth2_app_client_id>/user-consent/me`.
+     **This is the one nothing warns you about.** Consent is stored server-side per (user, app)
+     and is **sticky**: it does NOT widen when the app's scope list widens. A user who opened
+     the app before the scopes were applied keeps a grant holding only the platform defaults
+     (`openid`, `profile`, `email`, `offline_access`, `iam.*:read`) forever. Restart,
+     sign-out/sign-in and `apps update` all leave it untouched, and `apps get` looks perfect
+     throughout because the wrong plane is not one it displays.
+  Fix is **self-service — no account-admin needed**: `DELETE` the same `/user-consent/me` URL,
+  then reopen the app in a **fresh/incognito** browser session. Revocation does **not**
+  invalidate already-issued tokens (up to ~1 h), so a warm session keeps failing after a
+  correct fix and imitates the bug. `custom-app-integration get` 404s for non-account-admins —
+  do not read that as "the consent problem needs an admin"; it is a different object.
+- **When recording an App verification, name the client.** A programmatic CLI bearer token
+  carries broad scopes and never touches the consent flow; a browser session is scope-limited
+  by the consent grant. They are different auth paths that can disagree, and "verified live"
+  without the client named turned an untested browser path into a documented pass (I-086).
 - **The SDK refuses to run inside an App if you also pass a token** (I-082). Apps injects
   `DATABRICKS_CLIENT_ID`/`DATABRICKS_CLIENT_SECRET` for the app's own service principal, so
   `WorkspaceClient(host=..., token=<user token>)` raises

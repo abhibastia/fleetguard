@@ -26,6 +26,95 @@ no error and passed the obvious check.
 
 ## Tooling / process
 
+### I-086 — the App's Lakebase scope was granted on the app and never consented to by the user — a **third** configuration plane nothing we had documented mentioned — **SILENT**
+*Date:* 2026-09-08 · *Status:* ✅ **resolved same day** — root-caused, fixed from this account, and verified
+
+**Symptom.** Redeployed the App with tonight's code (`databricks sync` + `databricks apps
+deploy`, both reporting success). Every Lakebase-backed route 500s. The underlying error,
+straight from Databricks' own API:
+
+```
+POST /api/2.0/postgres/credentials
+> {"endpoint": "projects/summer-bootcamp-2026-v2/branches/production/endpoints/primary"}
+< 403 Forbidden
+< Invalid scope, required scopes: postgres
+```
+
+Only `/api/evidence` (reads a committed snapshot, touches no Lakebase) and the assistant
+panel's static shell (makes no call until a message is sent) loaded. Confirmed live in the
+owner's own browser — this is not a curl-without-a-session artifact.
+
+**Three remediation steps tried, in order, none of which fixed it:**
+1. `databricks apps stop` / `apps start` (full compute restart) — the documented I-083 fix
+   for "granted but not yet live." No change.
+2. Full sign-out and sign-in in the browser, on the theory that the session held a token
+   minted before the scope was live. No change — identical error on a genuinely fresh token.
+3. `databricks apps update --json '{"user_api_scopes":[...]}'` — explicitly re-applying the
+   *same* scope list, on the theory that the value can look correct via `apps get` without
+   having actually propagated to whatever issues the real token — followed by another full
+   stop/start and redeploy. **No change.** The error text even varied once (`unable to parse
+   response` vs the plain 403), but the raw logged request/response was identical both times:
+   the same `403 Forbidden — Invalid scope, required scopes: postgres` from the same endpoint.
+
+**ROOT CAUSE — a third plane.** OBO scope is not two settings that must agree, it is **three**,
+and we had documented only two. All three must contain the scope:
+
+| plane | holds | how to read it | state during the outage |
+|---|---|---|---|
+| workspace allowlist | which scopes *any* app may request | `workspace-settings-v2 get-public-workspace-setting allowedAppsUserApiScopes` | `["*"]` — fine |
+| app resource | which scopes *this* app requests | `apps get` → `user_api_scopes` | `postgres, sql, model-serving` — fine |
+| **user consent grant** | which scopes *this user* has agreed to give this app | `GET /api/2.0/oauth-app-integrations/<id>/user-consent/me` | **`offline_access, email, iam.current-user:read, openid, iam.access-control:read, profile`** — no `postgres` |
+
+The consent grant was captured when the user first opened the app, at which point the app
+still had **only platform defaults** — because `app.yaml` scopes are silently ignored (I-083)
+and the real scopes were applied afterwards. Consent is stored **server-side per (user, app)**
+and is **sticky**: it does not widen when the app's scope list widens.
+
+That is precisely why all three remediations failed, and none of them was a bad guess — each
+was aimed at a plane that was already correct. Restart reloads app config; sign-out/sign-in
+re-uses the stored grant; `apps update` edits the app, not the grant. `apps get` looks
+flawless throughout **because it is** — it simply does not show the plane that was wrong.
+
+**Fix, self-service, no admin needed:**
+```bash
+TOKEN=$(databricks auth token --profile abhi -o json | python3 -c "import json,sys; print(json.load(sys.stdin)['access_token'])")
+curl -X DELETE -H "Authorization: Bearer $TOKEN" \
+  "https://<workspace>/api/2.0/oauth-app-integrations/<oauth2_app_client_id>/user-consent/me"
+```
+Then reopen the app **in a fresh/incognito browser session** — revoking consent does *not*
+invalidate tokens already issued (Databricks' own docs say so; they live up to an hour), so a
+warm session can keep failing after a correct fix and imitate the bug. The consent screen then
+re-prompts with the full scope list. **Verified after re-consent:** `user_consented_scopes`
+contains `postgres`, `sql`, `model-serving`, and every Lakebase route works in the browser.
+
+**Two claims in the first version of this entry were wrong, and both are worth keeping visible.**
+
+1. **"Blocked on account-admin access."** False. The relevant object is not the account-level
+   custom app integration (`custom-app-integration get` → `Not Found`, which is what produced
+   this conclusion) but the **per-user consent grant**, and `/user-consent/me` is deliberately
+   self-service — `me` is the whole point. An access wall on one lookup was generalised into a
+   wall on the entire problem, and it closed the investigation one step early.
+2. **"A regression from a verified-working state."** Also false, and the more important error.
+   The consent record proves **no browser session ever held `postgres`** — consent only
+   accumulates, so a browser that had once succeeded would still show it. The morning's
+   "all seven routes verified live under real OBO" was therefore done with a **programmatic
+   CLI bearer token**, which carries broad scopes and never touches the consent flow. Nothing
+   regressed. This evening was **the first genuine browser-OBO test**, and it failed on first
+   contact. `STATUS.md` Phase 8 overclaimed this and has been corrected.
+
+**Lesson.** Two of them, and the second is the one that cost the time. *(a)* A permission error
+that survives every fix aimed at the config is evidence the config is not the plane that is
+wrong — extending I-083's "is the grant loaded" to a third question, "**has the user agreed to
+it**". *(b)* **"Verified live" must name the client.** A programmatic token and a browser session
+are different auth paths with different scope sets; recording the result without recording which
+one produced it turned an untested path into a documented pass, and the gap only surfaced when
+the untested path was finally exercised. Compare I-012, where `_rescued_data` read 0 while 143
+rows were mis-parsed: in both cases the check that was run was real, and simply not the check
+that was claimed.
+
+**Bonus.** Re-consenting exercised the browser OAuth-consent step that I-084 lists as never
+tested, retiring one of that issue's three unknowns.
+
 ### I-085 — "no password auth on Lakebase" was a fact about specific roles, not the platform — and our own project has it switched on too
 *Date:* 2026-09-08 · *Status:* **open — capability confirmed, our privilege to use it is not**
 

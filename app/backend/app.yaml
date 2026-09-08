@@ -71,10 +71,19 @@ env:
 #   sql            -> SQL warehouse, for routes that query UC rather than Postgres
 #   model-serving  -> POST /serving-endpoints/.../invocations from the chat panel
 #
-# Two things that cost real time and are invisible from the error message:
+# Three things that cost real time and are invisible from the error message:
 #   1. `iam.access-control:read` / `iam.current-user:read` arrive as platform defaults and
 #      are REJECTED if you try to set them. List only the assignable scopes above.
 #   2. **The app must be restarted after a scope change.** Granted-but-not-restarted returns
 #      the identical 403 as never-granted, so the fix looks like it failed when it worked.
+#   3. **Setting the scope here is not the last step — each USER must consent to it** (I-086).
+#      Consent is stored per (user, app), is sticky, and does NOT widen when this list does.
+#      Anyone who opened the app before the scopes were applied keeps a defaults-only grant
+#      and gets the same 403 forever, through restarts and re-logins. Check and fix it with:
+#
+#        GET/DELETE https://<workspace>/api/2.0/oauth-app-integrations/<oauth2_app_client_id>/user-consent/me
+#
+#      then reopen in an INCOGNITO window — revoking does not invalidate tokens already
+#      issued (~1 h), so a warm session keeps failing after a correct fix.
 #
 # Verify with: databricks apps get fleetguard-console -o json | grep user_api_scopes
