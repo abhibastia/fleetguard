@@ -349,13 +349,15 @@ Stated so they are not mistaken for omissions.
 
 ## 8a. Hosting and the auth seam
 
-Two surfaces, one codebase, decided 2026-09-01 (E-12/E-13).
+Two surfaces, one codebase, decided 2026-09-01 (E-12/E-13). **Direction changed 2026-09-08:
+the Databricks App is now the primary target and is built; Render is kept but is no longer
+the plan of record.**
 
-| Window | Surface | Auth mode | Data source |
+| Surface | Auth mode | Data source | State |
 |---|---|---|---|
-| Now → demo | **Render** (free tier) — public evidence **+ signed-in console** | `render-u2m` — Databricks U2M OAuth (PKCE), real per-user token | **live Lakebase** |
-| Local dev | developer machine | `static-dev` — developer's own token | live Lakebase |
-| ~20 Sept → demo | **Databricks App** in `abhi`, kept `STOPPED` between sessions — *the operator console* | `databricks-apps` — `X-Forwarded-Access-Token` (OBO) | live Lakebase |
+| **Databricks App** `fleetguard-console` in `abhi` — *the operator console, primary* | `databricks-apps` — `x-forwarded-access-token` (OBO) | live Lakebase | **Built and verified 2026-09-08**, kept `STOPPED` between sessions (`apps start`, ~2 min). Verified under the **owner's identity only** — see **I-084**, the open risk |
+| Local dev — near-term verification surface | `static-dev` — developer's own token | live Lakebase | `scripts/run_local_static_dev.sh`; screenshotted end to end |
+| **Render** (free tier) — public evidence + signed-in console | `render-u2m` (PKCE) or `app-login` + snapshot | live Lakebase / snapshot | **Deliberately kept, not deleted.** Zero cost to keep, non-zero to re-add. `app-login` + snapshot needs no Databricks identity at all, making it the fallback if I-084 bites |
 
 **Render ran on a snapshot until 2026-09-03, and no longer does.** The original constraint was
 real and enumerated, not a preference: measured 2026-09-02, every machine-credential route was
@@ -636,6 +638,87 @@ Therefore the backend resolves the caller's token through **a single swappable p
 selected by configuration; **no route handler reads a header or session directly**. This is
 built in MVP, not retrofitted: with the seam the migration is an afternoon, without it a
 rewrite in the final week, on the code path carrying every authorisation guarantee in §5.
+
+**The seam's claim was tested on 2026-09-08 and held.** Deploying to Databricks Apps needed an
+`app.yaml`, one CLI scope grant, and **one line of code** (`auth_type="pat"`, I-082) — no route
+handler changed, because none of them reads a header.
+
+---
+
+## 8b. Every authentication path, in one place
+
+Five layers, five different identity models. They are easy to conflate and the differences are
+load-bearing, so they are tabulated here rather than left spread across §7.1, the auth-seam
+docstrings and four issue entries.
+
+### Layer 1 — caller → console
+
+One seam, four providers, chosen by `FLEETGUARD_AUTH_MODE`. **Read explicitly, never inferred**
+— inference would let a misconfiguration silently select a weaker trust model.
+
+| mode | provider | identity arrives via | status |
+|---|---|---|---|
+| `databricks-apps` | `ForwardedHeaderTokenProvider` | `x-forwarded-access-token`, injected by the Apps ingress | verified live 2026-09-08 — **owner identity only, see I-084** |
+| `render-u2m` | `SessionTokenProvider` | U2M OAuth (PKCE); token held in a signed session cookie | built and flipped live; browser round-trip unconfirmed |
+| `app-login` | `AppLoginTokenProvider` | GitHub OAuth — **carries no Databricks credential**; startup refuses unless `FLEETGUARD_DATA_MODE=snapshot` | verified |
+| `static-dev` | `StaticTokenProvider` | `databricks auth token --profile abhi`, held statically (1 h life, I-053-adjacent) | used daily |
+
+### Layer 2 — console → Lakebase
+
+Exactly one method, and it is the property the whole design rests on:
+
+```
+WorkspaceClient(host, token=<caller's token>, auth_type="pat")
+  -> postgres.generate_database_credential(endpoint=...)
+  -> psycopg connects AS THE CALLER'S OWN POSTGRES ROLE
+```
+
+Credentials are cached per principal with a staleness check. `auth_type="pat"` is mandatory
+inside Apps (I-082): the platform injects `DATABRICKS_CLIENT_ID`/`SECRET` for the app's own
+service principal, and without pinning the strategy the SDK refuses to choose — the dangerous
+"fix" being a silent fallback to the app's identity.
+
+**Deliberately unused:** the static connection URL in the `lakebase-db` secret. It works, and
+it collapses every user onto one fixed role — keeping `opened_by` real while making per-user
+RLS inapplicable. Documented fallback, not a path.
+
+### Layer 3 — console → agent
+
+`POST /serving-endpoints/<agent>/invocations` with `Bearer {principal.token}` — the caller
+again. Requires the `model-serving` scope under Apps.
+
+### Layer 4 — deployed agent → data (a different identity entirely)
+
+Inside the serving endpoint, `WorkspaceClient()` **with no arguments** resolves to the
+endpoint's auto-provisioned service principal, via **automatic authentication passthrough**,
+granted only what `resources=[...]` declared at log time.
+
+This is the one service-principal identity in the system, and it is deliberately the most
+constrained: **engine and data are separate grants**, which is exactly how I-050 happened —
+the warehouse was declared, the table was not, and a missing grant surfaced as an empty result
+rather than an error. The agent has **no** Lakebase path at all; all three routes were checked
+and closed (§7.1), which is why the write is an action envelope the console executes.
+
+### Layer 5 — notebooks and jobs → Lakehouse
+
+Jobs run as their owner against Unity Catalog via `spark.sql`. Local CLI work uses the `abhi`
+profile's OAuth — U2M through Databricks' own **first-party CLI client**, which is why it needs
+no custom app registration and sidesteps the `all-apis` blocker below.
+
+### Evaluated and closed
+
+| path | why not |
+|---|---|
+| M2M `client_credentials` service principal on Render | §8a — no PAT or SP on a public host |
+| U2M with `all-apis` | account admin declined; the assignable set is only `all-apis`/`sql`/`offline_access`/`openid`/`profile`/`email`, so no narrower combination covers Lakebase **and** Model Serving |
+| Lakebase static URL from a secret | works; costs per-user identity (above) |
+| `DatabricksLakebase` MLflow resource | addresses a database *instance*; this project's Lakebase is the autoscaling project/endpoint flavour |
+| A service principal for the agent | `service-principals create` is admin-only on this workspace |
+| Personal access tokens | `tokens list` → *"User does not have permission to use tokens"* |
+
+**The through-line:** every user-facing read and write executes as the human. The only
+service-principal identity in the system belongs to the agent, and it cannot reach the
+database.
 
 ---
 
