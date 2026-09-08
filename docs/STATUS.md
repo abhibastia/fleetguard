@@ -180,6 +180,28 @@ index lifecycle — not corpus trimming — is the lever.
 
 ## Testing
 
+**Full end-to-end run in `static-dev` against live Lakebase — 2026-09-08, PASSED.** The whole
+vertical slice, both write paths, exercised in one session and cleaned up afterwards:
+
+| step | result |
+|---|---|
+| 8 read routes | all 200 — queue 50 · signals 50 · work-orders 25 · depots 60 · technicians 120 · evidence 1.44×/z 2.62 |
+| **Write 1** — approval gate | `SC-21V037000-e583bc8b`, **205 work orders** + audit, one transaction, **3 s**, attributed |
+| **Write 2** — agent | `AGENT-19098b28700a` FREIGHTLINER/CASCADIA, 1,217 vehicles, `EXACT`, real `opened_by` |
+| CDF | all 207 rows replicated (1 signal · 1 campaign · 205 work orders) |
+| `table_update` trigger | fired **unattended**; `gold_agent_action` 2→3, `gold_defect_signal_current` 50→51 |
+| Console | new signal renders badged `AGENT` with its human opener; counts 51 / 5 |
+| **Cleanup** | 214 rows removed, verified from a **fresh connection** (I-073) — back to 1 / 25 / 50 exactly |
+| Delete propagation | trigger fired again; gold facts returned to 2 / 50 — the I-080 tombstone path, proved a second time |
+
+Two things confirmed rather than assumed. **I-063 is genuinely closed**: re-approving `17V629000`
+returned a clear `409` naming the existing campaign and its launch time, instead of silently
+creating a duplicate. And the agent again used the **fleet's** spelling (`CASCADIA`) unprompted,
+so I-076's vocabulary tool is working on the real path, not just in a probe.
+
+CDF retains the test rows as **1 insert + 1 delete** — append-only by design, and exactly what
+the corrected latest-per-key pattern consumes to drop them from the gold facts.
+
 Three layers, doing different jobs. Full rationale in `src/pipelines/expectations/README.md`.
 
 | Layer | What | Run |
