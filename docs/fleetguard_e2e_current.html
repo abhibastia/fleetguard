@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>FleetGuard — end-to-end architecture (as-built)</title>
+<style>
+  /* Pinned light: renders to PNG. Mirrors fleetguard_e2e.html's visual system on purpose —
+     same reader, same grammar, different content. This file tracks ARCHITECTURE.md; the
+     other file stays frozen at the 2026-08-31 proposal. Do not let them merge back into one. */
+  :root{
+    --bg:#faf9f7; --ink:#22201d; --mut:#6f6a63; --line:#e2ded7; --card:#ffffff;
+    --c1:#2b5b8c; --c2:#2f6b4f; --c3:#68509b; --c4:#b8632c; --c5:#47505d;
+    --gov:#5c6b38; --red:#b03a3a; --ok:#2f6b4f; --warn:#9a6b1f;
+  }
+  *{box-sizing:border-box; margin:0; padding:0}
+  body{background:var(--bg); color:var(--ink);
+       font:400 13px/1.45 "Inter","Helvetica Neue",Helvetica,Arial,sans-serif;
+       -webkit-font-smoothing:antialiased;}
+  .page{width:1700px; padding:38px 42px 30px;}
+  code,.m{font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+          font-size:11.5px; letter-spacing:-.1px}
+
+  h1{font-size:30px; font-weight:700; letter-spacing:-.6px; display:inline}
+  .sub{font-size:16px; color:var(--mut); font-weight:400; margin-left:12px}
+  .strap{font-size:12px; color:var(--mut); margin-top:7px}
+  .live{display:inline-block; font-size:9.5px; font-weight:700; letter-spacing:.7px;
+        text-transform:uppercase; color:var(--ok); background:#eef4ef; border:1px solid #cfe0d4;
+        padding:2px 8px; border-radius:9px; margin-left:10px; vertical-align:2px}
+  .rule{height:1px; background:var(--line); margin:16px 0 20px}
+
+  .cols{display:grid; grid-template-columns:repeat(5,1fr); gap:16px}
+  .col>.top{height:3px; border-radius:2px; margin-bottom:9px}
+  .colhead{font-size:10.5px; font-weight:700; letter-spacing:.9px; text-transform:uppercase;
+           margin-bottom:11px}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:5px;
+        padding:9px 11px 10px; margin-bottom:9px; position:relative}
+  .card.em{border-width:1.5px}
+  .ch{font-size:10px; font-weight:700; letter-spacing:.55px; text-transform:uppercase;
+      margin-bottom:6px; padding-right:60px}
+  .card p{font-size:11.5px; color:var(--mut); line-height:1.5}
+  .card p.k{color:var(--ink)}
+  .badge{position:absolute; top:8px; right:9px; font-size:8.5px; font-weight:700;
+         letter-spacing:.6px; text-transform:uppercase; padding:2px 5px; border-radius:3px;
+         background:#f0eee9; color:#7a736a; border:1px solid #e4e0d8}
+  .badge.done{background:#eef4ef; color:var(--ok); border-color:#cfe0d4}
+  .badge.warn{background:#fbf3e6; color:var(--warn); border-color:#eeddb8}
+  .dash{border-style:dashed}
+  .strike{text-decoration:line-through; opacity:.6}
+
+  .c1 .top{background:var(--c1)} .c1 .colhead,.c1 .ch{color:var(--c1)}
+  .c2 .top{background:var(--c2)} .c2 .colhead,.c2 .ch{color:var(--c2)}
+  .c3 .top{background:var(--c3)} .c3 .colhead,.c3 .ch{color:var(--c3)}
+  .c4 .top{background:var(--c4)} .c4 .colhead,.c4 .ch{color:var(--c4)}
+  .c5 .top{background:var(--c5)} .c5 .colhead,.c5 .ch{color:var(--c5)}
+  .red{border-color:#e0b9b9!important} .red .ch{color:var(--red)}
+  .redbg{background:#fdf7f7}
+  .amber{border-color:#eeddb8!important} .amber .ch{color:var(--warn)}
+  .amberbg{background:#fdf9f0}
+
+  .gov{margin-top:20px; border:1px solid var(--line); border-radius:5px; background:var(--card);
+       overflow:hidden}
+  .govh{background:#f2f3ec; color:var(--gov); font-size:10.5px; font-weight:700;
+        letter-spacing:.8px; text-transform:uppercase; padding:7px 13px;
+        border-bottom:1px solid var(--line)}
+  .govgrid{display:grid; grid-template-columns:repeat(6,1fr); gap:20px; padding:13px 15px 15px}
+  .govgrid h4{font-size:11.5px; font-weight:700; margin-bottom:3px}
+  .govgrid p{font-size:11px; color:var(--mut); line-height:1.45}
+
+  .risk{margin-top:14px; border:1px solid #eeddb8; border-radius:5px; background:#fdfaf3;
+        overflow:hidden}
+  .riskh{background:#fbf3e6; color:var(--warn); font-size:10.5px; font-weight:700;
+         letter-spacing:.8px; text-transform:uppercase; padding:7px 13px;
+         border-bottom:1px solid #eeddb8}
+  .riskgrid{display:grid; grid-template-columns:repeat(3,1fr); gap:20px; padding:13px 15px 15px}
+  .riskgrid h4{font-size:11.5px; font-weight:700; margin-bottom:3px; color:var(--ink)}
+  .riskgrid p{font-size:11px; color:var(--mut); line-height:1.45}
+
+  .vs{display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-top:14px}
+  .v{background:var(--card); border:1px solid var(--line); border-radius:5px; padding:11px 13px;
+     position:relative}
+  .v h3{font-size:12px; font-weight:700; letter-spacing:.7px; text-transform:uppercase}
+  .v p{font-size:11.5px; color:var(--mut); margin-top:4px}
+  .vb{position:absolute; top:10px; right:12px; font-size:9px; font-weight:700; letter-spacing:.6px;
+      text-transform:uppercase; color:var(--ok); background:#eef4ef; border:1px solid #cfe0d4;
+      padding:2px 7px; border-radius:9px}
+
+  footer{margin-top:15px; font-size:11px; color:var(--mut); line-height:1.6}
+  footer b{color:var(--ink); font-weight:600}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <h1>FleetGuard</h1><span class="sub">Vehicle defect early warning &amp; recall response — end-to-end architecture</span><span class="live">AS-BUILT · 2026-09-08</span>
+  <p class="strap">Real NHTSA defect data · Lakeflow → AI Search → MLflow → Mosaic AI Agent Framework → Lakebase → CDF → gold facts · Databricks App (primary) · Render (kept, fallback). Tracks <span class="m">ARCHITECTURE.md</span> — supersedes <span class="m">fleetguard_e2e.html</span>, the frozen 2026-08-31 proposal diagram.</p>
+  <div class="rule"></div>
+
+  <div class="cols">
+
+    <!-- 1 -->
+    <div class="col c1">
+      <div class="top"></div><div class="colhead">1 Sources · Ingestion</div>
+
+      <div class="card"><span class="badge done">Real</span><div class="ch">NHTSA ODI flat files · manual trigger</div>
+        <p class="m k">FLAT_CMPL</p><p>2,240,289 rows · 1995 → 2026 ✓</p>
+        <p class="m k" style="margin-top:5px">FLAT_RCL_POST_2010</p><p>244,925 rows · 15,211 campaigns ✓</p>
+        <p class="m k" style="margin-top:5px">FLAT_INV</p><p>154,367 rows · 5,344 distinct investigations ✓</p>
+        <p class="m k" style="margin-top:5px">TSBS_RECEIVED_*</p><p>5,801,279 rows · 7 chunks ✓</p>
+      </div>
+
+      <div class="card"><span class="badge done">Real</span><div class="ch">NHTSA + vPIC APIs · no key</div>
+        <p class="m k">recalls/recallsByVehicle</p><p>200/200 fleet combos · returns <span class="m">parkIt</span> / <span class="m">doNotDrive</span></p>
+        <p class="m k" style="margin-top:5px">vpic</p><p>authoritative make/model/year — never the complaint VIN</p>
+      </div>
+
+      <div class="card"><div class="ch">UC Volume · landing zone</div>
+        <p class="m">/Volumes/bootcamp_students/<br>&nbsp;&nbsp;fleetguard/nhtsa_flat_files/</p>
+        <p style="margin-top:4px">per-source subdirs (Auto Loader needs a directory, not a file)</p>
+      </div>
+
+      <div class="card"><div class="ch">Ingest · manual by design</div>
+        <p class="k"><span class="m">If-Modified-Since</span> → <span class="m">304</span></p>
+        <p>ETag is advertised but ignored — do not use it</p>
+        <p style="margin-top:4px">no schedule — avoids shared-workspace compute pre-demo</p>
+      </div>
+
+      <div class="card dash"><span class="badge done">Done</span><div class="ch">Fleet registry · gold</div>
+        <p>20,000 vehicles · 60 depots · 989,042 exposure rows</p>
+        <p>400 generated VINs independently vPIC-verified, 400/400 exact</p>
+      </div>
+
+      <div class="card dash"><span class="badge">Cut</span><div class="ch">2nd connector</div>
+        <p class="strike">CPSC SaferProducts · USDA FSIS</p>
+        <p>deliberately dropped for schedule (Phase 12)</p>
+      </div>
+    </div>
+
+    <!-- 2 -->
+    <div class="col c2">
+      <div class="top"></div><div class="colhead">2 Lakeflow pipeline</div>
+
+      <div class="card"><div class="ch">Bronze · Auto Loader</div>
+        <p class="m k">bronze_complaints/recalls/investigations/tsbs</p>
+        <p><span class="m">quote =&gt; '\0'</span> — default quoting silently corrupted 143 rows</p>
+        <p>Delta CDF enabled from day one</p>
+      </div>
+
+      <div class="card"><div class="ch">Silver · route, don't drop</div>
+        <p class="k">bronze = silver + quarantine, every table</p>
+        <p>complaints 2,209,123 + 572 q · recalls 244,701 + 224 q · investigations 154,191 + 176 q</p>
+        <p class="k">component from <span class="m">COMPDESC</span> — no <span class="m">ai_extract</span> on ingest</p>
+      </div>
+
+      <div class="card"><div class="ch">Chunking</div>
+        <p class="m">silver_complaint_chunk</p><p>512-token windows, window-driven not stride-driven</p>
+        <p>retains component / make / model / harm</p>
+      </div>
+
+      <div class="card"><div class="ch">Gold · Delta</div>
+        <p class="m k">gold_emerging_signal</p><p>live detector output — replaces the descoped cluster table</p>
+        <p class="m k" style="margin-top:4px">gold_recall_campaign_scope</p>
+        <p class="m k">silver_investigation_case</p>
+        <p class="m k">gold_fleet_exposure</p>
+      </div>
+
+      <div class="card"><span class="badge">Descoped</span><div class="ch">Clustering — not in production</div>
+        <p class="strike">gold_emerging_cluster</p>
+        <p>HDBSCAN: 85% noise at every parameterisation tried</p>
+      </div>
+    </div>
+
+    <!-- 3 -->
+    <div class="col c3">
+      <div class="top"></div><div class="colhead">3 AI Search · ML</div>
+
+      <div class="card"><span class="badge done">Verified</span><div class="ch">AI Search · Delta Sync Index</div>
+        <p class="m k">complaint_chunk_idx</p>
+        <p>1,746,601 chunks, matching source exactly</p>
+        <p>HYBRID (ANN + BM25) · <span class="m">databricks-gte-large-en</span></p>
+      </div>
+
+      <div class="card"><span class="badge done">UC Model</span><div class="ch">Model A · emerging-defect detector</div>
+        <p class="k">volume anomaly only — <b>no clustering, no harm weight</b></p>
+        <p><span class="m">n≥5, base_months≥6, z≥3.0</span>, sustained run ≥2 months</p>
+        <p>dated at the run nearest the investigation open date</p>
+      </div>
+
+      <div class="card"><span class="badge done">UC Model</span><div class="ch">Model B · residual match confidence</div>
+        <p class="k">precision 83.7% · recall 96.3% · ROC-AUC 0.925</p>
+        <p>765-pair golden set from NHTSA's own recall text, 230-row held-out</p>
+        <p><b>not</b> the primary match — ranks the 725,356 <span class="m">MODEL_VARIANT</span> rows exact matching misses</p>
+      </div>
+
+      <div class="card em" style="border-color:#c3b4dd"><div class="ch">Lead-time backtest — measured</div>
+        <p class="k">16.0% of 777 investigations detected, median 197-day lead</p>
+        <p>placebo: 11.1% of 606, median 343 days · 1.44×, z≈2.62, p≈0.009</p>
+        <p class="k">semantic subdivision tested → <b>falsified</b>: 13.3%→11.2%, +0.0 days lead</p>
+        <p style="margin-top:4px; font-size:10.5px">context only — investigation → recall is 118 d median (regulatory latency, never reported as a system result)</p>
+      </div>
+    </div>
+
+    <!-- 4 -->
+    <div class="col c4">
+      <div class="top"></div><div class="colhead">4 Agent · Lakebase</div>
+
+      <div class="card"><span class="badge done">OLTP</span><div class="ch">Lakebase · managed Postgres</div>
+        <p class="m">vehicle · depot · defect_signal · recall_campaign</p>
+        <p class="m">vehicle_exposure · service_campaign · work_order</p>
+        <p class="m">agent_action · approval · audit_log · technician</p>
+        <p>12 tables, all <span class="m">REPLICA IDENTITY FULL</span></p>
+      </div>
+
+      <div class="card"><div class="ch">ResponsesAgent · 5 read tools</div>
+        <p class="m">search_complaints() · lookup_fleet_exposure()</p>
+        <p class="m">lookup_fleet_models() · lookup_emerging_signals()</p>
+        <p class="m">propose_service_campaign()</p>
+      </div>
+
+      <div class="card red redbg"><div class="ch">The one write tool</div>
+        <p class="m">open_defect_signal()</p>
+        <p class="k">returns an action envelope — the model never writes</p>
+        <p>console validates + executes under the <b>caller's own OBO token</b></p>
+      </div>
+
+      <div class="card red redbg em"><div class="ch">Deterministic path · Park It</div>
+        <p class="k">make/model/year + <span class="m">BGMAN</span>/<span class="m">ENDMAN</span> window</p>
+        <p>exact set membership · no model involved</p>
+        <p>recall data publishes no VIN ranges</p>
+      </div>
+
+      <div class="card red redbg"><div class="ch">Human approval gate</div>
+        <p><span class="m">FLEETGUARD_APPROVERS</span> — unconditional on principal source</p>
+        <p>1 active campaign/recall — enforced by a Postgres unique index, 409 on retry</p>
+      </div>
+
+      <div class="card"><div class="ch">MLflow 3 · agent tracing</div>
+        <p>traces, tool calls, token cost (inference table)</p>
+        <p class="k">v6 serving · scale-to-zero on</p>
+      </div>
+    </div>
+
+    <!-- 5 -->
+    <div class="col c5">
+      <div class="top"></div><div class="colhead">5 Analytics · Serving</div>
+
+      <div class="card"><span class="badge done">Measured</span><div class="ch">Lakebase CDF → Delta</div>
+        <p class="m k">bootcamp_cdc.lb_fleetguard_&lt;entity&gt;_history</p>
+        <p>12 tables, exact names, no <span class="m">_1</span> collisions</p>
+        <p>capture latency <b>7.1–15.6 s</b> measured (n=3)</p>
+      </div>
+
+      <div class="card amber amberbg"><div class="ch">CDF → gold facts · table_update trigger</div>
+        <p class="m">gold_agent_action · gold_defect_signal_current</p>
+        <p>reconciles exactly vs. live Postgres (2=2, 50=50)</p>
+        <p class="k">commit → gold fact: <b>155–269 s</b> (n=2) — platform forces a &gt;60 s settle window</p>
+      </div>
+
+      <div class="card"><span class="badge done">Live</span><div class="ch">AI/BI dashboard + metric view</div>
+        <p>4 pages · 9 datasets · <span class="m">evidence_metrics</span> metric view</p>
+        <p>on the existing SQL warehouse, no new compute</p>
+      </div>
+
+      <div class="card em" style="border-color:#9fb4c9"><span class="badge warn">I-084 open</span>
+        <div class="ch">Databricks App · primary surface</div>
+        <p class="k"><span class="m">fleetguard-console</span> — OBO, live Lakebase, real OBA</p>
+        <p>verified end to end under the <b>owner's identity only</b></p>
+        <p>kept <span class="m">STOPPED</span> between sessions — start ~2 min before use</p>
+      </div>
+
+      <div class="card"><span class="badge">Kept, fallback</span><div class="ch">Render · console</div>
+        <p class="k">same code, <span class="m">AuthProvider</span> swapped</p>
+        <p><span class="m">render-u2m</span> — browser round-trip unconfirmed</p>
+        <p><span class="m">app-login</span> + snapshot — needs no Databricks identity at all</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="gov">
+    <div class="govh">Governance, quality &amp; delivery · spans every column</div>
+    <div class="govgrid">
+      <div><h4>Unity Catalog</h4><p><span class="m">bootcamp_students.fleetguard</span>, one schema — catalog creation unavailable here</p></div>
+      <div><h4>Postgres RLS</h4><p><span class="m">fleetguard_vehicle</span> ENABLE+FORCE, proved toggled — fail-open, nobody enrolled yet</p></div>
+      <div><h4>Golden set + MLflow Eval</h4><p>765 labelled pairs, precision/recall published on Evidence</p></div>
+      <div><h4>Testing</h4><p>276 unit tests + 21 live-workspace integration tests, every router covered</p></div>
+      <div><h4>Auth seam</h4><p>4 token providers, one swappable seam — no handler reads a header directly</p></div>
+      <div><h4>Audit</h4><p><span class="m">fleetguard_audit_log</span>, before/after state, CSV export, append-only</p></div>
+    </div>
+  </div>
+
+  <div class="risk">
+    <div class="riskh">Open, as of 2026-09-08 — stated rather than hidden</div>
+    <div class="riskgrid">
+      <div><h4>I-084 · single-identity verification</h4><p>The App works end to end for the owner. No second real identity has signed in — unknown whether Lakebase auto-provisions a Postgres role for anyone else.</p></div>
+      <div><h4>Approvers gate excludes judges</h4><p><span class="m">FLEETGUARD_APPROVERS</span> holds the owner's email only — a judge can read everything and gets 403 on approve, by choice not oversight.</p></div>
+      <div><h4>E-01 · AI Gateway on the wrong endpoint</h4><p>Agent endpoints deployed via <span class="m">agents.deploy()</span> do not support <span class="m">ai_gateway</span> guardrails — only inference tables. The proposal's PII-guardrail claim needs a wrapper LLM endpoint to become true.</p></div>
+    </div>
+  </div>
+
+  <div class="vs">
+    <div class="v"><span class="vb">Verified</span><h3>Volume</h3>
+      <p>5.8M TSBs + 2.24M complaints + 245K recall rows + 154K investigation rows — counted from the live files</p></div>
+    <div class="v"><span class="vb">Met</span><h3>Variety</h3>
+      <p>unstructured owner-written free text, plus recall, bulletin and investigation prose</p></div>
+    <div class="v"><span class="vb">Met, narrower than proposed</span><h3>Velocity</h3>
+      <p>Lakebase CDF capture is genuinely sub-minute (7.1–15.6 s). The full write → gold-fact chain is <b>not</b>: the platform's own trigger floor forces ≈2.5–4.5 min end to end (measured, n=2) — state the range, never a single averaged number, and never the CDF figure for the whole chain.</p></div>
+  </div>
+
+  <footer>
+    <b>REAL:</b> NHTSA complaints, recalls, investigations, service bulletins, VIN decode — plus every embedding, every model, every agent write, every CDF row.<br>
+    <b>SYNTHETIC:</b> the fleet roster only, built from real vPIC decodes. <b>SIMULATED:</b> nothing. Databricks holds all data, models and agent execution; the console carries the operator workflow under the caller's own identity.
+  </footer>
+</div>
+</body>
+</html>

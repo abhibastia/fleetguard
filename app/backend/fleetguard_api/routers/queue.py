@@ -26,6 +26,11 @@ class QueueItem(BaseModel):
     vehicles_exposed: int
     depots_affected: int
     consequence: str | None
+    # Non-null only when a LAUNCHED service campaign already exists for this recall (the same
+    # `status = 'LAUNCHED'` scope the uniqueness index enforces, see I-063) — without this the
+    # queue looked identical whether a campaign had already been approved or not, and the only
+    # way to find out was clicking Approve and hitting the resulting 409.
+    service_campaign_id: str | None = None
 
 
 class ExposedVehicle(BaseModel):
@@ -45,6 +50,9 @@ class CampaignDetail(BaseModel):
     vehicles_exposed: int
     by_depot: dict[str, int]
     sample_vehicles: list[ExposedVehicle]
+    # Same meaning as QueueItem.service_campaign_id — present so the detail page can point at
+    # the existing launch instead of showing an Approve form that can only 409.
+    service_campaign_id: str | None = None
 
 
 @router.get("/queue", response_model=list[QueueItem])
@@ -67,6 +75,11 @@ def get_queue(
         return [QueueItem(**r) for r in snapshot.queue(limit)]
 
     scope = resolve_scope(principal, depot_id)
+    # LEFT JOIN, not inner: a campaign with no launched service campaign is the common case,
+    # not a missing-data case, and an inner join would silently drop it from the queue.
+    # Scoped to status = 'LAUNCHED' to match the one partial unique index that actually
+    # enforces "one active campaign per recall" (I-063) — a CANCELLED prior attempt must not
+    # make this look launched.
     sql = f"""
         SELECT c.campaign_id,
                c.component,
@@ -74,10 +87,13 @@ def get_queue(
                c.do_not_drive,
                COUNT(DISTINCT e.vin)      AS vehicles_exposed,
                COUNT(DISTINCT v.depot_id) AS depots_affected,
-               c.consequence
+               c.consequence,
+               MAX(sc.service_campaign_id) AS service_campaign_id
         FROM {PG_SCHEMA}.fleetguard_vehicle_exposure e
         JOIN {PG_SCHEMA}.fleetguard_vehicle v          ON v.vin = e.vin
         JOIN {PG_SCHEMA}.fleetguard_recall_campaign c  ON c.campaign_id = e.campaign_id
+        LEFT JOIN {PG_SCHEMA}.fleetguard_service_campaign sc
+               ON sc.campaign_id = c.campaign_id AND sc.status = 'LAUNCHED'
         {scope.where()}
         GROUP BY c.campaign_id, c.component, c.park_it, c.do_not_drive, c.consequence
         ORDER BY c.park_it DESC, c.do_not_drive DESC, vehicles_exposed DESC
@@ -113,8 +129,12 @@ def get_campaign(
     scope = resolve_scope(principal, depot_id)
     with connect(principal) as conn, conn.cursor() as cur:
         cur.execute(
-            f"""SELECT campaign_id, component, park_it, consequence, remedy
-                FROM {PG_SCHEMA}.fleetguard_recall_campaign WHERE campaign_id = %(cid)s""",
+            f"""SELECT c.campaign_id, c.component, c.park_it, c.consequence, c.remedy,
+                       sc.service_campaign_id
+                FROM {PG_SCHEMA}.fleetguard_recall_campaign c
+                LEFT JOIN {PG_SCHEMA}.fleetguard_service_campaign sc
+                       ON sc.campaign_id = c.campaign_id AND sc.status = 'LAUNCHED'
+                WHERE c.campaign_id = %(cid)s""",
             {"cid": campaign_id},
         )
         head = rows_to_dicts(cur)

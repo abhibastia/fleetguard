@@ -29,7 +29,7 @@ Prepared as a production architecture specification.
 > promise that lead time would be *"validated against held-out historical recalls"* rather
 > than asserted was kept — including where the validation returned an unwelcome answer.
 
-**Diagrams:** `fleetguard_e2e.html` (system architecture) · `fleetguard_identity.html` (identity & authorisation) — self-contained HTML, so they diff in review rather than drifting silently as binaries.
+**Diagrams:** [`fleetguard_e2e.html`](fleetguard_e2e.html) / [`.png`](fleetguard_e2e.png) (system architecture) · [`fleetguard_identity.html`](fleetguard_identity.html) / [`.png`](fleetguard_identity.png) (identity & authorisation) — self-contained HTML so they diff in review rather than drifting silently as binaries, PNG alongside for anything that only reads images. **These are frozen at 2026-08-31 like the rest of this document.** For the as-built equivalents, see [`fleetguard_e2e_current.html`](fleetguard_e2e_current.html) / [`.png`](fleetguard_e2e_current.png) and [`fleetguard_identity_current.html`](fleetguard_identity_current.html) / [`.png`](fleetguard_identity_current.png), which track `ARCHITECTURE.md`.
 
 ---
 

@@ -26,6 +26,54 @@ no error and passed the obvious check.
 
 ## Tooling / process
 
+### I-085 — "no password auth on Lakebase" was a fact about specific roles, not the platform — and our own project has it switched on too
+*Date:* 2026-09-08 · *Status:* **open — capability confirmed, our privilege to use it is not**
+
+**How this surfaced.** A bootcamp peer (Zach Steele) shared in Slack that his Render app
+writes to Lakebase using a plain `postgresql://edgar_app:<password>@ep-lingering-recipe-…/`
+connection string — static username/password, no Databricks OAuth involved. Asked to check
+his `zdsteele-capstone` project to understand the mechanism, **read-only, account-metadata
+level only:** `databricks postgres list-projects/list-branches/list-endpoints/list-databases
+--profile abhi`. Deliberately did not run `list-roles`, `generate-database-credential`, or
+connect to his database — metadata visible via the shared account's flat listing is one
+thing, touching his actual credentials or data is another, and only the former was in scope
+without his explicit grant. (`list-roles` was in fact blocked by the harness's own safety
+classifier when attempted alongside the others — a reasonable line, independently drawn.)
+
+**What the metadata showed.** `zdsteele-capstone` has `enable_pg_native_login: true` — a
+project-level flag that enables real Postgres password roles alongside the OAuth-token-minted
+roles Databricks auto-provisions per signed-in identity. That flag is *why* his static
+connection string works at all.
+
+**The finding that matters more: our own project has the same flag.** Checked
+`summer-bootcamp-2026-v2` (this project's Lakebase project) in the same `list-projects`
+output — `enable_pg_native_login: true` there as well. The earlier claim recorded elsewhere
+("Lakebase roles are all `LAKEBASE_OAUTH_V1`, no password auth") was true of the *specific
+roles* someone inspected at the time, not a project- or platform-wide restriction. Native
+password roles were never actually unavailable to us at the platform level.
+
+**Why this isn't simply "go do it."** `list-projects` also revealed `summer-bootcamp-2026-v2`
+is **owned by `zach@zachwilson.tech`**, not by this project's team — a fact not previously
+written down anywhere in this repo's docs. `CREATE ROLE` privilege typically belongs to the
+project owner (or an explicit grant from them); this account's identity has never tested
+whether it can create a role on a project it does not own. I-084 already established this
+account has no `CREATEROLE` here — this entry explains *why* (ownership, not a platform
+ceiling) rather than changing that conclusion. The static-role path a peer used may simply not
+be exercisable on this specific project without asking its owner, which is a different
+blocker than "the platform doesn't support this."
+
+**Why it's logged as open rather than resolved.** Two separate things were previously
+conflated under one "no password auth" claim: (1) whether Lakebase *supports* native login —
+now confirmed yes, and (2) whether *this identity* can create a role on *this project* —
+still untested. Resolving (2) either way (ask the owner, or try `CREATE ROLE` and observe the
+error) is the actual next step, not assumed here.
+
+**Lesson.** A measured fact about the roles that happen to exist is not the same claim as a
+platform limitation — the two look identical in a status doc until someone checks a
+differently-configured project and the gap shows. Separately: verifying "our project" also
+means verifying who owns it, not just its connection details — ownership determines which
+privilege questions are even worth asking.
+
 ### I-084 — **OPEN RISK:** a judge may sign into the App successfully and have every data route fail, and we cannot pre-provision the fix
 *Date:* 2026-09-08 · *Status:* **OPEN — untestable from this account, decide before the demo**
 

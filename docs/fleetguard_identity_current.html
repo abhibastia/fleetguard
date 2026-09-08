@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>FleetGuard — identity &amp; authorisation architecture (as-built)</title>
+<style>
+  /* Pinned light: renders to PNG. Mirrors fleetguard_identity.html's visual system on purpose;
+     content tracks ARCHITECTURE.md §8a/§8b. The other file stays frozen at the 2026-08-31
+     proposal — do not let the two merge back into one. */
+  :root{
+    --bg:#faf9f7; --ink:#22201d; --mut:#6f6a63; --line:#e2ded7; --card:#ffffff;
+    --d:#2f6b57; --a:#2b5b8c; --b:#68509b; --c:#b8632c; --warn:#9a6b1f; --ok:#2f6b4f;
+  }
+  *{box-sizing:border-box; margin:0; padding:0}
+  body{background:var(--bg); color:var(--ink);
+       font:400 13px/1.45 "Inter","Helvetica Neue",Helvetica,Arial,sans-serif;
+       -webkit-font-smoothing:antialiased}
+  .page{width:1790px; padding:38px 42px 30px}
+  code,.m{font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+          font-size:11.5px; letter-spacing:-.1px}
+
+  h1{font-size:30px; font-weight:700; letter-spacing:-.6px; display:inline}
+  .sub{font-size:16px; color:var(--mut); margin-left:12px}
+  .live{display:inline-block; font-size:9.5px; font-weight:700; letter-spacing:.7px;
+        text-transform:uppercase; color:var(--ok); background:#eef4ef; border:1px solid #cfe0d4;
+        padding:2px 8px; border-radius:9px; margin-left:10px; vertical-align:2px}
+  .strap{font-size:12px; color:var(--mut); margin-top:7px}
+  .rule{height:1px; background:var(--line); margin:16px 0 20px}
+
+  .band{border:1px solid var(--line); border-left-width:4px; border-radius:5px;
+        background:#fcfbfa; margin-bottom:15px; overflow:hidden}
+  .bh{padding:9px 14px 8px}
+  .bt{font-size:11px; font-weight:700; letter-spacing:.9px; text-transform:uppercase}
+  .bt .nm{color:var(--ink); margin-left:9px; letter-spacing:.2px; text-transform:none; font-size:13px}
+  .bs{font-size:11.5px; color:var(--mut); margin-top:3px}
+  .steps{display:grid; grid-template-columns:repeat(5,1fr); gap:0; padding:0 14px 14px;
+         align-items:stretch}
+  .st{background:var(--card); border:1px solid var(--line); border-radius:5px;
+      padding:9px 11px 10px; position:relative; margin-right:26px}
+  .st:last-child{margin-right:0}
+  .st::after{content:"→"; position:absolute; right:-20px; top:50%; transform:translateY(-50%);
+             color:#b9b3aa; font-size:15px}
+  .st:last-child::after{content:none}
+  .sn{display:inline-flex; width:17px; height:17px; border-radius:50%; color:#fff;
+      font-size:10px; font-weight:700; align-items:center; justify-content:center;
+      vertical-align:middle; margin-right:6px}
+  .sh{font-size:10px; font-weight:700; letter-spacing:.55px; text-transform:uppercase;
+      margin-bottom:6px}
+  .st p{font-size:11.5px; color:var(--mut); line-height:1.5}
+  .st p.k{color:var(--ink)}
+  .tag{position:absolute; top:-9px; right:9px; font-size:8.5px; font-weight:700;
+       letter-spacing:.6px; text-transform:uppercase; padding:2px 6px; border-radius:3px;
+       background:#eef4f1; color:var(--d); border:1px solid #cfe0d8}
+  .tag.warn{background:#fbf3e6; color:var(--warn); border-color:#eeddb8}
+
+  .pd{border-left-color:var(--a)} .pd .bt,.pd .sh{color:var(--a)} .pd .sn{background:var(--a)}
+  .pd .bh{background:#eef3f8}
+  .pa{border-left-color:var(--d)} .pa .bt,.pa .sh{color:var(--d)} .pa .sn{background:var(--d)}
+  .pa .bh{background:#f0f5f2}
+  .pb{border-left-color:var(--b)} .pb .bt,.pb .sh{color:var(--b)} .pb .sn{background:var(--b)}
+  .pb .bh{background:#f3f0f8}
+  .pc{border-left-color:var(--c)} .pc .bt,.pc .sh{color:var(--c)} .pc .sn{background:var(--c)}
+  .pc .bh{background:#fbf2ec}
+
+  .bot{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:4px}
+  .bx{border:1px solid var(--line); border-radius:5px; background:var(--card); overflow:hidden}
+  .bxh{font-size:10.5px; font-weight:700; letter-spacing:.8px; text-transform:uppercase;
+       padding:7px 13px; border-bottom:1px solid var(--line)}
+  .bx.g .bxh{background:#f2f3ec; color:#5c6b38}
+  .bx.r .bxh{background:#fbf1f1; color:#b03a3a}
+  table{width:100%; border-collapse:collapse}
+  td{padding:5px 13px; font-size:11.5px; vertical-align:top; border-bottom:1px solid #f2efe9}
+  tr:last-child td{border-bottom:none}
+  td.l{width:38%; font-weight:600}
+  td.r{color:var(--mut)}
+  footer{margin-top:15px; font-size:11.5px; color:var(--mut)}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <h1>FleetGuard</h1><span class="sub">Identity &amp; authorisation architecture</span><span class="live">AS-BUILT · 2026-09-08</span>
+  <p class="strap">One swappable auth seam, four token providers, one auto-provisioned service-principal identity that cannot reach the database. Tracks <span class="m">ARCHITECTURE.md</span> §8a/§8b — supersedes <span class="m">fleetguard_identity.html</span>, the frozen 2026-08-31 proposal diagram (which had this backwards: Render as Phase 1 primary, Databricks Apps as Phase 2).</p>
+  <div class="rule"></div>
+
+  <!-- PATH A — Databricks App, now primary -->
+  <div class="band pd">
+    <div class="bh"><div class="bt">Path A<span class="nm">Databricks App · user on-behalf-of — PRIMARY, built &amp; live</span></div>
+      <div class="bs">Verified end to end 2026-09-08. Needed an <span class="m">app.yaml</span>, one CLI scope grant, and one line of code (<span class="m">auth_type="pat"</span>) — no route handler changed, because none of them reads a header directly.</div></div>
+    <div class="steps">
+      <div class="st"><div class="sh"><span class="sn">1</span>User → Databricks App</div>
+        <p>workspace SSO · no separate login</p><p>no OAuth client to register</p>
+        <p class="k">app inherits workspace identity</p></div>
+      <div class="st"><div class="sh"><span class="sn">2</span>On-behalf-of token</div>
+        <p class="m k">x-forwarded-access-token</p>
+        <p>scopes on the <b>app resource</b>, not <span class="m">app.yaml</span> (I-083)</p>
+        <p><span class="m">postgres, sql, model-serving</span> — restart required after granting</p></div>
+      <div class="st"><div class="sh"><span class="sn">3</span>Console → Lakebase</div>
+        <p class="m k">WorkspaceClient(token=caller, auth_type="pat")</p>
+        <p><span class="m">generate_database_credential()</span></p>
+        <p class="k">connects AS the caller's own Postgres role</p></div>
+      <div class="st"><div class="sh"><span class="sn">4</span>Unity Catalog + Postgres RLS</div>
+        <p><span class="m">fleetguard_vehicle</span> RLS ENABLE+FORCE</p>
+        <p>evaluated at the data layer, frontend cannot bypass it</p>
+        <p class="k">fail-open — nobody enrolled in depot scoping yet</p></div>
+      <div class="st"><span class="tag warn">I-084 open</span><div class="sh"><span class="sn">5</span>Operator console</div>
+        <p>signal queue · exposure ranking · approve · assign</p>
+        <p class="k">verified for the <b>owner's identity only</b> — no second identity tested</p></div>
+    </div>
+  </div>
+
+  <!-- PATH B — local dev -->
+  <div class="band pa">
+    <div class="bh"><div class="bt">Path B<span class="nm">Local dev · static-dev — near-term verification surface</span></div>
+      <div class="bs">Same code path as Path A, a static token stands in for the OBO header. Used daily; not a demo surface.</div></div>
+    <div class="steps">
+      <div class="st"><div class="sh"><span class="sn">1</span><span class="m">databricks auth token</span></div>
+        <p>owner's own CLI OAuth (first-party client)</p>
+        <p class="k">no custom app, no scope negotiation</p></div>
+      <div class="st"><div class="sh"><span class="sn">2</span><span class="m">StaticTokenProvider</span></div>
+        <p><span class="m">FLEETGUARD_DEV_TOKEN</span> env var</p>
+        <p class="k">token is static — expires in 1 h, restart script to refresh</p></div>
+      <div class="st"><div class="sh"><span class="sn">3</span><span class="m">FLEETGUARD_DEV_USER</span></div>
+        <p>sets <span class="m">principal.user_name</span></p>
+        <p class="k">required for <span class="m">FLEETGUARD_APPROVERS</span> to ever match anyone</p></div>
+      <div class="st"><div class="sh"><span class="sn">4</span>Same seam as production</div>
+        <p>identical RLS, identical approval gate</p>
+        <p>proves the seam, not a shortcut around it</p></div>
+      <div class="st"><div class="sh"><span class="sn">5</span>uvicorn --reload</div>
+        <p>127.0.0.1, live Lakebase</p><p class="k">screenshotted end to end 2026-09-08</p></div>
+    </div>
+  </div>
+
+  <!-- PATH C — Render, kept as fallback -->
+  <div class="band pb">
+    <div class="bh"><div class="bt">Path C<span class="nm">Render · console — kept, no longer plan of record</span></div>
+      <div class="bs">Two sub-modes on one deployment, selected by <span class="m">FLEETGUARD_AUTH_MODE</span>. Zero cost to keep both; non-zero cost to rebuild either later.</div></div>
+    <div class="steps">
+      <div class="st"><div class="sh"><span class="sn">1a</span><span class="m">render-u2m</span></div>
+        <p class="k">real U2M OAuth, PKCE, live Lakebase</p>
+        <p>60-min token + <span class="m">offline_access</span> refresh</p>
+        <p>browser round-trip <b>unconfirmed</b></p></div>
+      <div class="st"><div class="sh"><span class="sn">1b</span><span class="m">app-login</span></div>
+        <p class="k">GitHub OAuth — carries <b>no</b> Databricks credential</p>
+        <p>proves who signed in, not a workspace identity</p></div>
+      <div class="st"><div class="sh"><span class="sn">2</span>Data mode gate</div>
+        <p><span class="m">app-login</span> ⇒ startup <b>refuses</b> unless <span class="m">FLEETGUARD_DATA_MODE=snapshot</span></p>
+        <p class="k">the two settings cannot drift apart</p></div>
+      <div class="st"><div class="sh"><span class="sn">3</span>Public evidence route</div>
+        <p class="m k">GET /api/evidence</p><p>reads a <b>committed JSON snapshot</b></p>
+        <p>no live credential on a public host — by design, not laziness</p></div>
+      <div class="st"><div class="sh"><span class="sn">4</span>Approval gate, either sub-mode</div>
+        <p><span class="m">FLEETGUARD_APPROVERS</span> — unconditional on <span class="m">principal.source</span></p>
+        <p class="k">snapshot mode: write routes return 501, never a simulated success</p></div>
+    </div>
+  </div>
+
+  <!-- PATH D — agent execution -->
+  <div class="band pc">
+    <div class="bh"><div class="bt">Path D<span class="nm">Agent execution · the one service-principal identity in the system</span></div>
+      <div class="bs">Deliberately the most constrained identity. All three routes to giving it a Lakebase path were checked and closed — engine and data are separate grants.</div></div>
+    <div class="steps">
+      <div class="st"><div class="sh"><span class="sn">1</span>Console → serving</div>
+        <p class="m">POST /serving-endpoints/…/invocations</p>
+        <p>Bearer = the <b>caller's</b> token, not a service credential</p></div>
+      <div class="st"><div class="sh"><span class="sn">2</span>Inside the endpoint</div>
+        <p class="m k">WorkspaceClient() — no arguments</p>
+        <p>resolves to the endpoint's <b>auto-provisioned</b> SP</p>
+        <p class="k">automatic authentication passthrough</p></div>
+      <div class="st"><div class="sh"><span class="sn">3</span>Grants = <span class="m">resources=[...]</span> at log time</div>
+        <p>AI Search index · SQL warehouse · <span class="m">gold_fleet_vehicle</span></p>
+        <p class="k">a table not declared here 500s at query time, not at deploy time (I-050)</p></div>
+      <div class="st"><span class="tag">No DB path</span><div class="sh"><span class="sn">4</span>open_defect_signal()</div>
+        <p>returns a deterministic action envelope</p>
+        <p class="k">the model cannot write — it has no Postgres credential, ever</p></div>
+      <div class="st"><div class="sh"><span class="sn">5</span>Console executes the write</div>
+        <p>under the <b>caller's own OBO token</b> (Path A step 3)</p>
+        <p class="k"><span class="m">opened_by</span> is a genuine human, RLS applies exactly as a UI click would</p></div>
+    </div>
+  </div>
+
+  <div class="bot">
+    <div class="bx g"><div class="bxh">Credential lifetimes, measured</div>
+      <table>
+        <tr><td class="l">Databricks App OBO header</td><td class="r">per request · platform-rotated, never persisted</td></tr>
+        <tr><td class="l">static-dev token</td><td class="r">1 hour · restart script to re-mint, not a refresh path</td></tr>
+        <tr><td class="l">Render U2M access token</td><td class="r">60 minutes · <span class="m">offline_access</span> refresh (round-trip unconfirmed)</td></tr>
+        <tr><td class="l">Lakebase database credential</td><td class="r">re-minted per connection, cached per principal with a staleness check</td></tr>
+        <tr><td class="l">Agent endpoint SP</td><td class="r">platform-managed · scoped by <span class="m">resources=[...]</span> at model-log time</td></tr>
+      </table></div>
+    <div class="bx r"><div class="bxh">Least privilege · what actually exists, not what was proposed</div>
+      <table>
+        <tr><td class="l m">signed-in human</td><td class="r">every console read/write, Path A/B/C alike — RLS + <span class="m">FLEETGUARD_APPROVERS</span> apply identically</td></tr>
+        <tr><td class="l m">app service principal (Databricks Apps default)</td><td class="r"><span class="m">DATABRICKS_CLIENT_ID/SECRET</span> — never used for Lakebase; <span class="m">auth_type="pat"</span> pins the caller's token instead (I-082)</td></tr>
+        <tr><td class="l m">agent endpoint's auto-provisioned SP</td><td class="r">read-only over declared resources · <b>zero</b> Lakebase grant, by design not oversight</td></tr>
+        <tr><td class="l m">no <span class="m">fleetguard_agent_sp</span> / <span class="m">_public_sp</span> / <span class="m">_pipeline_sp</span></td><td class="r">the proposal named these; none were built — the seam made them unnecessary</td></tr>
+      </table></div>
+  </div>
+
+  <footer>The through-line, unchanged since the proposal: every user-facing read and write executes as the human. The only service-principal identity in the system belongs to the agent, and it cannot reach the database — verified by checking, not assumed.</footer>
+</div>
+</body>
+</html>

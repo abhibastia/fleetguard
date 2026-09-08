@@ -111,6 +111,27 @@ function MoonIcon() {
   );
 }
 
+function ChatIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M4 5.5h16v10.2H9.4L5 19.5v-3.8H4V5.5Z"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function CloseIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M6 6l12 12M18 6 6 18" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 /** Shows the theme you would switch *to*, which is the convention users expect from a
  *  single-button toggle — and says so in the label, because an icon alone is ambiguous. */
 function ThemeToggle() {
@@ -142,6 +163,11 @@ export function App() {
   const [me, setMe] = useState<Me | null>(null);
   const [auth, setAuth] = useState<AuthStatus | null>(null);
   const [health, setHealth] = useState<Health | null>(null);
+  // The assistant used to exist only beside the Queue tab — asking it something while looking
+  // at Work Orders meant navigating away and losing that context. A floating dock keeps it
+  // reachable from every tab instead; closed by default so it never fires an API call until
+  // someone actually wants it.
+  const [assistantOpen, setAssistantOpen] = useState(false);
 
   // Back/forward must work: a browser button that silently does nothing is worse than no
   // routing at all.
@@ -316,12 +342,7 @@ export function App() {
         )}
 
         {!gateClosed && view.name === "queue" && (
-          <div className="split">
-            <div>
-              <Queue onOpen={(id) => setView({ name: "campaign", id })} />
-            </div>
-            <Assistant />
-          </div>
+          <Queue onOpen={(id) => setView({ name: "campaign", id })} />
         )}
         {!gateClosed && view.name === "campaign" && (
           <Campaign id={view.id} onBack={() => setView({ name: "queue" })} />
@@ -345,6 +366,30 @@ export function App() {
         {!gateClosed && view.name === "trends" && <Trends />}
         {view.name === "evidence" && <Evidence />}
       </main>
+
+      {/* Available from every tab, not just Queue — the assistant is self-contained (owns its
+          own turns/error state), so lifting it here cost nothing but the wrapper. Hidden
+          behind the same gate as the rest of the console: with no session there is no
+          identity for it to answer under, and Assistant's own 401 handling exists for the
+          case where a session exists but the serving endpoint call itself fails. */}
+      {!gateClosed && (
+        <>
+          <button
+            className="assistant-fab"
+            onClick={() => setAssistantOpen((v) => !v)}
+            aria-expanded={assistantOpen}
+            aria-label={assistantOpen ? "Close assistant" : "Open assistant"}
+            title={assistantOpen ? "Close assistant" : "Ask the assistant"}
+          >
+            {assistantOpen ? <CloseIcon /> : <ChatIcon />}
+          </button>
+          {assistantOpen && (
+            <div className="assistant-dock">
+              <Assistant />
+            </div>
+          )}
+        </>
+      )}
     </>
   );
 }

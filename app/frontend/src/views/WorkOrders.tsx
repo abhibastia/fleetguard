@@ -1,11 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, ApiError, type Technician, type WorkOrder } from "../lib/api";
+import { api, ApiError, type ServiceCampaign, type Technician, type WorkOrder } from "../lib/api";
 import { SortIndicator, useSort } from "../lib/sort";
 
 const STATUSES = ["OPEN", "IN_PROGRESS", "COMPLETED", "CANCELLED"] as const;
 const UNASSIGNED = "" as const; // <select> has no null value, so "" stands in for it locally
 const STATUS_FILTER_ALL = "ALL" as const;
 const DEPOT_FILTER_ALL = "ALL" as const;
+const CAMPAIGN_FILTER_ALL = "ALL" as const;
+// Matches the backend's own max (`Query(100, ge=1, le=500)`) — if a query returns exactly
+// this many rows, there may be more the console isn't showing, and it says so rather than
+// silently implying that's the whole list.
+const WORK_ORDER_FETCH_LIMIT = 500;
 
 type SortKey = "wo_id" | "vin" | "depot_id" | "due_date" | "status" | "actual_cost";
 
@@ -33,21 +38,37 @@ export function WorkOrders({
 }) {
   const [orders, setOrders] = useState<WorkOrder[] | null>(null);
   const [technicians, setTechnicians] = useState<Technician[]>([]);
+  const [campaigns, setCampaigns] = useState<ServiceCampaign[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [gated, setGated] = useState(false);
   const [updating, setUpdating] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>(STATUS_FILTER_ALL);
   const [depotFilter, setDepotFilter] = useState<string>(DEPOT_FILTER_ALL);
+  // Seeded from the URL-driven prop (arriving via a "Launched" row click) but editable from
+  // here too — previously the only way to scope to one campaign was that click-through, and
+  // navigating to this tab directly via the nav bar had no way to narrow it at all.
+  const [campaignFilter, setCampaignFilter] = useState<string>(
+    serviceCampaignId ?? CAMPAIGN_FILTER_ALL,
+  );
   const [overdueOnly, setOverdueOnly] = useState(false);
   // Local draft text per row while typing, committed on blur - a PATCH on every keystroke
   // would be both wasteful and would thrash the audit log with one row per digit.
   const [costDrafts, setCostDrafts] = useState<Record<string, string>>({});
 
+  // A fresh URL-driven filter (a new row click) overrides whatever was picked manually here.
+  useEffect(() => {
+    setCampaignFilter(serviceCampaignId ?? CAMPAIGN_FILTER_ALL);
+  }, [serviceCampaignId]);
+
   useEffect(() => {
     let stale = false;
     setOrders(null);
     api
-      .workOrders({ serviceCampaignId })
+      .workOrders({
+        serviceCampaignId:
+          campaignFilter !== CAMPAIGN_FILTER_ALL ? campaignFilter : undefined,
+        limit: WORK_ORDER_FETCH_LIMIT,
+      })
       .then((d) => {
         if (!stale) setOrders(d);
       })
@@ -59,7 +80,7 @@ export function WorkOrders({
     return () => {
       stale = true;
     };
-  }, [serviceCampaignId]);
+  }, [campaignFilter]);
 
   useEffect(() => {
     let stale = false;
@@ -75,6 +96,21 @@ export function WorkOrders({
         /* the roster is an enhancement to the assignment control, not required to read or
            change status - a failure here shouldn't block the rest of the page. */
       });
+    return () => {
+      stale = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let stale = false;
+    // Populates the campaign dropdown below. A failure here degrades to "no dropdown
+    // options" rather than blocking the page — the same tolerance as the technician roster.
+    api
+      .serviceCampaigns(500)
+      .then((c) => {
+        if (!stale) setCampaigns(c);
+      })
+      .catch(() => {});
     return () => {
       stale = true;
     };
@@ -198,16 +234,20 @@ export function WorkOrders({
         </p>
       </div>
 
-      {serviceCampaignId && (
+      {campaignFilter !== CAMPAIGN_FILTER_ALL && (
         <div className="filter-banner">
           <span>
-            Showing <strong>{serviceCampaignId}</strong> only.
+            Showing <strong>{campaignFilter}</strong> only.
           </span>
-          {onClearFilter && (
-            <button className="filter-clear" onClick={onClearFilter}>
-              Clear filter
-            </button>
-          )}
+          <button
+            className="filter-clear"
+            onClick={() => {
+              setCampaignFilter(CAMPAIGN_FILTER_ALL);
+              onClearFilter?.();
+            }}
+          >
+            Clear filter
+          </button>
         </div>
       )}
 
@@ -232,6 +272,13 @@ export function WorkOrders({
 
       {error && <div className="error">{error}</div>}
 
+      {orders.length === WORK_ORDER_FETCH_LIMIT && (
+        <div className="panel muted" style={{ marginBottom: 12 }}>
+          Showing the {WORK_ORDER_FETCH_LIMIT} most recently created work orders — there may be
+          more. Use the campaign filter to narrow this to an exact count.
+        </div>
+      )}
+
       {orders.length === 0 ? (
         <div className="panel">
           No work orders yet. That is a result, not an error — none have been created by an
@@ -240,6 +287,17 @@ export function WorkOrders({
       ) : (
         <>
           <div className="filter-row">
+            <select
+              value={campaignFilter}
+              onChange={(e) => setCampaignFilter(e.target.value)}
+            >
+              <option value={CAMPAIGN_FILTER_ALL}>All campaigns</option>
+              {campaigns.map((c) => (
+                <option key={c.service_campaign_id} value={c.service_campaign_id}>
+                  {c.service_campaign_id} — {c.title}
+                </option>
+              ))}
+            </select>
             <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
               <option value={STATUS_FILTER_ALL}>All statuses</option>
               {STATUSES.map((s) => (

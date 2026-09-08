@@ -98,6 +98,14 @@ export function Queue({ onOpen }: { onOpen: (id: string) => void }) {
         <div className={urgent > 0 ? "stat is-danger" : "stat"}>
           <div className="v">{urgent}</div>
           <div className="k">Immediate action</div>
+          {items.length > 0 && (
+            <div className="stat-bar" title={`${urgent} of ${items.length} campaigns`}>
+              <div
+                className="stat-bar-fill"
+                style={{ width: `${(urgent / items.length) * 100}%` }}
+              />
+            </div>
+          )}
         </div>
         <div className="stat">
           <div className="v">{items.length}</div>
@@ -139,6 +147,15 @@ export function Queue({ onOpen }: { onOpen: (id: string) => void }) {
                 <tr key={i.campaign_id} onClick={() => onOpen(i.campaign_id)}>
                   <td>
                     <strong>{i.campaign_id}</strong>
+                    {i.service_campaign_id && (
+                      <span
+                        className="tag launched"
+                        style={{ marginLeft: 8 }}
+                        title={`Already launched as ${i.service_campaign_id}`}
+                      >
+                        LAUNCHED
+                      </span>
+                    )}
                   </td>
                   <td className="muted">{i.component ?? "—"}</td>
                   <td>
@@ -146,7 +163,13 @@ export function Queue({ onOpen }: { onOpen: (id: string) => void }) {
                     {!i.park_it && i.do_not_drive && (
                       <span className="tag dnd">DO NOT DRIVE</span>
                     )}
-                    {!i.park_it && !i.do_not_drive && <span className="muted">—</span>}
+                    {/* A bare dash here would sit next to two rows with a real pill and read
+                        as missing data rather than "checked, no elevated severity" — the
+                        third real state gets the same badge shape, just neutral, same
+                        pattern .tag.quiet already uses on the Emerging tab. */}
+                    {!i.park_it && !i.do_not_drive && (
+                      <span className="tag quiet">STANDARD</span>
+                    )}
                   </td>
                   <td className="num">{i.vehicles_exposed.toLocaleString()}</td>
                   <td className="num">{i.depots_affected}</td>

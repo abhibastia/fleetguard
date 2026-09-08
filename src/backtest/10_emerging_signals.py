@@ -175,3 +175,101 @@ display(
 assert n > 0, "no signals at all — check the corpus edge and the window settings"
 assert n < 2000, f"{n} signals is not a work queue; tighten the rule before shipping this"
 print("emerging-signal build passed")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Per-signal explanation via `ai_extract`
+# MAGIC
+# MAGIC §6 of `ARCHITECTURE.md` says clustering "remains valid for explaining a signal and for
+# MAGIC keeping `ai_extract` spend proportional to what an operator sees" — but until now that
+# MAGIC was the design intent, not code. Nothing in `src/` ever called `ai_extract`. This closes
+# MAGIC that gap the way it was scoped from the start: **once per signal (~n, not ~2.24M)**, on a
+# MAGIC bounded sample of narratives, never on the ingest path (`silver_complaint` already has
+# MAGIC `COMPDESC` — re-deriving component from prose there was rejected once already, I-009).
+
+# COMMAND ----------
+
+NARRATIVES_PER_SIGNAL = 5
+
+spark.sql(f"""
+CREATE OR REPLACE TEMP VIEW signal_narrative_sample AS
+SELECT make, model, comp_top,
+       ARRAY_JOIN(COLLECT_LIST(narrative), ' ||| ') AS sample_text
+FROM (
+  SELECT s.make, s.model, s.comp_top, c.narrative,
+         ROW_NUMBER() OVER (PARTITION BY s.make, s.model, s.comp_top
+                             ORDER BY c.received_date DESC) AS rn
+  FROM gold_emerging_signal s
+  JOIN silver_complaint c
+    ON c.make = s.make AND c.model = s.model
+   AND SPLIT(c.component, ':')[0] = s.comp_top
+   AND c.received_date BETWEEN s.run_start AND s.run_end
+  WHERE c.narrative IS NOT NULL
+)
+WHERE rn <= {NARRATIVES_PER_SIGNAL}
+GROUP BY make, model, comp_top
+""")
+
+print(
+    "signals with at least one narrative to extract from:",
+    spark.table("signal_narrative_sample").count(),
+    "of",
+    n,
+)
+
+# COMMAND ----------
+
+# One ai_extract call per signal — bounded to the same grain as gold_emerging_signal, so
+# cost tracks the panel size, not the corpus. Schema form per the current ai_extract
+# signature (a JSON schema string, not the older label-array form).
+spark.sql("""
+CREATE OR REPLACE TEMP VIEW signal_extraction AS
+SELECT make, model, comp_top,
+       ai_extract(
+         sample_text,
+         '{"failure_mode":{"type":"string"},"severity_language":{"type":"string"}}',
+         map('version','2.0')
+       ) AS extracted
+FROM signal_narrative_sample
+""")
+
+spark.sql("""
+ALTER TABLE gold_emerging_signal ADD COLUMNS IF NOT EXISTS (
+  failure_mode STRING COMMENT 'ai_extract, per signal not per complaint — descriptive only, never a detection input',
+  severity_language STRING COMMENT 'ai_extract, per signal not per complaint — descriptive only, never a detection input'
+)
+""")
+
+spark.sql("""
+MERGE INTO gold_emerging_signal t
+USING signal_extraction e
+ON t.make = e.make AND t.model = e.model AND t.comp_top = e.comp_top
+WHEN MATCHED THEN UPDATE SET
+  t.failure_mode = e.extracted:response:failure_mode::STRING,
+  t.severity_language = e.extracted:response:severity_language::STRING
+""")
+
+explained = spark.sql(
+    "SELECT COUNT(*) AS n FROM gold_emerging_signal WHERE failure_mode IS NOT NULL"
+).collect()[0]["n"]
+print(f"signals with an ai_extract explanation: {explained} of {n}")
+display(
+    spark.sql("""
+      SELECT series_key, failure_mode, severity_language
+      FROM gold_emerging_signal WHERE failure_mode IS NOT NULL
+      ORDER BY fleet_vehicles DESC LIMIT 10
+    """)
+)
+
+# COMMAND ----------
+
+# Not yet wired further downstream: the Lakebase loader, `Signal` in
+# `routers/signals.py`, and `Signals.tsx` all predate this column and do not read it.
+# Surfacing it in the console is real follow-on work, not implied by this cell running —
+# state that explicitly rather than let "the column exists" be mistaken for "the operator
+# sees it".
+print(
+    "NOTE: failure_mode/severity_language are not yet surfaced past this table — "
+    "Lakebase loader, API, and console are unchanged."
+)

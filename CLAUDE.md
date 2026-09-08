@@ -295,6 +295,21 @@ GMC WMIs labelled RAM). 400 generated VINs verified independently: 400/400 exact
 **Lakebase / Phase 5 — UNPARKED 2026-08-31, both decisions made:**
 - Project `projects/summer-bootcamp-2026-v2`, branch `production`, endpoint `primary`,
   host `ep-patient-sun-d1ycq936.database.us-west-2.cloud.databricks.com`, db `databricks_postgres`.
+- **This project is owned by `zach@zachwilson.tech`, not by this project's team** (confirmed
+  2026-09-08 via `databricks postgres list-projects --profile abhi`, which returns every
+  Lakebase project visible on the shared account, not just ours — same flat-namespace
+  pattern as `jobs list`'s 296 jobs). This is *why* I-084's "no `CREATEROLE` on this account"
+  is true here: it is an ownership gap on someone else's project, not a platform-wide
+  Lakebase limitation. Do not conflate the two when reasoning about what's fixable from here.
+- **`enable_pg_native_login: true` is already set on `summer-bootcamp-2026-v2`** (confirmed
+  same session) — corrects the older claim elsewhere that "Lakebase roles are all
+  `LAKEBASE_OAUTH_V1`, no password auth": that described the roles someone happened to
+  inspect, not a project- or platform-level restriction. Native Postgres password roles
+  (`CREATE ROLE ... WITH LOGIN PASSWORD`) are a real, switched-on capability on this project.
+  **Still unverified:** whether this account's identity can actually exercise it (create a
+  new role) on a project it doesn't own — that's a distinct, untested question from the flag
+  being on. Found by checking a bootcamp peer's own project (`zdsteele-capstone`, owned by
+  `zacharysteele8@gmail.com`) at the account-metadata level only — see I-085.
 - **CDF destination AUTHORISED by the user:** `databricks_postgres.bootcamp_students` →
   `bootcamp_students.bootcamp_cdc`. That destination is owned by `zach@zachwilson.tech`
   and holds 354 cohort tables. This is an **explicitly authorised exception** to the

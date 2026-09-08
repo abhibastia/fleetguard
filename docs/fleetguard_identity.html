@@ -73,8 +73,9 @@
 <body>
 <div class="page">
 
-  <h1>FleetGuard</h1><span class="sub">Identity &amp; authorisation architecture</span>
+  <h1>FleetGuard</h1><span class="sub">Identity &amp; authorisation architecture</span><span style="display:inline-block; font-size:9.5px; font-weight:700; letter-spacing:.7px; text-transform:uppercase; color:#b03a3a; background:#fbf1f1; border:1px solid #e0b9b9; padding:2px 8px; border-radius:9px; margin-left:10px; vertical-align:2px">Frozen proposal · 2026-08-31</span>
   <p class="strap">Four token paths, no shared credentials, no long-lived database passwords. Render carries the console in Phase&nbsp;1; Databricks Apps takes over in Phase&nbsp;2.</p>
+  <p class="strap" style="color:#b03a3a">Design intent as proposed — deliberately not updated. The build reversed this priority (Databricks App shipped as primary; Render kept as fallback) and the actual grants differ from Path B/C below. For the as-built system, see <span class="m">fleetguard_identity_current.html</span> or <a href="ARCHITECTURE.md">ARCHITECTURE.md</a> §8a/§8b.</p>
   <div class="rule"></div>
 
   <!-- PATH D -->

@@ -122,6 +122,14 @@ export function DepotRisk() {
         <div className={highRiskCount > 0 ? "stat is-danger" : "stat is-ok"}>
           <div className="v">{highRiskCount}</div>
           <div className="k">High risk (&ge;5% of fleet urgent)</div>
+          {depots.length > 0 && (
+            <div className="stat-bar" title={`${highRiskCount} of ${depots.length} depots`}>
+              <div
+                className="stat-bar-fill"
+                style={{ width: `${(highRiskCount / depots.length) * 100}%` }}
+              />
+            </div>
+          )}
         </div>
         <div className="stat">
           <div className="v">{totalUrgent.toLocaleString()}</div>

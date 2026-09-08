@@ -49,6 +49,8 @@ export interface QueueItem {
   vehicles_exposed: number;
   depots_affected: number;
   consequence: string | null;
+  // Non-null only when a LAUNCHED service campaign already exists for this recall.
+  service_campaign_id: string | null;
 }
 
 export interface ExposedVehicle {
@@ -68,6 +70,7 @@ export interface CampaignDetail {
   vehicles_exposed: number;
   by_depot: Record<string, number>;
   sample_vehicles: ExposedVehicle[];
+  service_campaign_id: string | null;
 }
 
 export interface ApprovalResult {
@@ -296,13 +299,20 @@ export const api = {
   evidence: () => request<Evidence>("/evidence"),
   serviceCampaigns: (limit = 50) =>
     request<ServiceCampaign[]>(`/service-campaigns?limit=${limit}`),
-  workOrders: (params?: { serviceCampaignId?: string; depotId?: string; status?: string }) => {
+  workOrders: (params?: {
+    serviceCampaignId?: string;
+    depotId?: string;
+    status?: string;
+    limit?: number;
+  }) => {
     const q = new URLSearchParams();
     if (params?.serviceCampaignId) q.set("service_campaign_id", params.serviceCampaignId);
     if (params?.depotId) q.set("depot_id", params.depotId);
     if (params?.status) q.set("status", params.status);
-    const qs = q.toString();
-    return request<WorkOrder[]>(`/work-orders${qs ? `?${qs}` : ""}`);
+    // Backend default is 100 with no indication more exist — the console always asks for
+    // its max (500) instead, and the view itself discloses when that cap is actually hit.
+    q.set("limit", String(params?.limit ?? 500));
+    return request<WorkOrder[]>(`/work-orders?${q.toString()}`);
   },
   // `assigned_to`/`actual_cost` deliberately allow `null` (explicit unassign / explicit clear)
   // distinct from omitting the key entirely (leave unchanged) — JSON.stringify drops

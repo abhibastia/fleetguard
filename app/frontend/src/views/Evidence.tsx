@@ -46,29 +46,31 @@ export function Evidence() {
   return (
     <>
       <div className="page-head">
-        <h2>Does early warning actually work?</h2>
+        <h2>When it fires, how much head start does it give?</h2>
         <p>
           Measured against every ODI investigation opened since 2010, with a volume-matched control
-          arm. The gap between the arms is the evidence — the real arm alone is not.
+          arm. It does not catch most investigations — see the rate below — but the ones it does
+          catch, it catches early: a median {real.median_lead_days} days before NHTSA opens the
+          case. The gap between the arms is the evidence — the real arm alone is not.
         </p>
       </div>
 
       <div className="stats">
         <div className="stat is-ok">
+          <div className="v">{real.median_lead_days}d</div>
+          <div className="k">Median lead, real arm</div>
+        </div>
+        <div className="stat">
+          <div className="v">{data.lift}×</div>
+          <div className="k">Lift over placebo</div>
+        </div>
+        <div className="stat">
           <div className="v">{real.rate_pct.toFixed(1)}%</div>
           <div className="k">Detected · real arm</div>
         </div>
         <div className="stat">
           <div className="v">{placebo.rate_pct.toFixed(1)}%</div>
           <div className="k">Detected · placebo</div>
-        </div>
-        <div className="stat">
-          <div className="v">{data.lift}×</div>
-          <div className="k">Lift</div>
-        </div>
-        <div className="stat">
-          <div className="v">{real.median_lead_days}d</div>
-          <div className="k">Median lead</div>
         </div>
       </div>
 
@@ -112,25 +114,30 @@ export function Evidence() {
 
       <div className="panel prose" style={{ marginTop: 20 }}>
         <p style={{ marginTop: 0 }}>
-          <strong>{data.lift}× lift</strong>, two-proportion z ≈ {data.z},{" "}
-          <strong>p ≈ {data.p_value}</strong>. Statistically real, practically modest.
+          The <em>shape</em> is the evidence: real detections cluster near the investigation open
+          date ({real.median_lead_days} days out) while control detections scatter toward the
+          window midpoint ({placebo.median_lead_days} days) — the pattern a detector tracking a
+          genuine defect ramp produces, not one firing on background noise.
         </p>
         <p className="muted" style={{ marginBottom: 0 }}>
-          The <em>shape</em> is stronger evidence than the rate: real detections cluster near the
-          investigation open date ({real.median_lead_days} days) while control detections scatter
-          toward the window midpoint ({placebo.median_lead_days} days) — what a detector tracking a
-          genuine defect ramp produces, rather than one firing on background variance.
+          <strong>{data.lift}× lift</strong>, two-proportion z ≈ {data.z},{" "}
+          <strong>p ≈ {data.p_value}</strong> — statistically real. But lift describes how much
+          more often it fires than chance, not how often it fires at all; the rate below is what
+          answers that.
         </p>
       </div>
 
       <h3>Stated limits</h3>
       <ul className="muted prose">
         <li>
-          It misses roughly five of every six investigations — {real.detected} of {real.n}.
+          <strong>It misses roughly five of every six investigations</strong> —{" "}
+          {real.detected} of {real.n} detected. This is an early, narrow edge on a minority of
+          cases, not a general early-warning net over the fleet.
         </li>
         <li>
-          The control fires at {placebo.rate_pct.toFixed(1)}%, so most detections would have
-          occurred on a busy series with no defect. This is an edge, not an oracle.
+          The control fires at {placebo.rate_pct.toFixed(1)}%, so most individual detections would
+          have occurred on a busy series with no defect. Any single alert should be read that way —
+          the lead time is trustworthy in aggregate, not vehicle-by-vehicle.
         </li>
         <li>
           It predicts that an <strong>investigation will open</strong> — not that a recall will be

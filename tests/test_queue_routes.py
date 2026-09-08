@@ -111,11 +111,63 @@ class TestGetQueue:
 
         assert get_queue(USER, depot_id=None, limit=50) == []
 
+    def test_launched_campaign_carries_its_service_campaign_id(self, monkeypatch):
+        """Before this, the queue looked identical whether a recall had already been launched
+        or not — the only way to find out was clicking Approve and hitting the 409 from the
+        one-active-campaign-per-recall uniqueness index (I-063). The LEFT JOIN must surface
+        that state instead of requiring the user to trigger the error to discover it."""
+        rows = [
+            {
+                "campaign_id": "ALREADY-LAUNCHED",
+                "component": "STEERING",
+                "park_it": False,
+                "do_not_drive": False,
+                "vehicles_exposed": 10,
+                "depots_affected": 3,
+                "consequence": "c",
+                "service_campaign_id": "SC-ALREADY-LAUNCHED-abc123",
+            },
+            {
+                "campaign_id": "NOT-LAUNCHED",
+                "component": "BRAKES",
+                "park_it": False,
+                "do_not_drive": False,
+                "vehicles_exposed": 5,
+                "depots_affected": 2,
+                "consequence": "c",
+                # No key at all — a plain SQL row with no match wouldn't include the column
+                # as an explicit None either; the model's default must cover both shapes.
+            },
+        ]
+        cur = FakeCursor({"fleetguard_vehicle_exposure": rows})
+        install(monkeypatch, queue, cur)
+
+        result = get_queue(USER, depot_id=None, limit=50)
+
+        by_id = {r.campaign_id: r for r in result}
+        assert by_id["ALREADY-LAUNCHED"].service_campaign_id == "SC-ALREADY-LAUNCHED-abc123"
+        assert by_id["NOT-LAUNCHED"].service_campaign_id is None
+
+    def test_queue_join_scopes_to_launched_status_only(self, monkeypatch):
+        """A CANCELLED prior attempt must not read as launched — `campaign_id` is not unique
+        in `fleetguard_service_campaign` on its own, only `(campaign_id) WHERE status =
+        'LAUNCHED'` is (I-063). Asserting the SQL text is the only way to catch a future edit
+        that widens or drops this scope, since a fake row set can't express "this join
+        condition was wrong" the way a live status column can."""
+        cur = FakeCursor({"fleetguard_vehicle_exposure": []})
+        install(monkeypatch, queue, cur)
+
+        get_queue(USER, depot_id=None, limit=50)
+
+        sql = cur.sql_for("fleetguard_vehicle_exposure")
+        assert "LEFT JOIN" in sql
+        assert "sc.status = 'LAUNCHED'" in sql
+
 
 class TestGetCampaign:
     def _script(self, vehicles):
         return {
-            "fleetguard_recall_campaign WHERE": CAMPAIGN_HEAD,
+            "WHERE c.campaign_id = %(cid)s": CAMPAIGN_HEAD,
             "COUNT(DISTINCT e.vin) AS n": [
                 {"depot_id": "DEP-001", "n": 2},
                 {"depot_id": "DEP-002", "n": 1},
@@ -124,12 +176,32 @@ class TestGetCampaign:
         }
 
     def test_unknown_campaign_is_404(self, monkeypatch):
-        cur = FakeCursor({"fleetguard_recall_campaign WHERE": []})
+        cur = FakeCursor({"WHERE c.campaign_id = %(cid)s": []})
         install(monkeypatch, queue, cur)
 
         with pytest.raises(HTTPException) as exc:
             get_campaign(USER, "NOPE", depot_id=None, sample=25)
         assert exc.value.status_code == 404
+
+    def test_service_campaign_id_passes_through_when_already_launched(self, monkeypatch):
+        """Same gap as the queue list: the detail page showed an Approve form with no hint
+        that approving would 409, because nothing here ever asked whether a launch already
+        existed."""
+        head_with_launch = [{**CAMPAIGN_HEAD[0], "service_campaign_id": "SC-17V629000-xyz"}]
+        cur = FakeCursor({**self._script([]), "WHERE c.campaign_id = %(cid)s": head_with_launch})
+        install(monkeypatch, queue, cur)
+
+        detail = get_campaign(USER, "17V629000", depot_id=None, sample=25)
+
+        assert detail.service_campaign_id == "SC-17V629000-xyz"
+
+    def test_service_campaign_id_is_none_when_not_launched(self, monkeypatch):
+        cur = FakeCursor(self._script([]))
+        install(monkeypatch, queue, cur)
+
+        detail = get_campaign(USER, "17V629000", depot_id=None, sample=25)
+
+        assert detail.service_campaign_id is None
 
     def test_vehicles_exposed_is_summed_from_the_depot_breakdown(self, monkeypatch):
         """`vehicles_exposed` is derived, not selected — it must equal the by-depot totals, or

@@ -17,6 +17,13 @@ Companion documents, each with one job:
 Every number below is measured against the live workspace. Anything not yet measured is
 marked **(planned)** and carries no figure.
 
+**Diagrams (as-built, tracks this file):** [`fleetguard_e2e_current.html`](fleetguard_e2e_current.html)
+/ [`.png`](fleetguard_e2e_current.png) (system architecture) ·
+[`fleetguard_identity_current.html`](fleetguard_identity_current.html) /
+[`.png`](fleetguard_identity_current.png) (identity & authorisation, §8a/§8b). The similarly-named
+files without `_current` are the **frozen 2026-08-31 proposal diagrams** — do not confuse the two;
+update these when this file changes, never those.
+
 ---
 
 ## 1. What FleetGuard does
@@ -257,6 +264,15 @@ points. Complaint narratives are a continuum of phrasings, not density islands.
 **What survives.** Clustering failed as a *detector*, not as an *aggregator*. k-means
 subdivision assigns every complaint to a coherent group, which remains valid for explaining
 a signal and for keeping `ai_extract` spend proportional to what an operator sees.
+
+**(planned, code written not yet run)** `10_emerging_signals.py` now calls `ai_extract` once
+per row of `gold_emerging_signal` (~50 calls, not 2.24M) over a 5-narrative bounded sample per
+signal, writing `failure_mode`/`severity_language` — descriptive only, never a detection
+input, same rule as `harm_share`. Written 2026-09-08; not yet executed against live data, and
+the Lakebase loader / `routers/signals.py` / `Signals.tsx` do not read the new columns yet.
+Closes the gap between this section's design claim and what `src/` actually contained — until
+this cell existed, `ai_extract` was never called anywhere in the codebase, despite being named
+as a Spark-pipeline strength in the graded proposal feedback.
 
 ---
 

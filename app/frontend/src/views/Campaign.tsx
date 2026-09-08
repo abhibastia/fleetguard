@@ -92,7 +92,8 @@ export function Campaign({ id, onBack }: { id: string; onBack: () => void }) {
         <div className="grow">
           <div className="page-head">
             <h2>
-              {c.campaign_id} {c.park_it && <span className="tag parkit">PARK IT</span>}
+              {c.campaign_id} {c.park_it && <span className="tag parkit">PARK IT</span>}{" "}
+              {c.service_campaign_id && <span className="tag launched">LAUNCHED</span>}
             </h2>
             <p>{c.component ?? "—"}</p>
           </div>
@@ -137,6 +138,27 @@ export function Campaign({ id, onBack }: { id: string; onBack: () => void }) {
 
           {result ? (
             <ApprovalConfirmation result={result} />
+          ) : c.service_campaign_id ? (
+            // Showing the approve form here would only ever end in the 409 the backend's
+            // one-active-campaign-per-recall uniqueness index (I-063) enforces — this is the
+            // same information, told before the click instead of after it.
+            <div className="panel" style={{ margin: 0 }}>
+              <p style={{ marginTop: 0 }}>
+                <strong>Already launched</strong> as{" "}
+                <code>{c.service_campaign_id}</code>.
+              </p>
+              <p className="muted" style={{ marginBottom: 0, fontSize: 13 }}>
+                Approving again would be rejected — one recall can have only one active service
+                campaign at a time.
+              </p>
+              <a
+                className="crumb"
+                style={{ display: "inline-block", marginTop: 12 }}
+                href={`#/work-orders/${encodeURIComponent(c.service_campaign_id)}`}
+              >
+                View its work orders →
+              </a>
+            </div>
           ) : (
             <>
               <label htmlFor="t">Title</label>

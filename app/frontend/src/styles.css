@@ -401,6 +401,29 @@ h3 {
   color: var(--ok);
 }
 
+/* A number like "3 of 50" is a proportion, not just a count — this thin track makes the
+   fraction visible at a glance instead of requiring mental division. Deliberately not used on
+   every tile: only where the value is genuinely a subset of another stat on the same row. */
+.stat-bar {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  margin-top: 10px;
+  overflow: hidden;
+}
+.stat-bar-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 0.2s var(--ease);
+}
+.stat.is-danger .stat-bar-fill {
+  background: var(--danger);
+}
+.stat.is-ok .stat-bar-fill {
+  background: var(--ok);
+}
+
 /* ── controls ───────────────────────────────────────────────────────────────────────── */
 
 button {
@@ -561,6 +584,13 @@ tbody tr {
   transition: background 0.1s var(--ease);
 }
 
+/* Very subtle zebra striping — long tables (the 50-row Recall queue, the 50-row Emerging
+   list) were a uniform wall of rows with nothing but a border to separate them. Deliberately
+   fainter than the hover tint below, so hovering still reads as the stronger state. */
+tbody tr:nth-child(even) {
+  background: color-mix(in srgb, var(--surface) 96%, var(--line-strong) 4%);
+}
+
 tbody tr:hover {
   background: var(--surface-2);
 }
@@ -603,7 +633,7 @@ thead th.sortable:hover {
 }
 .bar-chart {
   width: 100%;
-  height: 180px;
+  height: 240px;
   display: block;
 }
 .bar-chart-tooltip {
@@ -620,13 +650,12 @@ thead th.sortable:hover {
   box-shadow: var(--shadow-sm);
   z-index: 5;
 }
-.bar-base {
-  fill: var(--accent);
-  opacity: 0.4;
-}
-/* A year whose data doesn't run through year-end — dashed outline and lower opacity so a
-   short bar reads as "incomplete," not "declined." See Trends.tsx for the asterisk/footnote
-   that spells out why. */
+/* `.bar-base` carries no styles of its own on purpose — a complete bar's fill is the
+   per-instance gradient set via the SVG element's own `fill` attribute in BarChart.tsx. A CSS
+   `fill` declaration here would win over that attribute (presentation attributes lose to any
+   matching CSS rule, regardless of source order) and silently blank the gradient out. A
+   partial (incomplete) bar overrides it below with its own flat, dashed, muted look — that
+   distinction is a real signal ("this year isn't finished yet"), not just decoration. */
 .bar-partial {
   fill: var(--accent);
   opacity: 0.18;
@@ -739,6 +768,15 @@ thead th.sortable:hover {
   border: 1px solid var(--warn-line);
 }
 .tag.live {
+  background: var(--ok-bg);
+  color: var(--ok);
+  border: 1px solid var(--ok-line);
+}
+/* Same token as .live (green = "a good, active state exists"), separate class because the
+   two mean different things — one is a still-firing detector run, this is an already-approved
+   service campaign. Reusing .live's class name here would make a future edit to one silently
+   change the other. */
+.tag.launched {
   background: var(--ok-bg);
   color: var(--ok);
   border: 1px solid var(--ok-line);
@@ -1034,6 +1072,60 @@ thead th.sortable:hover {
   display: flex;
   flex-direction: column;
   padding: 18px;
+}
+
+/* Floating dock: the same `.assistant` panel, reachable from every tab instead of sitting
+   beside just one. `position: static` overrides the sticky/top rule above, which assumes a
+   scrolling ancestor that doesn't exist inside a fixed-position dock. */
+.assistant-fab {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent);
+  color: var(--on-accent);
+  border: none;
+  box-shadow: var(--shadow-lg);
+  cursor: pointer;
+  z-index: 30;
+  transition:
+    transform 0.15s var(--ease),
+    box-shadow 0.15s var(--ease);
+}
+.assistant-fab:hover {
+  transform: translateY(-1px);
+}
+.assistant-fab svg {
+  width: 22px;
+  height: 22px;
+}
+
+.assistant-dock {
+  position: fixed;
+  right: 22px;
+  bottom: 86px;
+  width: 400px;
+  max-width: calc(100vw - 32px);
+  max-height: min(72vh, 680px);
+  z-index: 29;
+  border-radius: var(--r);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+.assistant-dock .assistant {
+  position: static;
+  top: auto;
+  height: 100%;
+  max-height: min(72vh, 680px);
+}
+.assistant-dock .assistant .turns {
+  max-height: none;
+  flex: 1;
 }
 
 .assistant .turns {

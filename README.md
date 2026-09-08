@@ -13,21 +13,30 @@ instead of one:
   human approval — from recall to dispatched work order in seconds, not the days a manual
   cross-reference takes.
 - **Proactive — early warning.** Detect a complaint pattern before NHTSA opens a formal
-  investigation into it. **Measured, not projected: 16.0% of investigations detected at a
-  median 197-day lead, against 11.1% on a volume-matched placebo control (1.44× lift,
-  z ≈ 2.62, p ≈ 0.009).** The system predicts that an investigation will open — not that a
-  recall will be issued, and not which VINs are affected; see `docs/ARCHITECTURE.md` §1 for
-  the precise, deliberately narrow claim.
+  investigation into it. **Measured, not projected: when it fires, a median 197-day lead on
+  the investigation opening — but it only fires on 16.0% of investigations, against 11.1% on
+  a volume-matched placebo control (1.44× lift, z ≈ 2.62, p ≈ 0.009).** A narrow, real edge on
+  a minority of cases, not a general early-warning net. The system predicts that an
+  investigation will open — not that a recall will be issued, and not which VINs are
+  affected; see `docs/ARCHITECTURE.md` §1 for the precise, deliberately narrow claim.
+
+![FleetGuard end-to-end architecture](docs/fleetguard_e2e_current.png)
+
+*As-built, tracks `docs/ARCHITECTURE.md`. See also the [identity & authorisation diagram](docs/fleetguard_identity_current.png) and the [frozen 2026-08-31 proposal diagrams](docs/FleetGuard_Proposal.md) for what changed and why.*
 
 ## Live demo
 
-**https://fleetguard-console-abhi.onrender.com**
+**Primary — Databricks App:** `fleetguard-console` (real per-user OBO — Unity Catalog and
+Postgres RLS enforce under the caller's own Databricks identity, not a simulation). Kept
+stopped between sessions to avoid idle cost; ask if you want it started. **Verified end to
+end under the owner's identity only** — a second real identity has not yet signed in, so
+treat that path as unconfirmed for anyone else until it has (`docs/STATUS.md`, I-084).
 
-Runs against live Lakebase, not a snapshot. Sign-in uses Databricks OAuth (`render-u2m`) —
-anyone with an identity in the shared workspace this was built against can sign in as
-themselves and read real fleet data under their own token; launching a service campaign is
-further restricted to an approver allowlist. The **Evidence** tab needs no sign-in — it's
-the published backtest result above, sourced live from the same measurement.
+**Fallback — Render:** https://fleetguard-console-abhi.onrender.com — kept live, not the
+plan of record. Runs against live Lakebase via `render-u2m` (Databricks OAuth; the browser
+login round-trip is itself unconfirmed) or against a committed snapshot via GitHub sign-in.
+The **Evidence** tab needs no sign-in on either surface — it's the published backtest result
+above, sourced live from the same measurement.
 
 ## What it's built on
 
@@ -36,9 +45,11 @@ the published backtest result above, sourced live from the same measurement.
   split so `bronze = silver + quarantine` reconciles exactly at every layer.
 - **Semantic retrieval**: Databricks AI Search over 1.7M+ complaint narrative chunks,
   hybrid (BM25 + embedding) search.
-- **A registered, deployed agent** (Mosaic AI Agent Framework, Model Serving): four tools
-  (complaint search, fleet exposure, emerging-signal lookup, campaign proposal), traced with
-  MLflow, evaluated against a held-out golden set built from NHTSA's own recall text.
+- **A registered, deployed agent** (Mosaic AI Agent Framework, Model Serving): six tools —
+  five read (complaint search, fleet exposure, fleet vocabulary lookup, emerging-signal
+  lookup, campaign proposal) and one real write (`open_defect_signal`, executed by the app
+  under the caller's own identity, never by the model) — traced with MLflow, evaluated
+  against a held-out golden set built from NHTSA's own recall text.
 - **Lakebase Postgres** as the operational store for fleet state (vehicles, depots, service
   campaigns, work orders, audit log) — Change Data Feed replicates every write into Unity
   Catalog within seconds, and Postgres Row-Level Security enforces depot-scoped reads below

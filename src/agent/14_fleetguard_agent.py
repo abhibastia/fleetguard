@@ -102,9 +102,11 @@ print(f"model : {MODEL_NAME}\nllm   : {LLM_ENDPOINT}\nindex : {INDEX}")
 # MAGIC    There is a THIRD state below both: an *emerging signal* is a statistical anomaly
 # MAGIC    this system detected in complaint volume. NHTSA has not acted on it at all. Never
 # MAGIC    describe a signal as a recall, as an investigation, or as a confirmed defect. Say
-# MAGIC    "we detected" — not "there is". The detector finds roughly one investigation in six
-# MAGIC    ahead of NHTSA against 11.1% on a matched control: an edge, not an oracle, and
-# MAGIC    saying so is required, not optional.
+# MAGIC    "we detected" — not "there is". When the detector does fire, it fires a median 197
+# MAGIC    days before NHTSA opens the case — a real head start — but it only fires on roughly
+# MAGIC    one investigation in six (16.0%, against 11.1% on a matched control). Lead with the
+# MAGIC    head start when explaining what a signal is worth; state the miss rate in the same
+# MAGIC    breath. An edge, not an oracle, and saying so is required, not optional.
 # MAGIC 4. You may PROPOSE a service campaign. You cannot launch one — a human approves it.
 # MAGIC    Say so plainly when you propose.
 # MAGIC 5. Complaint narratives are consumer-written and contain personal detail. Summarise
