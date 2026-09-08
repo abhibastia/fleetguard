@@ -247,6 +247,16 @@ failed during the build or exists because something adjacent to it failed silent
 
 ## Risks, honestly
 
+0. **The App is proved for one person, and the failure mode is the bad one (I-084).** This is
+   the project's live risk as of 2026-09-08, replacing the ones below that were retired. Every
+   verification of the Databricks App ran under the owner's identity. If Lakebase does not
+   auto-provision a Postgres login role, a judge authenticates successfully, sees the console
+   shell, gets their real identity back from `/api/me` — and then every data route 500s. **A
+   failure that arrives after visible success reads as a broken project, not a missing grant.**
+   That is I-050's lesson one layer up, and it is unresolved because it cannot be tested from
+   this account. One second-identity sign-in retires it; no amount of further owner-side
+   testing can.
+
 1. ~~**Phase 5 is completely untested.**~~ **FULLY RETIRED 2026-09-01** — schema, load, CDF
    replication and capture latency are all measured. This was the project's largest risk.
 2. ~~**The differentiator is still the risk, and the verdict is imminent.**~~ **RESOLVED
@@ -584,6 +594,24 @@ value, because the Emerging tab orders by that column. Fixed with the gold layer
 tiers (`EXACT → MODEL_VARIANT → MAKE_ONLY → NONE`), reported rather than blended. **I-075.**
 
 ### Next, in priority order
+
+**⚠️ HIGHEST PRIORITY — I-084: the App is verified under ONE identity only, and the open risk
+fails *after* a successful login.** The Databricks App works end to end for the owner. Nothing
+proves it works for a judge. `db.py` connects to Postgres **as the caller**, and it is unknown
+whether Lakebase auto-provisions a login role on first connect: measured live, `zach@zachwilson.tech`
+has one, but `eumardassis@gmail.com` and `gudetayared@gmail.com` — both owners on this metastore
+— do **not**. "The judges are admins" does not settle it; admin clears the app ACL, Postgres
+roles are a separate namespace. **We cannot pre-create roles** (no `CREATEROLE`, Phase 10), so
+if auto-provisioning does not happen there is no fix from this account.
+
+**One sign-in by one real second identity settles this**, along with the untested browser
+OAuth-consent step. **Do not test with `zach@zachwilson.tech`** — he already has a role, so a
+pass proves nothing. Pick someone without one. Fallback if it fails: Render's `app-login` +
+snapshot needs no Databricks identity at all.
+
+Also decide before the demo: **judges are not in `FLEETGUARD_APPROVERS`**, so they can read
+everything and get 403 on approve. Admin does not bypass it — the gate is application logic.
+
 
 0. ~~**The agent cannot see the fleet's make/model vocabulary**~~ and ~~**rule 6 reads as a
    permission gate**~~ — **both fixed, deployed and verified against the live endpoint

@@ -26,6 +26,57 @@ no error and passed the obvious check.
 
 ## Tooling / process
 
+### I-084 — **OPEN RISK:** a judge may sign into the App successfully and have every data route fail, and we cannot pre-provision the fix
+*Date:* 2026-09-08 · *Status:* **OPEN — untestable from this account, decide before the demo**
+
+**The question.** The Databricks App was verified end to end on 2026-09-08 — but **only under
+one identity, the owner's**. Nothing tested proves it works for a second person. The specific
+unknown: `db.py` mints a Lakebase credential from the caller's token and then connects to
+Postgres **as that identity**. Does Lakebase **auto-provision a Postgres login role** on first
+connect, or must the role already exist?
+
+**Why "the judges are admins" does not answer it.** It answers a different question. Workspace
+admin clears the app's ACL (`admins: CAN_MANAGE`) and lets them start the stopped app. Postgres
+roles are a **separate** namespace. Measured live:
+
+| identity | role on this metastore | Lakebase login role |
+|---|---|---|
+| `zach@zachwilson.tech` | owner of catalog `main` | **YES** |
+| `eumardassis@gmail.com` | owner of `bootcamp_students` | **NO** |
+| `gudetayared@gmail.com` | owner of `tabular` | **NO** |
+
+Two of the three named owners have no role. 27 login roles exist in total, all cohort members
+who have *used* Lakebase — which is consistent with **either** answer, so the population is
+evidence of nothing on its own.
+
+**The workaround is closed.** We cannot pre-create roles for them: Phase 10 established this
+account has **no `CREATEROLE`** on the shared Lakebase instance, correctly restricted on
+infrastructure shared with ~296 students. If auto-provisioning does not happen, there is no
+Lakebase-side fix available from here.
+
+**Why it is worse than an ordinary unknown.** The failure lands *after* a successful login. An
+admin judge authenticates, the shell renders, `/api/me` returns their real identity — and then
+every data route 500s. A failure that arrives after visible success reads as a broken project
+rather than a missing grant, and it is the single most damaging shape a demo failure can take.
+Compare I-050: the same lesson, one layer up.
+
+**How to settle it — one test, and the tester must be chosen deliberately.** A single sign-in
+by a real second identity resolves this, the browser OAuth-consent question (scopes were only
+ever exercised with a programmatic bearer token) and the ACL question at once.
+**`zach@zachwilson.tech` is the wrong tester** — he already has a role, so a pass proves
+nothing. Pick someone **without** one.
+
+**Fallback if it fails.** Render, running `app-login` + snapshot, requires no Databricks
+identity at all and is immune to this entire class of problem. This is a concrete vindication
+of the 2026-09-08 decision to keep the Render integration rather than delete it.
+
+**Separately, and by design:** `FLEETGUARD_APPROVERS` holds the owner's email only, so a judge
+can read everything and gets **403 on approve** — the approval gate is application logic, and
+admin status does not bypass it. If judges should exercise the approval flow (arguably the
+strongest part of the demo), they must be added explicitly.
+
+---
+
 ### I-083 — App OBO scopes are ignored in `app.yaml`, and a granted scope looks identical to a missing one until you restart — **SILENT**
 *Date:* 2026-09-08 · *Status:* resolved
 
