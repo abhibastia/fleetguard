@@ -207,7 +207,7 @@ Three layers, doing different jobs. Full rationale in `src/pipelines/expectation
 | Layer | What | Run |
 |---|---|---|
 | **Unit — backend** (`tests/*.py`, 23 files) | Pure logic, no Databricks: VIN/chunking/naming, the auth seam, scoping, db helpers, the evaluation scorer's negation logic. **341 tests, ~1 s.** | `pytest` |
-| **Unit — frontend** (`app/frontend/src/lib/*.test.ts`, 3 files) | `api.ts`'s error handling, `theme.ts`, `markdown.ts`. Zero frontend tests existed before 2026-09-02. **21 tests.** | `npm --prefix app/frontend run test` |
+| **Unit — frontend** (`app/frontend/src/lib/*.test.ts`, 4 files) | `api.ts`'s error handling, `theme.ts`, `markdown.ts`, and `dates.ts`'s overdue comparison (I-087 — mutation-checked to fail in **both** UTC+2 and UTC-7, so it catches a timezone bug from the timezone where that bug is invisible). Zero frontend tests existed before 2026-09-02. **30 tests.** | `npm --prefix app/frontend run test` |
 | **LDP expectations** (`src/pipelines/**/*.sql`) | Row-level, in-pipeline. Post-routing invariants + explicit `_dq_failures` quarantine split. | runs with the pipeline |
 | **Data quality** (`tests/test_data_quality.py`) | Cross-table invariants against live tables. **21 tests, 73 s.** | `pytest -m integration --run-integration` |
 

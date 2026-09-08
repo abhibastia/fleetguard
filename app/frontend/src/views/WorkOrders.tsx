@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, ApiError, type ServiceCampaign, type Technician, type WorkOrder } from "../lib/api";
+import { isOverdue } from "../lib/dates";
 import { SortIndicator, useSort } from "../lib/sort";
 
 const STATUSES = ["OPEN", "IN_PROGRESS", "COMPLETED", "CANCELLED"] as const;
@@ -14,10 +15,9 @@ const WORK_ORDER_FETCH_LIMIT = 500;
 
 type SortKey = "wo_id" | "vin" | "depot_id" | "due_date" | "status" | "actual_cost";
 
-function isOverdue(w: WorkOrder): boolean {
-  if (!w.due_date || w.status === "COMPLETED" || w.status === "CANCELLED") return false;
-  return new Date(w.due_date) < new Date(new Date().toDateString());
-}
+// `isOverdue` lives in lib/dates.ts, not here: it was wrong once (a UTC-vs-local parsing
+// mismatch that flagged everything due *today* as overdue for any viewer behind UTC), and this
+// project's rule is that logic which has already failed gets extracted where it can be tested.
 
 /**
  * Work orders — what happens after "approve," which until now nothing showed.
@@ -221,7 +221,10 @@ export function WorkOrders({
     open: orders.filter((o) => o.status === "OPEN").length,
     inProgress: orders.filter((o) => o.status === "IN_PROGRESS").length,
     completed: orders.filter((o) => o.status === "COMPLETED").length,
-    overdue: orders.filter(isOverdue).length,
+    // Wrapped, not point-free: `filter(isOverdue)` would pass the array **index** into
+    // `isOverdue`'s optional `today` parameter, comparing a date string to a number for every
+    // row after the first. TypeScript rejects it, which is the only reason it was not shipped.
+    overdue: orders.filter((o) => isOverdue(o)).length,
   };
 
   return (

@@ -26,6 +26,78 @@ no error and passed the obvious check.
 
 ## Tooling / process
 
+### I-087 — every work order due **today** rendered as OVERDUE, but only for viewers behind UTC — **SILENT**, and invisible from the author's own screen
+*Date:* 2026-09-09 · *Status:* ✅ resolved
+
+**Found by** working through the one line in `scratchpad.txt` that was a correctness question
+rather than a feature request — "timezone of date columns". The schema turned out to be right
+(`TIMESTAMPTZ` throughout, `DATE` for date-only), so the answer was "no problem here" until the
+same question was asked one layer up, at the browser.
+
+**The bug.** `WorkOrders.tsx`:
+
+```js
+return new Date(w.due_date) < new Date(new Date().toDateString());
+```
+
+Two `new Date()` calls, two **different parsing rules**:
+- `new Date("2026-09-08")` — ISO date-only — parses as **UTC** midnight.
+- `new Date("Tue Sep 08 2026")` — what `toDateString()` produces — parses as **local** midnight.
+
+For a viewer *behind* UTC, local midnight is later in absolute time than UTC midnight of the
+same calendar day, so today's own date compares as earlier than "today" and **every open work
+order due today rendered as OVERDUE**. Measured:
+
+| timezone | work order due today |
+|---|---|
+| `Europe/Berlin` (UTC+2 — the author's) | correctly not overdue |
+| `America/Los_Angeles` (UTC-7 — **the workspace's own region**) | **flagged OVERDUE** |
+
+**Why it survived.** It is correct east of Greenwich and wrong west of it. Everything the author
+sees is right; everything a US-based judge sees is wrong. No error, no warning — the overdue
+count on the stat tile and the row badges are simply inflated. The same shape as I-012
+(`_rescued_data` reading 0 while 143 rows were mis-parsed): the check that was run was real, it
+just was not the check that mattered.
+
+**A second defect it was hiding.** The backend has always defined overdue as
+`due_date < CURRENT_DATE` (`depots.py`, plain SQL, correct). So the console and the Depot Risk
+tile held **two different definitions of overdue** and could disagree about the same rows. Only
+one of them was wrong, but nothing compared them.
+
+**Fix.** `due_date` is a Postgres `DATE` arriving as `YYYY-MM-DD`, so compare the **strings** and
+never construct a `Date` at all — ISO date-only sorts lexicographically in date order, which is
+both correct and timezone-free, and matches the backend's definition exactly. Extracted to
+`lib/dates.ts` with `today` injectable, per the standing rule that logic which has already been
+wrong once moves somewhere it can be tested. 9 tests added (`lib/dates.test.ts`).
+
+**The tests were mutation-checked, and the result is the useful part.** Restoring the original
+expression fails **2 tests in Europe/Berlin and 3 in America/Los_Angeles** — the extra LA failure
+being the timezone-dependent "due today" case. Injecting `today` is what makes the suite fail in
+the *author's* timezone, where the bug itself is invisible. A test that only failed in LA would
+have reproduced the original mistake in a new place: correct on someone else's machine, useless
+on the one where the code is written.
+
+**And TypeScript caught a fresh bug introduced by the fix.** Making `today` an optional second
+parameter silently broke `orders.filter(isOverdue)`, because `Array.filter` passes
+`(value, index, array)` — the array **index** would have bound to `today`, comparing a date
+string against a number for every row after the first. `tsc` rejected it via a `PostToolUse`
+hook before it could run. An injectable-parameter design and a point-free `filter` are
+individually reasonable and jointly wrong; the call site is now wrapped, with a comment saying
+why it is not point-free.
+
+**Checked and deliberately not changed:** `Trends.tsx` also parses a date string, but appends
+`T00:00:00Z` explicitly and reads it back with `getUTCFullYear`/`getUTCMonth`/`getUTCDate`
+throughout, displaying the raw string rather than a formatted `Date`. It is internally
+consistent and correct. Working code adjacent to a bug is not itself a bug.
+
+**Lesson.** A date-only value has no timezone, so any code path that turns one into an instant
+has invented information. The two safe options are to compare the strings, or to be explicit
+about the zone *and* read it back in the same zone — `Trends.tsx` does the second, this now does
+the first. Mixing the two is what fails, and it fails in a direction that depends on where the
+reader is sitting, which is the one variable no amount of local testing varies.
+
+---
+
 ### I-086 — the App's Lakebase scope was granted on the app and never consented to by the user — a **third** configuration plane nothing we had documented mentioned — **SILENT**
 *Date:* 2026-09-08 · *Status:* ✅ **resolved same day** — root-caused, fixed from this account, and verified
 
