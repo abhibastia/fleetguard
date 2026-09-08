@@ -122,7 +122,7 @@ CDF history holds **2** rows for that signal — the insert and its tombstone, p
 the fact table holds **0**. Under the superseded pattern it would have stayed at 3 and 51 with
 the deleted row presented as current, for as long as the table existed.
 
-**Encoded as a regression**, not just fixed: `14_cdf_to_gold_facts` asserts
+**Encoded as a regression**, not just fixed: `21_cdf_to_gold_facts` asserts
 `live_keys + deleted_keys == distinct_keys`, asserts the fact row count equals the live-key
 count, and — while any delete exists — asserts the **superseded pattern still over-counts**.
 If that last assertion ever stops firing, the check has gone blind and says so.
