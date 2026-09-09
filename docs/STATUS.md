@@ -619,9 +619,11 @@ scale-to-zero. The only continuously-billing resource is the **AI Search endpoin
 ~$6.72/day** — a known, accepted cost (I-018), roughly $115 between now and the demo.
 
 **One thing is waiting on another person, and as of 2026-09-09 it no longer blocks anything:**
-TA Raghu (`raghavendra.yama@gmail.com`, who is **also one of the judges**) has `CAN_USE` on the
-App and has been asked to sign in and browse. See **A1** — he already has a Lakebase role, so
+TA Raghu (`raghavendra.yama@gmail.com`, who is **also one of the judges**) has `CAN_MANAGE` on
+the App and has been asked to sign in and browse. See **A1** — he already has a Lakebase role, so
 his pass cannot close A1 on its own, and neither can the other two judges, who also have roles.
+**All three judges can start the app themselves** as of 2026-09-09, so none of them is waiting on
+the owner to bring it up.
 **A1's demo-day risk is retired regardless of his reply**; what remains is a robustness question
 off the critical path.
 
@@ -638,8 +640,9 @@ Everything between here and there is history, kept for the record.
 | **I-087 found and fixed** | Work orders due *today* rendered as OVERDUE for any viewer behind UTC. Correct in the author's timezone, wrong in the workspace's own region. |
 | **UC Functions + MCP — declined** | Investigated and **deliberately not built**. Reasoning recorded in **C4** so it is not re-proposed. |
 | **B2 done — Phase 11 complete** | `scripts/seed_demo_state.py`, 711 writes **through the real API**. Audit log 11 → **723** rows, work orders 230 → **331** across 3 campaigns, costs 1 → **144**. Re-run makes **0 writes**. Revived a dead feature: `overdue_work_orders` was **0 on all 60 depots** because every due date was identical. |
-| **A2 decided — all three judges can approve** | Four addresses in `app.yaml`, each verified as a live workspace identity first. Found and fixed the half that would have failed on the day: **only Raghu could open the app**; the other two judges now have `CAN_USE`. **Deployed and verified the same day** — the deploy also shipped two commits (`signals.py`/I-079, console bundle/I-087) that had reached `main` but never the App. |
+| **A2 decided — all three judges can approve** | Four addresses in `app.yaml`, each verified as a live workspace identity first. Found and fixed the half that would have failed on the day: **only Raghu could open the app**; the other two judges now have `CAN_MANAGE` (upgraded 2026-09-09 so all three can start the app themselves). **Deployed and verified the same day** — the deploy also shipped two commits (`signals.py`/I-079, console bundle/I-087) that had reached `main` but never the App. |
 | **I-091 / I-092 — two demo-breaking failures found by a dry run** | `/api/signals` **500'd** (`match_basis` read shipped ahead of its migration) and the **agent endpoint was STOPPED**, not merely scaled to zero — requests do not wake it. Both fixed and verified. Neither was visible to any test. |
+| **Judges given `CAN_MANAGE`** | Upgraded from `CAN_USE` so they can **start the app themselves** — a bootcamp project should not need the owner awake to be looked at. `CAN_USE` cannot start stopped compute and there is no level in between, so this is the smallest grant that works; it also carries deploy/update/delete. `app.yaml` was checked for secrets first — there are none. |
 | **`docs/DEMO.md` written** | The runbook that did not exist: pre-flight with measured timings, nine beats, every number with its source, and an explicit *what not to claim*. |
 | **A1 largely retired** | **All three judges already hold Lakebase roles**, so I-084's "succeeds at login, 500s on every data route" cannot happen to the judging audience. What is left is a robustness question no judge can answer. |
 
@@ -738,15 +741,16 @@ works — a clean false negative that reads like a real finding, and was only ca
 owner's result was impossible.
 
 **A1 state as of 2026-09-09 — in flight, but it will not close A1 on its own.** TA Raghu
-(`raghavendra.yama@gmail.com`) has been granted **`CAN_USE`** on the app and asked to sign in and
-browse. Three things a cold session must not misread:
+(`raghavendra.yama@gmail.com`) has been granted **`CAN_MANAGE`** on the app (upgraded from
+`CAN_USE` on 2026-09-09, along with the other two judges) and asked to sign in and browse. Three things a cold session must not misread:
 - **He already has a Lakebase login role** (checked: `postgres list-roles` on
   `summer-bootcamp-2026-v2`, 32 roles, his among them). So a pass proves the ACL, the consent
   flow and the non-owner code paths — **not** the auto-provisioning question that actually
   threatens the demo. **A1 still needs a tester without a role.** Most of the ~296-person cohort
   qualifies; check any candidate with that same command before asking them.
-- **The app must be started for him** — `CAN_USE` does not permit starting stopped compute, and
-  the app is deliberately stopped.
+- ~~**The app must be started for him**~~ — **superseded 2026-09-09: all three judges now hold
+  `CAN_MANAGE` and can start it themselves.** Deliberate, at the user's direction: this is a
+  bootcamp project and judges should not need the owner awake to look at it.
 - **He is in `FLEETGUARD_APPROVERS`** (added `dfcc13c`), so Approve would **succeed** for him,
   writing a service campaign plus ~200 work orders and firing CDF. The app ACL and the approver
   list are independent mechanisms — `CAN_USE` grants no protection here. He has been asked not
@@ -764,7 +768,13 @@ useless without being able to open the app, and **only Raghu had `CAN_USE`** —
 judges could not reach the console at all. Granted with **`apps update-permissions`**, not
 `set-permissions`: the latter *replaces* the whole ACL and would have dropped the existing
 entries, the same footgun shape as `serving-endpoints update-config` replacing `served_entities`.
-Final ACL: owner `CAN_MANAGE`, `admins` `CAN_MANAGE`, three judges `CAN_USE`.
+Final ACL: owner `CAN_MANAGE`, `admins` `CAN_MANAGE`, **three judges `CAN_MANAGE`** — upgraded
+from `CAN_USE` on 2026-09-09 so they can **start the app themselves**. `CAN_USE` cannot start
+stopped compute and there is no level between the two (`get-permission-levels` returns exactly
+`CAN_USE` and `CAN_MANAGE`), so this is the smallest grant that meets the requirement. It also
+carries deploy/update/**delete**. Checked before granting: `app.yaml` holds no secrets — only
+auth mode, data mode, PG project, host and the approver list — so "get app environment" exposes
+nothing sensitive.
 
 **DEPLOYED AND VERIFIED LIVE 2026-09-09** — deployment `01f1ac4926e91a33831468ede9ae27cd`,
 `SUCCEEDED`. The four-address list was confirmed *in the workspace copy* of `app.yaml` after the
@@ -917,7 +927,7 @@ guidance alongside rows.
 |---|---|---|
 | AI Search `fleetguard-vs` | **running, ~$6.72/day** | ~17 days ⇒ **~$115** if left up to the demo (I-018). The only continuously-billing resource. **Do not rebuild the index inside the demo window** — it is most of a working day |
 | Agent serving endpoint | v6, **scale-to-zero ON**, restored 2026-09-09 after being found **STOPPED** | `agents.deploy()` resets this to `False` on *every* deploy — re-assert it after any redeploy. **`scale_to_zero_enabled: True` does not mean the endpoint works** (I-092): it read `True` while the entity was `DEPLOYMENT_STOPPED` and every request 400'd. Check `state.ready`, not the flag |
-| Databricks App | **STOPPED** — brought up 2026-09-09 to deploy the approver list + two stale commits, stopped again once verified | `databricks apps start fleetguard-console`, ~2 min. It will not answer a cold URL, and `CAN_USE` does not let a tester start it — **so no judge, Raghu included, can test on their own**; bring it up before anyone else tries |
+| Databricks App | **STOPPED** — brought up 2026-09-09 to deploy the approver list + two stale commits, stopped again once verified | `databricks apps start fleetguard-console`, ~2 min (measured 117 s to `RUNNING`). It will not answer a cold URL. **All three judges now hold `CAN_MANAGE` and can start it themselves** (2026-09-09) — so a stopped app no longer blocks them, but they can also bring up billing compute unattended |
 | `fleetguard-cdf-to-gold` | **UNPAUSED** | Event-driven, not scheduled; fires only on agent writes or signal loads, capped at 1 run/min |
 
 ### E. Demo-day mechanics, easy to forget
@@ -935,7 +945,7 @@ guidance alongside rows.
 - **The agent endpoint stops, and a request does not wake it (I-092).** Restore takes **~3 min**
   and there is no `start` subcommand. This is step 1 of `DEMO.md`'s pre-flight for a reason.
 - **The approver list IS deployed** as of 2026-09-09 (deployment `01f1ac4926e91a33831468ede9ae27cd`,
-  `SUCCEEDED`): four addresses, three judges, all holding `CAN_USE`. Nothing further is needed —
+  `SUCCEEDED`): four addresses, three judges, all holding `CAN_MANAGE`. Nothing further is needed —
   but the general rule stands for any *future* `app.yaml` edit, because an app running an older
   deployment enforces the older list and its 403 is identical to a missing grant.
 - **Always `databricks sync --dry-run` before deploying.** This deploy silently carried two

@@ -19,7 +19,7 @@ Three things are asleep and **two of them do not wake on their own.**
 |---|---|---|---|
 | 1 | `databricks serving-endpoints get agents_bootcamp_students-fleetguard-fleetguard_agent --profile abhi` | — | Check `state.ready`. If `NOT_READY` / `DEPLOYMENT_STOPPED`, do step 2 |
 | 2 | **Restore the agent endpoint** — see below | **~3 min** (measured 184 s) | **A stopped endpoint does NOT wake on request.** It returns `400 The given endpoint is stopped` and the Assistant panel shows an error |
-| 3 | `databricks apps start fleetguard-console --profile abhi` | **~2 min** (measured 117 s to `RUNNING`) | `apps start` returns after ~105 s but `app_status` is still `UNAVAILABLE`; poll until `RUNNING` |
+| 3 | `databricks apps start fleetguard-console --profile abhi` | **~2 min** (measured 117 s to `RUNNING`) | `apps start` returns after ~105 s but `app_status` is still `UNAVAILABLE`; poll until `RUNNING`. **Any of the three judges can run this too** — they hold `CAN_MANAGE` |
 | 4 | Ask the assistant one throwaway question | ~20 s | First answer after a restore is slower (measured 20 s vs 13 s warm) |
 | 5 | `curl .../api/signals` → expect **200** | ~1 s | This route has broken before (I-091) and it is the proactive half of the story |
 
@@ -164,10 +164,13 @@ B1's tiered match.
 
 - **The agent endpoint stops and does not wake.** Highest-risk item; see pre-flight. Found dead
   during this dry run, having been believed merely scaled-to-zero.
-- **Judges can approve.** All three are in `FLEETGUARD_APPROVERS` and hold `CAN_USE`. An approval
+- **Judges can approve.** All three are in `FLEETGUARD_APPROVERS` and hold `CAN_MANAGE`. An approval
   writes up to ~200 work orders and replicates to **append-only** CDF that cannot be scrubbed.
   Fine if intended — budget the cleanup.
-- **`CAN_USE` cannot start stopped compute**, so nobody can look at the app unless you start it.
+- **Judges can start the app themselves** (`CAN_MANAGE`, granted 2026-09-09) — deliberate, since
+  this is a bootcamp project and they should not need you awake to look at it. Two consequences:
+  they can bring up billing compute unattended, and `CAN_MANAGE` also covers deploy/update/delete,
+  which is simply the smallest level that permits starting — there is no narrower option.
 - **Cold starts:** app ~2 min, agent restore ~3 min, first answer ~20 s.
 - **If a route misbehaves,** check it directly — `/api/signals` returning 500 while twelve other
   routes return 200 is easy to miss from the UI alone (I-091).
@@ -192,7 +195,40 @@ B1's tiered match.
 
 ---
 
-## 6. Shutdown
+## 6. For a judge looking on their own
+
+All three judges hold `CAN_MANAGE`, so none of them needs the owner available. Send them this:
+
+> **Console:** `https://fleetguard-console-1352785079224954.aws.databricksapps.com`
+>
+> The app is kept **stopped** between sessions so it isn't billing idle compute, so it will not
+> answer a cold URL. Start it first — it takes about two minutes:
+>
+> ```bash
+> databricks apps start fleetguard-console
+> ```
+>
+> **You will see an OAuth consent screen** listing `postgres`, `sql` and `model-serving`. Accept
+> it. If you decline, every data page returns `403 Invalid scope` and the app looks broken rather
+> than unauthorised.
+>
+> **The Assistant panel needs a second service** that is also asleep and does **not** wake on
+> request. If chat errors, see the restore snippet in §1 — about three minutes.
+>
+> **You can approve a campaign** — you are on the approver list. Be aware it writes a service
+> campaign plus one work order per exposed vehicle (up to ~200 rows) and replicates to an
+> append-only log that cannot be scrubbed. Please do it deliberately rather than to see what the
+> button does.
+>
+> **Please stop the app when you're done:** `databricks apps stop fleetguard-console`.
+
+Two things this grant carries that are worth knowing: judges can bring up **billing compute**
+unattended, and `CAN_MANAGE` also permits deploy, update and **delete**. There is no permission
+level between `CAN_USE` and `CAN_MANAGE`, so this is the smallest grant that allows starting —
+accepted deliberately, since a bootcamp project that can only be seen when its author is awake is
+worse.
+
+## 7. Shutdown
 
 ```bash
 databricks apps stop fleetguard-console --profile abhi
