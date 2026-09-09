@@ -637,7 +637,7 @@ Everything between here and there is history, kept for the record.
 | **I-087 found and fixed** | Work orders due *today* rendered as OVERDUE for any viewer behind UTC. Correct in the author's timezone, wrong in the workspace's own region. |
 | **UC Functions + MCP — declined** | Investigated and **deliberately not built**. Reasoning recorded in **C4** so it is not re-proposed. |
 | **B2 done — Phase 11 complete** | `scripts/seed_demo_state.py`, 711 writes **through the real API**. Audit log 11 → **722** rows, work orders 230 → **331** across 3 campaigns, costs 1 → **144**. Re-run makes **0 writes**. Revived a dead feature: `overdue_work_orders` was **0 on all 60 depots** because every due date was identical. |
-| **A2 decided — all three judges can approve** | Four addresses in `app.yaml`, each verified as a live workspace identity first. Found and fixed the half that would have failed on the day: **only Raghu could open the app**; the other two judges now have `CAN_USE`. Needs a **redeploy** to take effect. |
+| **A2 decided — all three judges can approve** | Four addresses in `app.yaml`, each verified as a live workspace identity first. Found and fixed the half that would have failed on the day: **only Raghu could open the app**; the other two judges now have `CAN_USE`. **Deployed and verified the same day** — the deploy also shipped two commits (`signals.py`/I-079, console bundle/I-087) that had reached `main` but never the App. |
 | **A1 largely retired** | **All three judges already hold Lakebase roles**, so I-084's "succeeds at login, 500s on every data route" cannot happen to the judging audience. What is left is a robustness question no judge can answer. |
 
 **MVP has been complete since 7 September, five days early.** The vertical slice runs end to
@@ -763,10 +763,25 @@ judges could not reach the console at all. Granted with **`apps update-permissio
 entries, the same footgun shape as `serving-endpoints update-config` replacing `served_entities`.
 Final ACL: owner `CAN_MANAGE`, `admins` `CAN_MANAGE`, three judges `CAN_USE`.
 
-**Two things a cold session must not forget.** `app.yaml` is **not live until the app is
-redeployed** — editing it and stopping is the same silent no-op as I-083's ignored scope block.
-And each approval writes one service campaign plus one work order per exposed vehicle (up to
-~200 rows) and replicates to **append-only** CDF, so budget cleanup after judging.
+**DEPLOYED AND VERIFIED LIVE 2026-09-09** — deployment `01f1ac4926e91a33831468ede9ae27cd`,
+`SUCCEEDED`. The four-address list was confirmed *in the workspace copy* of `app.yaml` after the
+sync, not assumed from the local file. **The rule still stands for the next change:** `app.yaml`
+is not live until the app is redeployed, and editing it and stopping is the same silent no-op as
+I-083's ignored scope block — this instance is simply discharged.
+
+**The deploy shipped more than the approver list, and that is worth knowing.** The deployed app
+was several commits stale: the sync also carried **`signals.py` (B1 / I-079's tiered match)** and
+the **current console bundle** (I-087's date fix plus the polish). Both had been merged to `main`
+and neither had ever reached the App. Found by running `databricks sync --dry-run` first, which
+prints the exact file set — worth doing every time for precisely this reason.
+
+**What this does NOT prove.** That a *judge* can approve. That needs their identity and their own
+browser consent grant. The honest claim is "the four-address list is deployed and serving",
+verified under a **programmatic CLI bearer token** — which is exactly the client distinction
+I-086 exists because of, where "verified live" without naming the client turned an untested
+browser path into a documented pass. Each approval also writes one service campaign plus one work
+order per exposed vehicle (up to ~200 rows) into **append-only** CDF, so budget cleanup after
+judging.
 
 ### B. Build work still outstanding
 
@@ -896,7 +911,7 @@ guidance alongside rows.
 |---|---|---|
 | AI Search `fleetguard-vs` | **running, ~$6.72/day** | ~17 days ⇒ **~$115** if left up to the demo (I-018). The only continuously-billing resource. **Do not rebuild the index inside the demo window** — it is most of a working day |
 | Agent serving endpoint | v6, **scale-to-zero ON** | `agents.deploy()` resets this to `False` on *every* deploy — re-assert it after any redeploy |
-| Databricks App | **STOPPED** — brought up 2026-09-08 to fix I-086, stopped again once verified | `databricks apps start fleetguard-console`, ~2 min. It will not answer a cold URL, and `CAN_USE` does not let a tester start it — bring it up before anyone else tries |
+| Databricks App | **STOPPED** — brought up 2026-09-09 to deploy the approver list + two stale commits, stopped again once verified | `databricks apps start fleetguard-console`, ~2 min. It will not answer a cold URL, and `CAN_USE` does not let a tester start it — **so no judge, Raghu included, can test on their own**; bring it up before anyone else tries |
 | `fleetguard-cdf-to-gold` | **UNPAUSED** | Event-driven, not scheduled; fires only on agent writes or signal loads, capped at 1 run/min |
 
 ### E. Demo-day mechanics, easy to forget
@@ -907,9 +922,13 @@ guidance alongside rows.
   — probe an API route to confirm a deploy, never the console page.
 - The Emerging tab's "**4 affecting your fleet**" is 2 batch + 2 agent-opened of 50. If B1 lands
   it becomes **6 of 50**. Do not confuse it with I-079's separate "2 → 4 of 48" (I-079).
-- **`app.yaml`'s approver list is only live after a redeploy.** Three judges are named in it as
-  of 2026-09-09 and all three hold `CAN_USE`, but a running app deployed before that change
-  still enforces the old two-address list — and the 403 looks identical either way.
+- **The approver list IS deployed** as of 2026-09-09 (deployment `01f1ac4926e91a33831468ede9ae27cd`,
+  `SUCCEEDED`): four addresses, three judges, all holding `CAN_USE`. Nothing further is needed —
+  but the general rule stands for any *future* `app.yaml` edit, because an app running an older
+  deployment enforces the older list and its 403 is identical to a missing grant.
+- **Always `databricks sync --dry-run` before deploying.** This deploy silently carried two
+  further commits that had reached `main` but never the App — `signals.py` (I-079) and the
+  console bundle (I-087). The dry run names the exact file set; nothing else does.
 - **The demo state is seeded** (B2): 3 launched campaigns, 331 work orders, 722 audit rows, 44
   overdue across 28 depots. The Park It recalls are deliberately **left unapproved** so the live
   approve-and-launch moment still has something consequential to act on — do not approve them
