@@ -89,8 +89,31 @@ audit trail and the observability trail the *same* trail, which is a materially 
 governance story than either alone.
 
 ### E-04 · Inference tables on the agent endpoint
-**Status: ADOPT.** The one Gateway feature that *is* supported on agent endpoints. Feeds
-§8.6 observability and per-request cost.
+**Status: BUILT — inference tables 2026-09-02, per-request token cost 2026-09-09.** The one
+Gateway feature that *is* supported on agent endpoints. Feeds §8.6 observability and
+per-request cost.
+
+**The documented extraction path does not work as written.** E-04 records it as
+`$.databricks_output.trace.info.trace_metadata['mlflow.trace.tokenUsage']`. Measured: the
+**parent object resolves** (`get_json_object(... '$.databricks_output.trace.info.trace_metadata')`
+is non-null), but the leaf **cannot be addressed** — the key name contains dots
+(`mlflow.trace.tokenUsage`), which Spark's `get_json_object` JSONPath treats as nesting. The
+value is also a **JSON string inside** the metadata object, so it needs a second parse. Both
+facts have to be discovered by looking at the payload; neither is in the note.
+
+**Second trap: the value is not unique.** A single response carries **3–7** `total_tokens`
+occurrences — one per LLM call in the agent's tool loop — plus the one trace-level aggregate.
+An unanchored `regexp_extract` returns whichever appears first. Checked across every 200-row:
+the aggregate happens to come first and the two agree, **but nothing guarantees that ordering**,
+so the shipped query anchors on `INSTR(response, 'mlflow.trace.tokenUsage')` and reads within
+that block — correct by construction rather than by luck.
+
+**Where it landed:** the dashboard's Operations page joins `gold_agent_action` to
+`fleetguard_agent_payload` on E-03's `trace_id` and shows, in one row, **who authorised a write,
+what the model saw, how long it took, and the tokens it consumed** (measured: action 7 —
+14,727 in / 1,235 out / 15,962 total, 29,726 ms). The columns `gold_agent_action.input_tokens`
+/ `output_tokens` stay **deliberately empty**: the inference table already holds this, and a
+second copy invites the two to disagree.
 
 Day 4 supplies the non-obvious extraction path — token usage is buried in the trace metadata,
 not a column:

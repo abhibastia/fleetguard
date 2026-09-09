@@ -167,13 +167,18 @@
     },
     {
       "name": "ds_ops_agent",
-      "displayName": "Agent writes joined to their trace",
+      "displayName": "Agent writes joined to their trace and token cost",
       "queryLines": [
+        "WITH usage AS (SELECT databricks_request_id, execution_duration_ms, status_code, ",
+        "SUBSTR(response, INSTR(response, 'mlflow.trace.tokenUsage'), 200) AS tu ",
+        "FROM fleetguard_agent_payload) ",
         "SELECT a.action_id, a.tool, a.actor_principal, a.on_behalf_of, a.trace_id, ",
-        "p.execution_duration_ms, p.status_code, ",
+        "u.execution_duration_ms, u.status_code, ",
+        "CAST(regexp_extract(u.tu, 'input_tokens[^0-9]+([0-9]+)', 1) AS INT) AS input_tokens, ",
+        "CAST(regexp_extract(u.tu, 'output_tokens[^0-9]+([0-9]+)', 1) AS INT) AS output_tokens, ",
+        "CAST(regexp_extract(u.tu, 'total_tokens[^0-9]+([0-9]+)', 1) AS INT) AS total_tokens, ",
         "CASE WHEN a.trace_id IS NULL THEN 'not traced (pre E-03)' ELSE 'traced' END AS trace_state ",
-        "FROM gold_agent_action a ",
-        "LEFT JOIN fleetguard_agent_payload p ON p.databricks_request_id = a.trace_id "
+        "FROM gold_agent_action a LEFT JOIN usage u ON u.databricks_request_id = a.trace_id "
       ]
     }
   ],
@@ -1163,7 +1168,7 @@
             "name": "ops-h-gov",
             "multilineTextboxSpec": {
               "lines": [
-                "## Governance \u2014 the audit trail and the trace are the same trail\n\nEvery agent write records the serving endpoint's own request id, so the human who authorised it joins to what the model actually saw and how long it took. Rows written before 2026-09-09 predate that wiring and carry no trace (E-03).\n"
+                "## Governance \u2014 the audit trail, the trace and the cost are one row\n\nEvery agent write records the serving endpoint's request id, so the human who authorised it joins to what the model saw, how long it took, and the tokens it consumed. Rows written before 2026-09-09 predate that wiring and carry none (E-03/E-04).\n"
               ]
             }
           },
@@ -1204,6 +1209,18 @@
                       "expression": "`execution_duration_ms`"
                     },
                     {
+                      "name": "input_tokens",
+                      "expression": "`input_tokens`"
+                    },
+                    {
+                      "name": "output_tokens",
+                      "expression": "`output_tokens`"
+                    },
+                    {
+                      "name": "total_tokens",
+                      "expression": "`total_tokens`"
+                    },
+                    {
                       "name": "status_code",
                       "expression": "`status_code`"
                     }
@@ -1216,7 +1233,7 @@
               "version": 2,
               "widgetType": "table",
               "frame": {
-                "title": "Agent writes, joined to their own trace",
+                "title": "Agent writes \u2014 who authorised it, what it cost, how long it took",
                 "showTitle": true
               },
               "encodings": {
@@ -1239,7 +1256,19 @@
                   },
                   {
                     "fieldName": "execution_duration_ms",
-                    "displayName": "Model latency (ms)"
+                    "displayName": "Latency (ms)"
+                  },
+                  {
+                    "fieldName": "input_tokens",
+                    "displayName": "Input tokens"
+                  },
+                  {
+                    "fieldName": "output_tokens",
+                    "displayName": "Output tokens"
+                  },
+                  {
+                    "fieldName": "total_tokens",
+                    "displayName": "Total tokens"
                   },
                   {
                     "fieldName": "status_code",
