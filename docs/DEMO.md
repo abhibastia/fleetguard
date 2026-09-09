@@ -26,13 +26,16 @@ Three things are asleep and **two of them do not wake on their own.**
 **The two idle states are not the same thing, and the difference decides whether you act.**
 Measured 2026-09-09:
 
-| `deployment_state_message` | `deployment` | Wakes on request? | Action |
-|---|---|---|---|
-| **`Scaled to zero`** | `DEPLOYMENT_READY` | **Yes — 47 s cold start**, answers correctly | none; just warm it once |
-| **`Stopped`** | `DEPLOYMENT_STOPPED` | **No.** `400 the given endpoint is stopped`, twice | restore, ~3 min |
+| `state.ready` | `deployment_state_message` | Meaning | Billing? | Action |
+|---|---|---|---|---|
+| `READY` | *(empty)* | warm, replicas up | **yes** | nothing — it idles down on its own |
+| `READY` | **`Scaled to zero`** | idle; **wakes on request in 47 s** | no | nothing; warm it once pre-demo |
+| `NOT_READY` | **`Stopped`** | **does not wake** — `400 the given endpoint is stopped` | no | restore, ~3 min |
 
-`scale_to_zero_enabled` reads `True` in **both**, so the flag tells you nothing — read the
-deployment state. The likely progression is active → scaled to zero → stopped after longer idle,
+**`state.ready: READY` does not mean it is running** — it means the endpoint has a working
+config, and it reads `READY` both warm and scaled to zero. **`scale_to_zero_enabled` reads
+`True` in all three**, so the flag tells you nothing either. `deployment_state_message` is the
+only field that distinguishes them, and it is the one to read. The likely progression is active → scaled to zero → stopped after longer idle,
 which is why touching it on submission day matters: it keeps the endpoint in the state that wakes.
 
 **Restoring the agent endpoint.** There is **no `start` or `resume` subcommand** — Model Serving
