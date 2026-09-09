@@ -164,6 +164,13 @@ B1's tiered match.
 
 - **The agent endpoint stops and does not wake.** Highest-risk item; see pre-flight. Found dead
   during this dry run, having been believed merely scaled-to-zero.
+  **DECIDED 2026-09-09: leave it on scale-to-zero and let the Assistant read as offline.** A
+  stopped endpoint now renders *"The assistant is offline. The queue and approval path are
+  unaffected."* rather than a raw error (I-093). The trade is accepted deliberately: keeping it
+  warm through the judging window costs continuous Small-CPU serving, and the honest offline
+  state is better than a crash. **Restore it as a submission-day step** (~3 min) so it is most
+  likely alive when reviewers look — how long the idle window is before it stops again has not
+  been measured.
 - **Judges can approve.** All three are in `FLEETGUARD_APPROVERS` and hold `CAN_MANAGE`. An approval
   writes up to ~200 work orders and replicates to **append-only** CDF that cannot be scrubbed.
   Fine if intended — budget the cleanup.
@@ -190,6 +197,14 @@ B1's tiered match.
   lowered detection to 11.2% and added 0.0 days. Present it as a published negative; it is one of
   the strongest things here.
 - **Not** that determinism covers every match. **EXACT only.**
+- **Not** that a reviewer is watching Row-Level Security constrain them. RLS is real, enabled
+  and `FORCE`d on `fleetguard_vehicle`, and it was proved under the owner's identity — but all
+  three judges hold **`bypassrls = True`** (via `databricks_superuser`; the owner does not), so
+  **the policy does not apply to their sessions at all.** They also read through
+  `databricks_superuser`'s grants rather than any of their own. Separately, nobody is enrolled in
+  `fleetguard_depot_assignment`, so the scoping is fail-open for everyone by default. Demonstrate
+  RLS by showing the policy and the owner-side proof; do not invite a judge to verify it by
+  looking at their own session, because they will correctly see no restriction.
 - **Not** that the audit trail spans months. It is genuine — real writes by a real identity —
   but seeded on 2026-09-09, so the timestamps cluster.
 
@@ -213,7 +228,9 @@ All three judges hold `CAN_MANAGE`, so none of them needs the owner available. S
 > than unauthorised.
 >
 > **The Assistant panel needs a second service** that is also asleep and does **not** wake on
-> request. If chat errors, see the restore snippet in §1 — about three minutes.
+> request. If it says *"The assistant is offline"*, that is the honest state, not a crash — the
+> queue, approval and every other tab are unaffected. Restoring it takes about three minutes and
+> needs the author (the snippet is in §1); **message them and they can bring it up.**
 >
 > **You can approve a campaign** — you are on the approver list. **Please don't, until after
 > submission.** Not a permissions matter: an approval writes a service campaign plus one work

@@ -142,6 +142,24 @@ def chat(principal: CurrentPrincipal, req: ChatRequest) -> ChatReply:
             reason = resp.json().get("message", "")
         except ValueError:
             reason = ""
+
+        # A *stopped* endpoint answers **400**, not 404 — so the 404 branch above never fires
+        # for by far the most common real cause, and this fell through to the 502 below.
+        # `Assistant.tsx` keys its "the assistant is offline" message on **503**, and its own
+        # comment says "503 means the serving endpoint is stopped" — so that message was
+        # unreachable for exactly the case it was written for, and a judge hitting a
+        # scaled-down endpoint saw a raw 502 instead (I-093, measured 2026-09-09).
+        #
+        # Matching on the provider's message text is unlovely and deliberate: both cases are
+        # bare 400s, so the body is the only signal there is. If the wording changes this
+        # degrades to the old 502 — worse, not broken — and `tests/test_chat_offline.py`
+        # pins the string actually observed from the endpoint.
+        if resp.status_code == 400 and "stopped" in reason.lower():
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"Agent endpoint '{AGENT_ENDPOINT}' is stopped.",
+            )
+
         detail = f"Agent endpoint returned {resp.status_code}"
         if reason:
             detail += f": {reason}"

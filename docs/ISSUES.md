@@ -26,6 +26,38 @@ no error and passed the obvious check.
 
 ## Tooling / process
 
+### I-093 — the "assistant is offline" state was unreachable for the case it was written for — **SILENT**
+*Date:* 2026-09-09 · *Status:* ✅ resolved
+
+**Found by** auditing what a judge hits when the agent endpoint is asleep, after I-092 showed it
+stops on its own.
+
+**The bug, in two halves written to different assumptions.** `Assistant.tsx` renders a friendly
+*"The assistant is offline. The queue and approval path are unaffected."* only on **503**, and its
+own comment states *"503 means the serving endpoint is stopped"*. `chat.py` maps **404 → 503** —
+but a stopped Databricks serving endpoint answers **400**, not 404, so the request fell through to
+the generic `>= 400` branch and surfaced as a raw **502**. The friendly state was therefore
+unreachable for precisely the situation it exists to describe, and the most likely real-world
+cause produced the ugliest possible output.
+
+**Neither half was wrong on its own,** which is why it survived review: the frontend correctly
+handles 503, the backend correctly surfaces the endpoint's message (the 2026-09-04 fix), and the
+existing test `test_stopped_endpoint_error_is_surfaced_not_swallowed` **asserted 502 and passed**
+— it encoded the bug as the expectation, pinning the real message body while pinning the wrong
+status alongside it.
+
+**Fix.** Map a 400 whose body mentions `stopped` to 503. Matching on the provider's message text
+is unlovely and deliberate — a stopped endpoint and a malformed request are both bare 400s, so the
+body is the only signal there is; if the wording changes this degrades to the old 502, which is
+worse rather than broken. The test was rewritten to assert 503, and a second test added so a
+genuine 400 still yields 502 with its reason, since the offline branch must not swallow real
+request errors.
+
+**Lesson.** A status-code contract spanning two files is a contract nobody type-checks. Both sides
+looked correct in isolation and the test agreed with the broken half — so the only thing that
+could have caught this was asking *what does the user actually see when the thing fails*, which is
+a question about behaviour, not about code.
+
 ### I-092 — the agent serving endpoint was STOPPED, and a request does not wake it — **SILENT**
 *Date:* 2026-09-09 · *Status:* ✅ resolved
 

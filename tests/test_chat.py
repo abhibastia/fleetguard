@@ -29,7 +29,17 @@ class _FakeResponse:
         return self._body
 
 
-def test_stopped_endpoint_error_is_surfaced_not_swallowed(monkeypatch):
+def test_a_stopped_endpoint_reads_as_offline_503_not_a_raw_502(monkeypatch):
+    """I-093. This test previously asserted **502**, which encoded the bug.
+
+    Surfacing the endpoint's message (the 2026-09-04 fix) was necessary but not sufficient:
+    `Assistant.tsx` renders its "the assistant is offline" message only on **503**, and its
+    own comment says "503 means the serving endpoint is stopped" — so the friendly state was
+    unreachable for precisely the case it was written for, and a judge hitting a scaled-down
+    endpoint got a raw 502 instead. The message body is pinned verbatim as returned by the
+    live endpoint on 2026-09-09, because matching on it is the only signal available: a
+    stopped endpoint and a malformed request are both bare 400s.
+    """
     _configure(monkeypatch)
     monkeypatch.setattr(
         chat_module.httpx,
@@ -44,8 +54,25 @@ def test_stopped_endpoint_error_is_surfaced_not_swallowed(monkeypatch):
     )
 
     resp = client.post("/api/chat", json={"messages": [{"role": "user", "content": "hi"}]})
+    assert resp.status_code == 503, "the frontend's offline state keys on 503"
+    assert "stopped" in resp.json()["detail"].lower()
+
+
+def test_a_real_400_is_still_a_502_and_still_says_why(monkeypatch):
+    """The offline branch must not swallow genuine request errors — a malformed request is a
+    bug to see, not a service to wait for."""
+    _configure(monkeypatch)
+    monkeypatch.setattr(
+        chat_module.httpx,
+        "post",
+        lambda *a, **k: _FakeResponse(
+            400, {"error_code": "BAD_REQUEST", "message": "Invalid input schema for messages."}
+        ),
+    )
+
+    resp = client.post("/api/chat", json={"messages": [{"role": "user", "content": "hi"}]})
     assert resp.status_code == 502
-    assert "stopped" in resp.json()["detail"]
+    assert "Invalid input schema" in resp.json()["detail"]
 
 
 def test_400_with_unparseable_body_still_reports_the_status(monkeypatch):

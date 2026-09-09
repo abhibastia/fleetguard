@@ -27,8 +27,9 @@ instead of one:
 ## Live demo
 
 **Primary — Databricks App:** [`fleetguard-console`](https://fleetguard-console-1352785079224954.aws.databricksapps.com)
-— real per-user OBO, so Unity Catalog and Postgres RLS enforce under *your* Databricks
-identity, not a simulation.
+— real per-user OBO: every query runs as *your* Databricks identity, not a service account
+and not a simulation, so Unity Catalog and Postgres apply their own rules to you rather than
+the app deciding what you may see.
 
 **It is kept stopped between sessions** so it isn't billing idle compute, and it will not
 answer a cold URL. **Start it yourself — about two minutes:**
@@ -40,6 +41,10 @@ databricks apps start fleetguard-console
 You'll then see an **OAuth consent screen** listing `postgres`, `sql` and `model-serving`.
 Accept it; declining returns `403 Invalid scope` on every data page, which looks like a broken
 app rather than an unauthorised one. Please **stop it again** when you're done.
+
+**The Assistant panel may say "the assistant is offline."** That is expected, not a fault: the
+agent runs on a serving endpoint kept on scale-to-zero, and a stopped endpoint does not wake on
+request. Every other tab is unaffected. Ask and it can be restored in about three minutes.
 
 **[`docs/DEMO.md`](docs/DEMO.md) is the guided tour** — pre-flight with measured timings, the
 nine beats worth seeing, every number with its source, and an explicit list of what this project
@@ -75,7 +80,9 @@ above, sourced live from the same measurement.
   `table_update` job, taking **2.5–4.5 minutes end to end** (two live cycles). The two numbers
   are kept apart deliberately: quoting the capture latency for the whole chain would overstate
   it by an order of magnitude. Postgres Row-Level Security enforces depot-scoped reads below
-  the application, not just in it.
+  the application, not just in it — proved live, with two honest limits: no principal is
+  enrolled by default, so it is fail-open until someone is, and a reviewer holding
+  `bypassrls` will not see it apply to their own session (`docs/DEMO.md` §5).
 - **A FastAPI + React console**, one service for API and UI, running unchanged across
   Render and Databricks Apps behind a single auth seam (`app/backend/fleetguard_api/auth/`).
 
