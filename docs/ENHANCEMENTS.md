@@ -379,6 +379,50 @@ unit tests alongside `vin.py` and `chunking.py` — no workspace required.
 
 ## Tier 3 — genuinely additive; only if Phases 6–8 land early
 
+### E-15 · TSBs as a corroborating signal for Model A — **MEASURED AND REJECTED 2026-09-09**
+
+**Status: REJECTED on evidence.** Not deferred, not descoped for schedule — tested against the
+full backtest population and the signal is not there.
+
+**Why it looked strong.** 5.8M TSB rows / 258,438 bulletins were already ingested, conformed and
+quarantine-reconciled, and **consumed by nothing**. `silver_tsb.sql`'s own comment states the
+intent: *"TSBs are Model A's corroborating signal: a manufacturer bulletin on the same component
+raises confidence that a complaint cluster reflects a real defect rather than noise."* The table
+carries `make`, `model`, `components` and `communication_date` on the same normalisation the
+detector uses, and a manufacturer bulletin is a genuinely **independent observer** — the maker
+documenting a defect, not more complaints. No new source, no embeddings, no new cost.
+
+**Measured on the full 777 REAL / 606 PLACEBO population** (`gold_backtest_scope`, which spans
+2010–2026 and is *not* the restricted 37-month embedded set):
+
+| measurement | REAL | PLACEBO | reading |
+|---|---:|---:|---|
+| % with ≥1 prior-year TSB on the component | **48.5%** | **55.9%** | **opposite direction**, z −2.74, p 0.006 |
+| all-time TSBs for that vehicle (median) | 669 | **1,737** | arms **not matched on TSB exposure** — 2.4× |
+| share of prior-year TSBs on the component (median) | 3.19% | 3.14% | **no difference** |
+| the same share (mean) | 12.25% | 9.0% | tail-driven, not a shift |
+| % with <10 prior-year TSBs | **25.3%** | 19.7% | explains the mean gap — smaller denominators |
+
+**The finding, in order.** The raw test came out *backwards*, and significantly so:
+never-investigated series carry **more** prior-year TSBs. That is a confound, not a discovery —
+the placebo arm was volume-matched on **complaints**, never on bulletins, and its vehicles carry
+2.4× the TSB volume overall. Controlling for that by using each vehicle's own TSB share moved the
+**mean** into the hypothesised direction, but the **medians are identical**, and the mean gap is
+explained by REAL series having smaller denominators (a vehicle with 3 bulletins scores 33% on a
+single match). Every apparent effect, in both directions, is TSB-volume mismatch.
+
+**Consequence — and this is why the backtest came first.** The plan had been to ship a descriptive
+"bulletins on this component in the window" column on `gold_emerging_signal`. **It is not shipped.**
+The measurement says the number would not mean anything, and a number whose strength cannot be
+stated is exactly what I-069 and I-075 exist to prevent. Building the column first and measuring
+afterwards would have put an unvalidated figure in front of an operator.
+
+**What would make this worth revisiting:** a placebo arm matched on TSB propensity rather than on
+complaint volume — a different control-construction problem, not a schedule item.
+
+**This is the project's second published negative**, after I-049 falsified semantic clustering.
+Both were the obvious improvement; both were measured rather than assumed.
+
 ### E-10 · Genie + UC metric views, as a pair
 **Status: UPGRADED to post-MVP committed (was: defer).** E-11 gives Genie a defined job —
 the VP Ops analytics surface — rather than leaving it a loose platform feature, which is why

@@ -74,8 +74,11 @@ Counter-intuitive, but it front-loads the honesty. **16.0% vs 11.1%, 1.44×, p �
 
 > "We detect roughly 1 in 6 defect ramps before NHTSA opens an investigation, at a median 197
 > days of lead. The control arm catches 11.1%. That gap is small and it is real — z 2.62.
-> I also tried the obvious improvement, semantic clustering, and it made detection *worse*. That
-> negative is published on this page too."
+> I tried the two obvious improvements and published both failures. Semantic clustering made
+> detection *worse*. Manufacturer service bulletins — an independent signal, 5.8M of them already
+> in the warehouse — showed nothing once I controlled for the fact that the two arms weren't
+> matched on bulletin volume. I didn't ship the feature I'd planned off the back of that,
+> because the measurement said the number wouldn't mean anything."
 
 The point: everything that follows sits on a measured, falsifiable claim with a control arm.
 

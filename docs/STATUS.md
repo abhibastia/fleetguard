@@ -155,6 +155,25 @@ detections. Volume anomaly does not merely carry the differentiator — it **is*
 differentiator. The figures above are the published result, not a floor awaiting
 improvement.
 
+### TSB corroboration — measured, rejected (2026-09-09)
+
+The second hypothesis tested against the control arm, and the second negative. TSBs were the
+strongest untapped source — 5.8M rows already ingested and consumed by nothing, with
+`silver_tsb.sql`'s own comment naming them "Model A's corroborating signal". Measured on the full
+777 REAL / 606 PLACEBO population:
+
+| | REAL | PLACEBO |
+|---|---:|---:|
+| % with ≥1 prior-year TSB on the component | 48.5% | **55.9%** |
+| median all-time TSBs for that vehicle | 669 | **1,737** |
+| median share of prior-year TSBs on the component | 3.19% | 3.14% |
+
+The raw test ran **backwards** (z −2.74, p 0.006) because the placebo arm was volume-matched on
+complaints, not bulletins — its vehicles carry 2.4× the TSB volume. Controlling for that leaves
+**identical medians**. No usable signal, and **the descriptive console column was therefore not
+shipped**: the backtest is what said the number would be meaningless. Full detail in
+`ENHANCEMENTS.md` E-15.
+
 ### Corpus
 
 - Complaints **2,240,289** (`LDATE` 1995-01-01 → 2026-08-27) · recalls **244,925** rows /
@@ -642,6 +661,7 @@ Everything between here and there is history, kept for the record.
 | **B2 done — Phase 11 complete** | `scripts/seed_demo_state.py`, 711 writes **through the real API**. Audit log 11 → **723** rows, work orders 230 → **331** across 3 campaigns, costs 1 → **144**. Re-run makes **0 writes**. Revived a dead feature: `overdue_work_orders` was **0 on all 60 depots** because every due date was identical. |
 | **A2 decided — all three judges can approve** | Four addresses in `app.yaml`, each verified as a live workspace identity first. Found and fixed the half that would have failed on the day: **only Raghu could open the app**; the other two judges now have `CAN_MANAGE` (upgraded 2026-09-09 so all three can start the app themselves). **Deployed and verified the same day** — the deploy also shipped two commits (`signals.py`/I-079, console bundle/I-087) that had reached `main` but never the App. |
 | **I-091 / I-092 — two demo-breaking failures found by a dry run** | `/api/signals` **500'd** (`match_basis` read shipped ahead of its migration) and the **agent endpoint was STOPPED**, not merely scaled to zero — requests do not wake it. Both fixed and verified. Neither was visible to any test. |
+| **TSB corroboration measured and rejected (E-15)** | The strongest untapped source — 5.8M bulletins already ingested, consumed by nothing, and named as Model A's corroborator in the pipeline's own comment. Tested on the full 777/606 population: raw test ran **backwards** (z −2.74) on a TSB-volume confound; controlled, the medians are **identical**. **The planned console column was not shipped** — measuring first is what stopped an unvalidated number reaching an operator. |
 | **E-03: the trace loop is closed and the join is proven** | `chat.py` now passes the endpoint's `databricks_request_id` into `fleetguard_agent_action.trace_id`, which was NULL for every row ever written. Verified live in Unity Catalog: `gold_agent_action` joins `fleetguard_agent_payload` on it, returning one row where **`authorised_by` and `called_as` are the same human** — the write-path claim made checkable rather than asserted. Inference-table ingest lags **>30 min**, so a demo-time write will not appear immediately. |
 | **E-06 / I-094: evaluation was scoring a stale model** | `16_evaluate_agent.py` defaulted to v3 while **v6** serves, so default runs passed green against a three-version-old artefact. Now resolves latest and prints which version it scored. |
 | **E-07 / E-09 closed** | Both sat marked ADOPT with no implementation and no reversal (I-051's pattern in the backlog). E-09 turned out **already satisfied** by the action-envelope pattern, which suspends across a process *and identity* boundary. |
