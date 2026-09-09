@@ -80,9 +80,9 @@ manual, 1 event-triggered** (`fleetguard-cdf-to-gold`, `table_update`, UNPAUSED 
 "all manual" stopped being true then) ·
 1 serverless SQL warehouse · 1 AI Search endpoint.
 
-**AI/BI Dashboard & metric view (added 2026-09-03):** `FleetGuard — Fleet & Recall Overview`
-(`dashboard_id 01f1a7257e801a2ebb71bdc18fc2113a`, published), 4 pages — Overview, Emerging
-Signals, Evidence, Trust — 9 datasets, all against `bootcamp_students.fleetguard` on the
+**AI/BI Dashboard & metric view (added 2026-09-03, Operations page added 2026-09-09):**
+`FleetGuard — Fleet & Recall Overview` (`dashboard_id 01f1a7257e801a2ebb71bdc18fc2113a`,
+published), **5 pages — Overview, Operations, Emerging Signals, Evidence, Trust — 12 datasets**, all against `bootcamp_students.fleetguard` on the
 existing `Serverless Starter Warehouse` (`b15d3d6f837ba428`). No new compute, no scheduled
 auto-refresh (queries run only on view). `bootcamp_students.fleetguard.evidence_metrics` — a
 UC Metric View governing `Detection Rate %` / `Lift` / `Median Lead Days` once, sourced from
@@ -661,6 +661,7 @@ Everything between here and there is history, kept for the record.
 | **B2 done — Phase 11 complete** | `scripts/seed_demo_state.py`, 711 writes **through the real API**. Audit log 11 → **723** rows, work orders 230 → **331** across 3 campaigns, costs 1 → **144**. Re-run makes **0 writes**. Revived a dead feature: `overdue_work_orders` was **0 on all 60 depots** because every due date was identical. |
 | **A2 decided — all three judges can approve** | Four addresses in `app.yaml`, each verified as a live workspace identity first. Found and fixed the half that would have failed on the day: **only Raghu could open the app**; the other two judges now have `CAN_MANAGE` (upgraded 2026-09-09 so all three can start the app themselves). **Deployed and verified the same day** — the deploy also shipped two commits (`signals.py`/I-079, console bundle/I-087) that had reached `main` but never the App. |
 | **I-091 / I-092 — two demo-breaking failures found by a dry run** | `/api/signals` **500'd** (`match_basis` read shipped ahead of its migration) and the **agent endpoint was STOPPED**, not merely scaled to zero — requests do not wake it. Both fixed and verified. Neither was visible to any test. |
+| **Dashboard: Operations page** | The dashboard predated B2 and had **no operational analytics at all** — four pages about the corpus, fleet, signals and trust, and nothing about what the system *did*. New page reads **live Lakebase through CDF** (331 work orders, $84,409.68, 724 audit rows, 44 overdue), reconciling exactly with Postgres, plus the E-03 governance join. |
 | **TSB corroboration measured and rejected (E-15)** | The strongest untapped source — 5.8M bulletins already ingested, consumed by nothing, and named as Model A's corroborator in the pipeline's own comment. Tested on the full 777/606 population: raw test ran **backwards** (z −2.74) on a TSB-volume confound; controlled, the medians are **identical**. **The planned console column was not shipped** — measuring first is what stopped an unvalidated number reaching an operator. |
 | **E-03: the trace loop is closed and the join is proven** | `chat.py` now passes the endpoint's `databricks_request_id` into `fleetguard_agent_action.trace_id`, which was NULL for every row ever written. Verified live in Unity Catalog: `gold_agent_action` joins `fleetguard_agent_payload` on it, returning one row where **`authorised_by` and `called_as` are the same human** — the write-path claim made checkable rather than asserted. Inference-table ingest lags **>30 min**, so a demo-time write will not appear immediately. |
 | **E-06 / I-094: evaluation was scoring a stale model** | `16_evaluate_agent.py` defaulted to v3 while **v6** serves, so default runs passed green against a three-version-old artefact. Now resolves latest and prints which version it scored. |

@@ -119,6 +119,62 @@
         "UNION ALL\n",
         "SELECT 'investigations', _dq_failures, COUNT(*) FROM silver_investigation_quarantine GROUP BY 1,2"
       ]
+    },
+    {
+      "name": "ds_ops",
+      "displayName": "Work orders (live, via CDF)",
+      "queryLines": [
+        "WITH wo AS (SELECT ",
+        "wo_id, service_campaign_id, vin, depot_id, assigned_to, due_date, status, actual_cost FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY wo_id ORDER BY _sort_by DESC) AS rn ",
+        "FROM bootcamp_students.bootcamp_cdc.lb_fleetguard_work_order_history ",
+        "WHERE _pg_change_type <> 'update_preimage') ",
+        "WHERE rn = 1 AND _pg_change_type <> 'delete' ",
+        "), sc AS (SELECT ",
+        "service_campaign_id, campaign_id FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY service_campaign_id ORDER BY _sort_by DESC) AS rn ",
+        "FROM bootcamp_students.bootcamp_cdc.lb_fleetguard_service_campaign_history ",
+        "WHERE _pg_change_type <> 'update_preimage') ",
+        "WHERE rn = 1 AND _pg_change_type <> 'delete' ",
+        "), rc AS (SELECT ",
+        "campaign_id, component, park_it FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY campaign_id ORDER BY _sort_by DESC) AS rn ",
+        "FROM bootcamp_students.bootcamp_cdc.lb_fleetguard_recall_campaign_history ",
+        "WHERE _pg_change_type <> 'update_preimage') ",
+        "WHERE rn = 1 AND _pg_change_type <> 'delete' ",
+        ") ",
+        "SELECT w.wo_id, w.status, w.vin, w.depot_id, w.assigned_to, w.due_date, ",
+        "COALESCE(w.actual_cost, 0) AS actual_cost, ",
+        "CASE WHEN w.actual_cost IS NOT NULL THEN 1 ELSE 0 END AS is_costed, ",
+        "CASE WHEN w.status = 'COMPLETED' THEN 1 ELSE 0 END AS is_completed, ",
+        "CASE WHEN w.status NOT IN ('COMPLETED','CANCELLED') AND w.due_date < current_date() ",
+        "THEN 1 ELSE 0 END AS is_overdue, ",
+        "d.region, d.city, d.depot_name, sc.campaign_id, ",
+        "SPLIT(rc.component, ':')[0] AS component, rc.component AS component_full, rc.park_it ",
+        "FROM wo w ",
+        "LEFT JOIN sc ON sc.service_campaign_id = w.service_campaign_id ",
+        "LEFT JOIN rc ON rc.campaign_id = sc.campaign_id ",
+        "LEFT JOIN gold_fleet_depot d ON d.depot_id = w.depot_id "
+      ]
+    },
+    {
+      "name": "ds_ops_audit",
+      "displayName": "Audit trail (live, via CDF)",
+      "queryLines": [
+        "SELECT ",
+        "audit_id, action, entity_type, entity_id, actor_principal, CAST(created_at AS DATE) AS audit_date FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY audit_id ORDER BY _sort_by DESC) AS rn ",
+        "FROM bootcamp_students.bootcamp_cdc.lb_fleetguard_audit_log_history ",
+        "WHERE _pg_change_type <> 'update_preimage') ",
+        "WHERE rn = 1 AND _pg_change_type <> 'delete' "
+      ]
+    },
+    {
+      "name": "ds_ops_agent",
+      "displayName": "Agent writes joined to their trace",
+      "queryLines": [
+        "SELECT a.action_id, a.tool, a.actor_principal, a.on_behalf_of, a.trace_id, ",
+        "p.execution_duration_ms, p.status_code, ",
+        "CASE WHEN a.trace_id IS NULL THEN 'not traced (pre E-03)' ELSE 'traced' END AS trace_state ",
+        "FROM gold_agent_action a ",
+        "LEFT JOIN fleetguard_agent_payload p ON p.databricks_request_id = a.trace_id "
+      ]
     }
   ],
   "pages": [
@@ -132,146 +188,1073 @@
           "widget": {
             "name": "overview-title",
             "multilineTextboxSpec": {
-              "lines": ["# FleetGuard — Fleet & Recall Exposure\n"]
+              "lines": [
+                "# FleetGuard \u2014 Fleet & Recall Exposure\n"
+              ]
             }
           },
-          "position": {"x": 0, "y": 0, "width": 12, "height": 1}
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 12,
+            "height": 1
+          }
         },
         {
           "widget": {
             "name": "overview-subtitle",
             "multilineTextboxSpec": {
               "lines": [
-                "20,000 fleet vehicles across 60 depots, matched against 592 open NHTSA campaigns. Ranked by consequence before volume — a do-not-drive defect outranks a larger label recall. Live against `bootcamp_students.fleetguard`."
+                "20,000 fleet vehicles across 60 depots, matched against 592 open NHTSA campaigns. Ranked by consequence before volume \u2014 a do-not-drive defect outranks a larger label recall. Live against `bootcamp_students.fleetguard`."
               ]
             }
           },
-          "position": {"x": 0, "y": 1, "width": 12, "height": 1}
+          "position": {
+            "x": 0,
+            "y": 1,
+            "width": 12,
+            "height": 1
+          }
         },
         {
           "widget": {
             "name": "kpi-fleet-size",
-            "queries": [{"name": "main_query", "query": {"datasetName": "ds_overview_kpis", "fields": [{"name": "fleet_size", "expression": "`fleet_size`"}], "disaggregated": true}}],
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_overview_kpis",
+                  "fields": [
+                    {
+                      "name": "fleet_size",
+                      "expression": "`fleet_size`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
             "spec": {
-              "version": 2, "widgetType": "counter",
-              "encodings": {"value": {"fieldName": "fleet_size", "displayName": "Fleet vehicles"}},
-              "frame": {"title": "Fleet vehicles", "showTitle": true}
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "fleet_size",
+                  "displayName": "Fleet vehicles"
+                }
+              },
+              "frame": {
+                "title": "Fleet vehicles",
+                "showTitle": true
+              }
             }
           },
-          "position": {"x": 0, "y": 2, "width": 3, "height": 4}
+          "position": {
+            "x": 0,
+            "y": 2,
+            "width": 3,
+            "height": 4
+          }
         },
         {
           "widget": {
             "name": "kpi-vehicles-exposed",
-            "queries": [{"name": "main_query", "query": {"datasetName": "ds_overview_kpis", "fields": [{"name": "vehicles_exposed", "expression": "`vehicles_exposed`"}], "disaggregated": true}}],
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_overview_kpis",
+                  "fields": [
+                    {
+                      "name": "vehicles_exposed",
+                      "expression": "`vehicles_exposed`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
             "spec": {
-              "version": 2, "widgetType": "counter",
-              "encodings": {"value": {"fieldName": "vehicles_exposed", "displayName": "Vehicles with open exposure"}},
-              "frame": {"title": "Vehicles with open exposure", "showTitle": true}
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "vehicles_exposed",
+                  "displayName": "Vehicles with open exposure"
+                }
+              },
+              "frame": {
+                "title": "Vehicles with open exposure",
+                "showTitle": true
+              }
             }
           },
-          "position": {"x": 3, "y": 2, "width": 3, "height": 4}
+          "position": {
+            "x": 3,
+            "y": 2,
+            "width": 3,
+            "height": 4
+          }
         },
         {
           "widget": {
             "name": "kpi-open-campaigns",
-            "queries": [{"name": "main_query", "query": {"datasetName": "ds_overview_kpis", "fields": [{"name": "open_campaigns", "expression": "`open_campaigns`"}], "disaggregated": true}}],
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_overview_kpis",
+                  "fields": [
+                    {
+                      "name": "open_campaigns",
+                      "expression": "`open_campaigns`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
             "spec": {
-              "version": 2, "widgetType": "counter",
-              "encodings": {"value": {"fieldName": "open_campaigns", "displayName": "Open campaigns matched to fleet"}},
-              "frame": {"title": "Open campaigns matched to fleet", "showTitle": true}
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "open_campaigns",
+                  "displayName": "Open campaigns matched to fleet"
+                }
+              },
+              "frame": {
+                "title": "Open campaigns matched to fleet",
+                "showTitle": true
+              }
             }
           },
-          "position": {"x": 6, "y": 2, "width": 3, "height": 4}
+          "position": {
+            "x": 6,
+            "y": 2,
+            "width": 3,
+            "height": 4
+          }
         },
         {
           "widget": {
             "name": "kpi-urgent-campaigns",
-            "queries": [{"name": "main_query", "query": {"datasetName": "ds_overview_kpis", "fields": [{"name": "urgent_campaigns", "expression": "`urgent_campaigns`"}], "disaggregated": true}}],
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_overview_kpis",
+                  "fields": [
+                    {
+                      "name": "urgent_campaigns",
+                      "expression": "`urgent_campaigns`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
             "spec": {
-              "version": 2, "widgetType": "counter",
-              "encodings": {"value": {"fieldName": "urgent_campaigns", "displayName": "Park It / Do Not Drive campaigns"}},
-              "frame": {"title": "Park It / Do Not Drive campaigns", "showTitle": true}
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "urgent_campaigns",
+                  "displayName": "Park It / Do Not Drive campaigns"
+                }
+              },
+              "frame": {
+                "title": "Park It / Do Not Drive campaigns",
+                "showTitle": true
+              }
             }
           },
-          "position": {"x": 9, "y": 2, "width": 3, "height": 4}
+          "position": {
+            "x": 9,
+            "y": 2,
+            "width": 3,
+            "height": 4
+          }
         },
         {
           "widget": {
             "name": "section-fleet-composition",
-            "multilineTextboxSpec": {"lines": ["## Fleet composition\n"]}
+            "multilineTextboxSpec": {
+              "lines": [
+                "## Fleet composition\n"
+              ]
+            }
           },
-          "position": {"x": 0, "y": 6, "width": 12, "height": 1}
+          "position": {
+            "x": 0,
+            "y": 6,
+            "width": 12,
+            "height": 1
+          }
         },
         {
           "widget": {
             "name": "fleet-by-segment",
-            "queries": [{"name": "main_query", "query": {"datasetName": "ds_fleet", "fields": [
-              {"name": "segment", "expression": "`segment`"},
-              {"name": "count(vin)", "expression": "COUNT(`vin`)"}
-            ], "disaggregated": false}}],
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_fleet",
+                  "fields": [
+                    {
+                      "name": "segment",
+                      "expression": "`segment`"
+                    },
+                    {
+                      "name": "count(vin)",
+                      "expression": "COUNT(`vin`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
             "spec": {
-              "version": 3, "widgetType": "bar",
-              "frame": {"title": "Fleet by segment", "showTitle": true},
+              "version": 3,
+              "widgetType": "bar",
+              "frame": {
+                "title": "Fleet by segment",
+                "showTitle": true
+              },
               "encodings": {
-                "x": {"fieldName": "segment", "scale": {"type": "categorical"}, "displayName": "Segment"},
-                "y": {"fieldName": "count(vin)", "scale": {"type": "quantitative"}, "displayName": "Vehicles"},
-                "color": {"fieldName": "segment", "scale": {"type": "categorical"}}
+                "x": {
+                  "fieldName": "segment",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "Segment"
+                },
+                "y": {
+                  "fieldName": "count(vin)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Vehicles"
+                },
+                "color": {
+                  "fieldName": "segment",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
               }
             }
           },
-          "position": {"x": 0, "y": 7, "width": 6, "height": 5}
+          "position": {
+            "x": 0,
+            "y": 7,
+            "width": 6,
+            "height": 5
+          }
         },
         {
           "widget": {
             "name": "fleet-by-make",
-            "queries": [{"name": "main_query", "query": {"datasetName": "ds_fleet", "fields": [
-              {"name": "make", "expression": "`make`"},
-              {"name": "count(vin)", "expression": "COUNT(`vin`)"}
-            ], "disaggregated": false, "orders": [{"direction": "DESC", "expression": "COUNT(`vin`)"}]}}],
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_fleet",
+                  "fields": [
+                    {
+                      "name": "make",
+                      "expression": "`make`"
+                    },
+                    {
+                      "name": "count(vin)",
+                      "expression": "COUNT(`vin`)"
+                    }
+                  ],
+                  "disaggregated": false,
+                  "orders": [
+                    {
+                      "direction": "DESC",
+                      "expression": "COUNT(`vin`)"
+                    }
+                  ]
+                }
+              }
+            ],
             "spec": {
-              "version": 2, "widgetType": "table",
-              "frame": {"title": "Fleet by make", "showTitle": true},
-              "encodings": {"columns": [
-                {"fieldName": "make", "displayName": "Make"},
-                {"fieldName": "count(vin)", "displayName": "Vehicles"}
-              ]}
+              "version": 2,
+              "widgetType": "table",
+              "frame": {
+                "title": "Fleet by make",
+                "showTitle": true
+              },
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "make",
+                    "displayName": "Make"
+                  },
+                  {
+                    "fieldName": "count(vin)",
+                    "displayName": "Vehicles"
+                  }
+                ]
+              }
             }
           },
-          "position": {"x": 6, "y": 7, "width": 6, "height": 5}
+          "position": {
+            "x": 6,
+            "y": 7,
+            "width": 6,
+            "height": 5
+          }
         },
         {
           "widget": {
             "name": "section-recall-exposure",
-            "multilineTextboxSpec": {"lines": ["## Recall exposure, ranked by consequence then volume\n"]}
+            "multilineTextboxSpec": {
+              "lines": [
+                "## Recall exposure, ranked by consequence then volume\n"
+              ]
+            }
           },
-          "position": {"x": 0, "y": 12, "width": 12, "height": 1}
+          "position": {
+            "x": 0,
+            "y": 12,
+            "width": 12,
+            "height": 1
+          }
         },
         {
           "widget": {
             "name": "top-campaigns",
-            "queries": [{"name": "main_query", "query": {"datasetName": "ds_top_campaigns", "fields": [
-              {"name": "campaign_number", "expression": "`campaign_number`"},
-              {"name": "component", "expression": "`component`"},
-              {"name": "park_it", "expression": "`park_it`"},
-              {"name": "do_not_drive", "expression": "`do_not_drive`"},
-              {"name": "vehicles", "expression": "`vehicles`"},
-              {"name": "depots", "expression": "`depots`"}
-            ], "disaggregated": true}}],
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_top_campaigns",
+                  "fields": [
+                    {
+                      "name": "campaign_number",
+                      "expression": "`campaign_number`"
+                    },
+                    {
+                      "name": "component",
+                      "expression": "`component`"
+                    },
+                    {
+                      "name": "park_it",
+                      "expression": "`park_it`"
+                    },
+                    {
+                      "name": "do_not_drive",
+                      "expression": "`do_not_drive`"
+                    },
+                    {
+                      "name": "vehicles",
+                      "expression": "`vehicles`"
+                    },
+                    {
+                      "name": "depots",
+                      "expression": "`depots`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
             "spec": {
-              "version": 2, "widgetType": "table",
-              "frame": {"title": "Campaigns (Park It / Do Not Drive first, then by vehicles exposed)", "showTitle": true},
-              "encodings": {"columns": [
-                {"fieldName": "campaign_number", "displayName": "Campaign"},
-                {"fieldName": "component", "displayName": "Component"},
-                {"fieldName": "park_it", "displayName": "Park It"},
-                {"fieldName": "do_not_drive", "displayName": "Do Not Drive"},
-                {"fieldName": "vehicles", "displayName": "Vehicles"},
-                {"fieldName": "depots", "displayName": "Depots"}
-              ]}
+              "version": 2,
+              "widgetType": "table",
+              "frame": {
+                "title": "Campaigns (Park It / Do Not Drive first, then by vehicles exposed)",
+                "showTitle": true
+              },
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "campaign_number",
+                    "displayName": "Campaign"
+                  },
+                  {
+                    "fieldName": "component",
+                    "displayName": "Component"
+                  },
+                  {
+                    "fieldName": "park_it",
+                    "displayName": "Park It"
+                  },
+                  {
+                    "fieldName": "do_not_drive",
+                    "displayName": "Do Not Drive"
+                  },
+                  {
+                    "fieldName": "vehicles",
+                    "displayName": "Vehicles"
+                  },
+                  {
+                    "fieldName": "depots",
+                    "displayName": "Depots"
+                  }
+                ]
+              }
             }
           },
-          "position": {"x": 0, "y": 13, "width": 12, "height": 7}
+          "position": {
+            "x": 0,
+            "y": 13,
+            "width": 12,
+            "height": 7
+          }
+        }
+      ]
+    },
+    {
+      "name": "operations",
+      "displayName": "Operations",
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layoutVersion": "GRID_V1",
+      "layout": [
+        {
+          "widget": {
+            "name": "ops-title",
+            "multilineTextboxSpec": {
+              "lines": [
+                "# Operations \u2014 what the system actually did\n"
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 12,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "ops-sub",
+            "multilineTextboxSpec": {
+              "lines": [
+                "Recall response after approval: work orders dispatched, repairs completed, cost logged, and every change audited. Read live from Lakebase Postgres through Change Data Feed \u2014 the same rows the console writes, not a copy.\n"
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 1,
+            "width": 12,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "ops-kpi-wo",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_ops",
+                  "fields": [
+                    {
+                      "name": "count(wo_id)",
+                      "expression": "COUNT(`wo_id`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "count(wo_id)",
+                  "displayName": "Work orders dispatched"
+                }
+              },
+              "frame": {
+                "title": "Work orders dispatched",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 2,
+            "width": 3,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "ops-kpi-done",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_ops",
+                  "fields": [
+                    {
+                      "name": "sum(is_completed)",
+                      "expression": "SUM(`is_completed`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "sum(is_completed)",
+                  "displayName": "Repairs completed"
+                }
+              },
+              "frame": {
+                "title": "Repairs completed",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 2,
+            "width": 3,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "ops-kpi-cost",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_ops",
+                  "fields": [
+                    {
+                      "name": "sum(actual_cost)",
+                      "expression": "SUM(`actual_cost`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "sum(actual_cost)",
+                  "displayName": "Repair cost logged (USD)"
+                }
+              },
+              "frame": {
+                "title": "Repair cost logged (USD)",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 2,
+            "width": 3,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "ops-kpi-overdue",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_ops",
+                  "fields": [
+                    {
+                      "name": "sum(is_overdue)",
+                      "expression": "SUM(`is_overdue`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "sum(is_overdue)",
+                  "displayName": "Overdue work orders"
+                }
+              },
+              "frame": {
+                "title": "Overdue work orders",
+                "showTitle": true
+              }
+            }
+          },
+          "position": {
+            "x": 9,
+            "y": 2,
+            "width": 3,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "ops-h-work",
+            "multilineTextboxSpec": {
+              "lines": [
+                "## Where the work is\n"
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 5,
+            "width": 12,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "ops-by-status",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_ops",
+                  "fields": [
+                    {
+                      "name": "status",
+                      "expression": "`status`"
+                    },
+                    {
+                      "name": "count(wo_id)",
+                      "expression": "COUNT(`wo_id`)"
+                    }
+                  ],
+                  "disaggregated": false,
+                  "orders": [
+                    {
+                      "direction": "DESC",
+                      "expression": "COUNT(`wo_id`)"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "frame": {
+                "title": "Work orders by status",
+                "showTitle": true
+              },
+              "encodings": {
+                "x": {
+                  "fieldName": "status",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "Status"
+                },
+                "y": {
+                  "fieldName": "count(wo_id)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Work orders"
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 6,
+            "width": 6,
+            "height": 5
+          }
+        },
+        {
+          "widget": {
+            "name": "ops-cost-by-component",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_ops",
+                  "fields": [
+                    {
+                      "name": "component",
+                      "expression": "`component`"
+                    },
+                    {
+                      "name": "sum(actual_cost)",
+                      "expression": "SUM(`actual_cost`)"
+                    }
+                  ],
+                  "disaggregated": false,
+                  "orders": [
+                    {
+                      "direction": "DESC",
+                      "expression": "SUM(`actual_cost`)"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "frame": {
+                "title": "Logged repair cost by component",
+                "showTitle": true
+              },
+              "encodings": {
+                "x": {
+                  "fieldName": "component",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "Component"
+                },
+                "y": {
+                  "fieldName": "sum(actual_cost)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Cost (USD)"
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 6,
+            "width": 6,
+            "height": 5
+          }
+        },
+        {
+          "widget": {
+            "name": "ops-overdue-by-region",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_ops",
+                  "fields": [
+                    {
+                      "name": "region",
+                      "expression": "`region`"
+                    },
+                    {
+                      "name": "sum(is_overdue)",
+                      "expression": "SUM(`is_overdue`)"
+                    }
+                  ],
+                  "disaggregated": false,
+                  "orders": [
+                    {
+                      "direction": "DESC",
+                      "expression": "SUM(`is_overdue`)"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "frame": {
+                "title": "Overdue work orders by region",
+                "showTitle": true
+              },
+              "encodings": {
+                "x": {
+                  "fieldName": "region",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "Region"
+                },
+                "y": {
+                  "fieldName": "sum(is_overdue)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Overdue"
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 11,
+            "width": 6,
+            "height": 5
+          }
+        },
+        {
+          "widget": {
+            "name": "ops-audit-actions",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_ops_audit",
+                  "fields": [
+                    {
+                      "name": "action",
+                      "expression": "`action`"
+                    },
+                    {
+                      "name": "count(audit_id)",
+                      "expression": "COUNT(`audit_id`)"
+                    }
+                  ],
+                  "disaggregated": false,
+                  "orders": [
+                    {
+                      "direction": "DESC",
+                      "expression": "COUNT(`audit_id`)"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "frame": {
+                "title": "Audit trail by action",
+                "showTitle": true
+              },
+              "encodings": {
+                "x": {
+                  "fieldName": "action",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "Action"
+                },
+                "y": {
+                  "fieldName": "count(audit_id)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Entries"
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 11,
+            "width": 6,
+            "height": 5
+          }
+        },
+        {
+          "widget": {
+            "name": "ops-h-depot",
+            "multilineTextboxSpec": {
+              "lines": [
+                "## By region\n"
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 16,
+            "width": 12,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "ops-region-table",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_ops",
+                  "fields": [
+                    {
+                      "name": "region",
+                      "expression": "`region`"
+                    },
+                    {
+                      "name": "count(wo_id)",
+                      "expression": "COUNT(`wo_id`)"
+                    },
+                    {
+                      "name": "sum(is_completed)",
+                      "expression": "SUM(`is_completed`)"
+                    },
+                    {
+                      "name": "sum(is_overdue)",
+                      "expression": "SUM(`is_overdue`)"
+                    },
+                    {
+                      "name": "sum(actual_cost)",
+                      "expression": "SUM(`actual_cost`)"
+                    }
+                  ],
+                  "disaggregated": false,
+                  "orders": [
+                    {
+                      "direction": "DESC",
+                      "expression": "COUNT(`wo_id`)"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "table",
+              "frame": {
+                "title": "Work orders and cost by region",
+                "showTitle": true
+              },
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "region",
+                    "displayName": "Region"
+                  },
+                  {
+                    "fieldName": "count(wo_id)",
+                    "displayName": "Work orders"
+                  },
+                  {
+                    "fieldName": "sum(is_completed)",
+                    "displayName": "Completed"
+                  },
+                  {
+                    "fieldName": "sum(is_overdue)",
+                    "displayName": "Overdue"
+                  },
+                  {
+                    "fieldName": "sum(actual_cost)",
+                    "displayName": "Cost logged (USD)"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 17,
+            "width": 12,
+            "height": 5
+          }
+        },
+        {
+          "widget": {
+            "name": "ops-h-gov",
+            "multilineTextboxSpec": {
+              "lines": [
+                "## Governance \u2014 the audit trail and the trace are the same trail\n\nEvery agent write records the serving endpoint's own request id, so the human who authorised it joins to what the model actually saw and how long it took. Rows written before 2026-09-09 predate that wiring and carry no trace (E-03).\n"
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 22,
+            "width": 12,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "ops-agent-table",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_ops_agent",
+                  "fields": [
+                    {
+                      "name": "action_id",
+                      "expression": "`action_id`"
+                    },
+                    {
+                      "name": "tool",
+                      "expression": "`tool`"
+                    },
+                    {
+                      "name": "actor_principal",
+                      "expression": "`actor_principal`"
+                    },
+                    {
+                      "name": "trace_state",
+                      "expression": "`trace_state`"
+                    },
+                    {
+                      "name": "execution_duration_ms",
+                      "expression": "`execution_duration_ms`"
+                    },
+                    {
+                      "name": "status_code",
+                      "expression": "`status_code`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "table",
+              "frame": {
+                "title": "Agent writes, joined to their own trace",
+                "showTitle": true
+              },
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "action_id",
+                    "displayName": "Action"
+                  },
+                  {
+                    "fieldName": "tool",
+                    "displayName": "Tool"
+                  },
+                  {
+                    "fieldName": "actor_principal",
+                    "displayName": "Authorised by"
+                  },
+                  {
+                    "fieldName": "trace_state",
+                    "displayName": "Trace"
+                  },
+                  {
+                    "fieldName": "execution_duration_ms",
+                    "displayName": "Model latency (ms)"
+                  },
+                  {
+                    "fieldName": "status_code",
+                    "displayName": "Status"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 24,
+            "width": 12,
+            "height": 4
+          }
         }
       ]
     },
@@ -282,104 +1265,399 @@
       "layoutVersion": "GRID_V1",
       "layout": [
         {
-          "widget": {"name": "signals-title", "multilineTextboxSpec": {"lines": ["# Emerging Defects — the Proactive Half\n"]}},
-          "position": {"x": 0, "y": 0, "width": 12, "height": 1}
+          "widget": {
+            "name": "signals-title",
+            "multilineTextboxSpec": {
+              "lines": [
+                "# Emerging Defects \u2014 the Proactive Half\n"
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 12,
+            "height": 1
+          }
         },
         {
-          "widget": {"name": "signals-subtitle", "multilineTextboxSpec": {"lines": [
-            "Series with a sustained complaint anomaly (z ≥ 3.0 for ≥ 2 consecutive months against their own trailing year) that NHTSA has not recalled — the same detector the backtest measures at 16.0% vs 11.1% placebo, 1.44×. A signal is a detected anomaly, not a confirmed defect."
-          ]}},
-          "position": {"x": 0, "y": 1, "width": 12, "height": 1}
+          "widget": {
+            "name": "signals-subtitle",
+            "multilineTextboxSpec": {
+              "lines": [
+                "Series with a sustained complaint anomaly (z \u2265 3.0 for \u2265 2 consecutive months against their own trailing year) that NHTSA has not recalled \u2014 the same detector the backtest measures at 16.0% vs 11.1% placebo, 1.44\u00d7. A signal is a detected anomaly, not a confirmed defect."
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 1,
+            "width": 12,
+            "height": 1
+          }
         },
         {
           "widget": {
             "name": "kpi-total-signals",
-            "queries": [{"name": "main_query", "query": {"datasetName": "ds_signals_kpis", "fields": [{"name": "total_signals", "expression": "`total_signals`"}], "disaggregated": true}}],
-            "spec": {"version": 2, "widgetType": "counter", "encodings": {"value": {"fieldName": "total_signals", "displayName": "Detected · 12 months"}}, "frame": {"title": "Detected · 12 months", "showTitle": true}}
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_signals_kpis",
+                  "fields": [
+                    {
+                      "name": "total_signals",
+                      "expression": "`total_signals`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "total_signals",
+                  "displayName": "Detected \u00b7 12 months"
+                }
+              },
+              "frame": {
+                "title": "Detected \u00b7 12 months",
+                "showTitle": true
+              }
+            }
           },
-          "position": {"x": 0, "y": 2, "width": 4, "height": 4}
+          "position": {
+            "x": 0,
+            "y": 2,
+            "width": 4,
+            "height": 4
+          }
         },
         {
           "widget": {
             "name": "kpi-live-signals",
-            "queries": [{"name": "main_query", "query": {"datasetName": "ds_signals_kpis", "fields": [{"name": "live_signals", "expression": "`live_signals`"}], "disaggregated": true}}],
-            "spec": {"version": 2, "widgetType": "counter", "encodings": {"value": {"fieldName": "live_signals", "displayName": "Still firing"}}, "frame": {"title": "Still firing", "showTitle": true}}
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_signals_kpis",
+                  "fields": [
+                    {
+                      "name": "live_signals",
+                      "expression": "`live_signals`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "live_signals",
+                  "displayName": "Still firing"
+                }
+              },
+              "frame": {
+                "title": "Still firing",
+                "showTitle": true
+              }
+            }
           },
-          "position": {"x": 4, "y": 2, "width": 4, "height": 4}
+          "position": {
+            "x": 4,
+            "y": 2,
+            "width": 4,
+            "height": 4
+          }
         },
         {
           "widget": {
             "name": "kpi-fleet-signals",
-            "queries": [{"name": "main_query", "query": {"datasetName": "ds_signals_kpis", "fields": [{"name": "fleet_signals", "expression": "`fleet_signals`"}], "disaggregated": true}}],
-            "spec": {"version": 2, "widgetType": "counter", "encodings": {"value": {"fieldName": "fleet_signals", "displayName": "Affecting your fleet"}}, "frame": {"title": "Affecting your fleet", "showTitle": true}}
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_signals_kpis",
+                  "fields": [
+                    {
+                      "name": "fleet_signals",
+                      "expression": "`fleet_signals`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "fleet_signals",
+                  "displayName": "Affecting your fleet"
+                }
+              },
+              "frame": {
+                "title": "Affecting your fleet",
+                "showTitle": true
+              }
+            }
           },
-          "position": {"x": 8, "y": 2, "width": 4, "height": 4}
+          "position": {
+            "x": 8,
+            "y": 2,
+            "width": 4,
+            "height": 4
+          }
         },
         {
-          "widget": {"name": "section-signal-activity", "multilineTextboxSpec": {"lines": ["## Signal activity by month\n"]}},
-          "position": {"x": 0, "y": 6, "width": 12, "height": 1}
+          "widget": {
+            "name": "section-signal-activity",
+            "multilineTextboxSpec": {
+              "lines": [
+                "## Signal activity by month\n"
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 6,
+            "width": 12,
+            "height": 1
+          }
         },
         {
           "widget": {
             "name": "signals-by-month",
-            "queries": [{"name": "main_query", "query": {"datasetName": "ds_signals", "fields": [
-              {"name": "monthly(run_end)", "expression": "DATE_TRUNC(\"MONTH\", `run_end`)"},
-              {"name": "is_live", "expression": "`is_live`"},
-              {"name": "count(*)", "expression": "COUNT(`*`)"}
-            ], "disaggregated": false, "orders": [{"direction": "ASC", "expression": "DATE_TRUNC(\"MONTH\", `run_end`)"}]}}],
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_signals",
+                  "fields": [
+                    {
+                      "name": "monthly(run_end)",
+                      "expression": "DATE_TRUNC(\"MONTH\", `run_end`)"
+                    },
+                    {
+                      "name": "is_live",
+                      "expression": "`is_live`"
+                    },
+                    {
+                      "name": "count(*)",
+                      "expression": "COUNT(`*`)"
+                    }
+                  ],
+                  "disaggregated": false,
+                  "orders": [
+                    {
+                      "direction": "ASC",
+                      "expression": "DATE_TRUNC(\"MONTH\", `run_end`)"
+                    }
+                  ]
+                }
+              }
+            ],
             "spec": {
-              "version": 3, "widgetType": "bar",
-              "frame": {"title": "Signals fired, by month last live", "showTitle": true},
+              "version": 3,
+              "widgetType": "bar",
+              "frame": {
+                "title": "Signals fired, by month last live",
+                "showTitle": true
+              },
               "encodings": {
-                "x": {"fieldName": "monthly(run_end)", "scale": {"type": "temporal"}, "displayName": "Month"},
-                "y": {"fieldName": "count(*)", "scale": {"type": "quantitative"}, "displayName": "Signals"},
-                "color": {"fieldName": "is_live", "scale": {"type": "categorical", "mappings": [
-                  {"value": "true", "color": "#009E73"},
-                  {"value": "false", "color": "#8C9196"}
-                ]}, "displayName": "Still firing"}
+                "x": {
+                  "fieldName": "monthly(run_end)",
+                  "scale": {
+                    "type": "temporal"
+                  },
+                  "displayName": "Month"
+                },
+                "y": {
+                  "fieldName": "count(*)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Signals"
+                },
+                "color": {
+                  "fieldName": "is_live",
+                  "scale": {
+                    "type": "categorical",
+                    "mappings": [
+                      {
+                        "value": "true",
+                        "color": "#009E73"
+                      },
+                      {
+                        "value": "false",
+                        "color": "#8C9196"
+                      }
+                    ]
+                  },
+                  "displayName": "Still firing"
+                }
               }
             }
           },
-          "position": {"x": 0, "y": 7, "width": 12, "height": 6}
+          "position": {
+            "x": 0,
+            "y": 7,
+            "width": 12,
+            "height": 6
+          }
         },
         {
-          "widget": {"name": "section-top-signals", "multilineTextboxSpec": {"lines": ["## Signal detail, fleet-relevant first\n"]}},
-          "position": {"x": 0, "y": 13, "width": 12, "height": 1}
+          "widget": {
+            "name": "section-top-signals",
+            "multilineTextboxSpec": {
+              "lines": [
+                "## Signal detail, fleet-relevant first\n"
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 13,
+            "width": 12,
+            "height": 1
+          }
         },
         {
           "widget": {
             "name": "signals-table",
-            "queries": [{"name": "main_query", "query": {"datasetName": "ds_signals", "fields": [
-              {"name": "make", "expression": "`make`"},
-              {"name": "model", "expression": "`model`"},
-              {"name": "comp_top", "expression": "`comp_top`"},
-              {"name": "max_z", "expression": "`max_z`"},
-              {"name": "complaints_in_run", "expression": "`complaints_in_run`"},
-              {"name": "harm_share", "expression": "`harm_share`"},
-              {"name": "fleet_vehicles", "expression": "`fleet_vehicles`"},
-              {"name": "is_live", "expression": "`is_live`"},
-              {"name": "run_end", "expression": "`run_end`"}
-            ], "disaggregated": true, "orders": [
-              {"direction": "DESC", "expression": "`fleet_vehicles`"},
-              {"direction": "DESC", "expression": "`max_z`"}
-            ]}}],
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_signals",
+                  "fields": [
+                    {
+                      "name": "make",
+                      "expression": "`make`"
+                    },
+                    {
+                      "name": "model",
+                      "expression": "`model`"
+                    },
+                    {
+                      "name": "comp_top",
+                      "expression": "`comp_top`"
+                    },
+                    {
+                      "name": "max_z",
+                      "expression": "`max_z`"
+                    },
+                    {
+                      "name": "complaints_in_run",
+                      "expression": "`complaints_in_run`"
+                    },
+                    {
+                      "name": "harm_share",
+                      "expression": "`harm_share`"
+                    },
+                    {
+                      "name": "fleet_vehicles",
+                      "expression": "`fleet_vehicles`"
+                    },
+                    {
+                      "name": "is_live",
+                      "expression": "`is_live`"
+                    },
+                    {
+                      "name": "run_end",
+                      "expression": "`run_end`"
+                    }
+                  ],
+                  "disaggregated": true,
+                  "orders": [
+                    {
+                      "direction": "DESC",
+                      "expression": "`fleet_vehicles`"
+                    },
+                    {
+                      "direction": "DESC",
+                      "expression": "`max_z`"
+                    }
+                  ]
+                }
+              }
+            ],
             "spec": {
-              "version": 2, "widgetType": "table",
-              "frame": {"title": "All 48 signals — 12 months", "showTitle": true},
-              "encodings": {"columns": [
-                {"fieldName": "make", "displayName": "Make"},
-                {"fieldName": "model", "displayName": "Model"},
-                {"fieldName": "comp_top", "displayName": "Component"},
-                {"fieldName": "max_z", "displayName": "Peak z", "format": {"type": "number", "decimalPlaces": {"type": "exact", "places": 1}}},
-                {"fieldName": "complaints_in_run", "displayName": "Complaints"},
-                {"fieldName": "harm_share", "displayName": "Harm share", "format": {"type": "number-percent", "decimalPlaces": {"type": "max", "places": 1}}},
-                {"fieldName": "fleet_vehicles", "displayName": "Fleet vehicles"},
-                {"fieldName": "is_live", "displayName": "Still firing"},
-                {"fieldName": "run_end", "displayName": "Last fired"}
-              ]}
+              "version": 2,
+              "widgetType": "table",
+              "frame": {
+                "title": "All 48 signals \u2014 12 months",
+                "showTitle": true
+              },
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "make",
+                    "displayName": "Make"
+                  },
+                  {
+                    "fieldName": "model",
+                    "displayName": "Model"
+                  },
+                  {
+                    "fieldName": "comp_top",
+                    "displayName": "Component"
+                  },
+                  {
+                    "fieldName": "max_z",
+                    "displayName": "Peak z",
+                    "format": {
+                      "type": "number",
+                      "decimalPlaces": {
+                        "type": "exact",
+                        "places": 1
+                      }
+                    }
+                  },
+                  {
+                    "fieldName": "complaints_in_run",
+                    "displayName": "Complaints"
+                  },
+                  {
+                    "fieldName": "harm_share",
+                    "displayName": "Harm share",
+                    "format": {
+                      "type": "number-percent",
+                      "decimalPlaces": {
+                        "type": "max",
+                        "places": 1
+                      }
+                    }
+                  },
+                  {
+                    "fieldName": "fleet_vehicles",
+                    "displayName": "Fleet vehicles"
+                  },
+                  {
+                    "fieldName": "is_live",
+                    "displayName": "Still firing"
+                  },
+                  {
+                    "fieldName": "run_end",
+                    "displayName": "Last fired"
+                  }
+                ]
+              }
             }
           },
-          "position": {"x": 0, "y": 14, "width": 12, "height": 7}
+          "position": {
+            "x": 0,
+            "y": 14,
+            "width": 12,
+            "height": 7
+          }
         }
       ]
     },
@@ -389,94 +1667,405 @@
       "pageType": "PAGE_TYPE_CANVAS",
       "layoutVersion": "GRID_V1",
       "layout": [
-        {"widget": {"name": "evidence-title", "multilineTextboxSpec": {"lines": ["# Does Early Warning Actually Work?\n"]}}, "position": {"x": 0, "y": 0, "width": 12, "height": 1}},
-        {"widget": {"name": "evidence-subtitle", "multilineTextboxSpec": {"lines": [
-          "Measured against every ODI investigation opened since 2010, with a volume-matched placebo control arm. The gap between the arms is the evidence — the real arm alone is not."
-        ]}}, "position": {"x": 0, "y": 1, "width": 12, "height": 1}},
+        {
+          "widget": {
+            "name": "evidence-title",
+            "multilineTextboxSpec": {
+              "lines": [
+                "# Does Early Warning Actually Work?\n"
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 12,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "evidence-subtitle",
+            "multilineTextboxSpec": {
+              "lines": [
+                "Measured against every ODI investigation opened since 2010, with a volume-matched placebo control arm. The gap between the arms is the evidence \u2014 the real arm alone is not."
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 1,
+            "width": 12,
+            "height": 1
+          }
+        },
         {
           "widget": {
             "name": "kpi-real-rate",
-            "queries": [{"name": "main_query", "query": {"datasetName": "ds_evidence_metrics", "fields": [{"name": "measure(Real Detection Rate %)", "expression": "MEASURE(`Real Detection Rate %`)"}], "disaggregated": false}}],
-            "spec": {"version": 2, "widgetType": "counter", "encodings": {"value": {"fieldName": "measure(Real Detection Rate %)", "displayName": "Detected · real arm", "format": {"type": "number", "decimalPlaces": {"type": "exact", "places": 1}}, "formatTemplate": "{{ @formatted }}%"}}, "frame": {"title": "Detected · real arm", "showTitle": true}}
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_evidence_metrics",
+                  "fields": [
+                    {
+                      "name": "measure(Real Detection Rate %)",
+                      "expression": "MEASURE(`Real Detection Rate %`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "measure(Real Detection Rate %)",
+                  "displayName": "Detected \u00b7 real arm",
+                  "format": {
+                    "type": "number",
+                    "decimalPlaces": {
+                      "type": "exact",
+                      "places": 1
+                    }
+                  },
+                  "formatTemplate": "{{ @formatted }}%"
+                }
+              },
+              "frame": {
+                "title": "Detected \u00b7 real arm",
+                "showTitle": true
+              }
+            }
           },
-          "position": {"x": 0, "y": 2, "width": 3, "height": 4}
+          "position": {
+            "x": 0,
+            "y": 2,
+            "width": 3,
+            "height": 4
+          }
         },
         {
           "widget": {
             "name": "kpi-placebo-rate",
-            "queries": [{"name": "main_query", "query": {"datasetName": "ds_evidence_metrics", "fields": [{"name": "measure(Placebo Detection Rate %)", "expression": "MEASURE(`Placebo Detection Rate %`)"}], "disaggregated": false}}],
-            "spec": {"version": 2, "widgetType": "counter", "encodings": {"value": {"fieldName": "measure(Placebo Detection Rate %)", "displayName": "Detected · placebo", "format": {"type": "number", "decimalPlaces": {"type": "exact", "places": 1}}, "formatTemplate": "{{ @formatted }}%"}}, "frame": {"title": "Detected · placebo", "showTitle": true}}
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_evidence_metrics",
+                  "fields": [
+                    {
+                      "name": "measure(Placebo Detection Rate %)",
+                      "expression": "MEASURE(`Placebo Detection Rate %`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "measure(Placebo Detection Rate %)",
+                  "displayName": "Detected \u00b7 placebo",
+                  "format": {
+                    "type": "number",
+                    "decimalPlaces": {
+                      "type": "exact",
+                      "places": 1
+                    }
+                  },
+                  "formatTemplate": "{{ @formatted }}%"
+                }
+              },
+              "frame": {
+                "title": "Detected \u00b7 placebo",
+                "showTitle": true
+              }
+            }
           },
-          "position": {"x": 3, "y": 2, "width": 3, "height": 4}
+          "position": {
+            "x": 3,
+            "y": 2,
+            "width": 3,
+            "height": 4
+          }
         },
         {
           "widget": {
             "name": "kpi-lift",
-            "queries": [{"name": "main_query", "query": {"datasetName": "ds_evidence_metrics", "fields": [{"name": "measure(Lift)", "expression": "MEASURE(`Lift`)"}], "disaggregated": false}}],
-            "spec": {"version": 2, "widgetType": "counter", "encodings": {"value": {"fieldName": "measure(Lift)", "displayName": "Lift", "format": {"type": "number", "decimalPlaces": {"type": "exact", "places": 2}}, "formatTemplate": "{{ @formatted }}×"}}, "frame": {"title": "Lift", "showTitle": true}}
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_evidence_metrics",
+                  "fields": [
+                    {
+                      "name": "measure(Lift)",
+                      "expression": "MEASURE(`Lift`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "measure(Lift)",
+                  "displayName": "Lift",
+                  "format": {
+                    "type": "number",
+                    "decimalPlaces": {
+                      "type": "exact",
+                      "places": 2
+                    }
+                  },
+                  "formatTemplate": "{{ @formatted }}\u00d7"
+                }
+              },
+              "frame": {
+                "title": "Lift",
+                "showTitle": true
+              }
+            }
           },
-          "position": {"x": 6, "y": 2, "width": 3, "height": 4}
+          "position": {
+            "x": 6,
+            "y": 2,
+            "width": 3,
+            "height": 4
+          }
         },
         {
           "widget": {
             "name": "kpi-median-lead",
-            "queries": [{"name": "main_query", "query": {"datasetName": "ds_evidence_metrics", "fields": [{"name": "measure(Real Median Lead Days)", "expression": "MEASURE(`Real Median Lead Days`)"}], "disaggregated": false}}],
-            "spec": {"version": 2, "widgetType": "counter", "encodings": {"value": {"fieldName": "measure(Real Median Lead Days)", "displayName": "Median lead", "formatTemplate": "{{ @formatted }}d"}}, "frame": {"title": "Median lead", "showTitle": true}}
-          },
-          "position": {"x": 9, "y": 2, "width": 3, "height": 4}
-        },
-        {"widget": {"name": "section-arms", "multilineTextboxSpec": {"lines": ["## Real vs. placebo — from `evidence_metrics`, the governed metric view\n"]}}, "position": {"x": 0, "y": 6, "width": 12, "height": 1}},
-        {
-          "widget": {
-            "name": "arm-detect-rate",
-            "queries": [{"name": "main_query", "query": {"datasetName": "ds_evidence_metrics", "fields": [
-              {"name": "Arm", "expression": "`Arm`"},
-              {"name": "measure(Detection Rate %)", "expression": "MEASURE(`Detection Rate %`)"}
-            ], "disaggregated": false}}],
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_evidence_metrics",
+                  "fields": [
+                    {
+                      "name": "measure(Real Median Lead Days)",
+                      "expression": "MEASURE(`Real Median Lead Days`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
             "spec": {
-              "version": 3, "widgetType": "bar",
-              "frame": {"title": "Detection rate by arm", "showTitle": true},
+              "version": 2,
+              "widgetType": "counter",
               "encodings": {
-                "x": {"fieldName": "Arm", "scale": {"type": "categorical"}, "displayName": "Arm"},
-                "y": {"fieldName": "measure(Detection Rate %)", "scale": {"type": "quantitative"}, "displayName": "Detected %"},
-                "color": {"fieldName": "Arm", "scale": {"type": "categorical", "mappings": [
-                  {"value": "REAL (investigated series)", "color": "#009E73"},
-                  {"value": "PLACEBO (never investigated)", "color": "#8C9196"}
-                ]}}
+                "value": {
+                  "fieldName": "measure(Real Median Lead Days)",
+                  "displayName": "Median lead",
+                  "formatTemplate": "{{ @formatted }}d"
+                }
+              },
+              "frame": {
+                "title": "Median lead",
+                "showTitle": true
               }
             }
           },
-          "position": {"x": 0, "y": 7, "width": 6, "height": 5}
+          "position": {
+            "x": 9,
+            "y": 2,
+            "width": 3,
+            "height": 4
+          }
+        },
+        {
+          "widget": {
+            "name": "section-arms",
+            "multilineTextboxSpec": {
+              "lines": [
+                "## Real vs. placebo \u2014 from `evidence_metrics`, the governed metric view\n"
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 6,
+            "width": 12,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "arm-detect-rate",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_evidence_metrics",
+                  "fields": [
+                    {
+                      "name": "Arm",
+                      "expression": "`Arm`"
+                    },
+                    {
+                      "name": "measure(Detection Rate %)",
+                      "expression": "MEASURE(`Detection Rate %`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "frame": {
+                "title": "Detection rate by arm",
+                "showTitle": true
+              },
+              "encodings": {
+                "x": {
+                  "fieldName": "Arm",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "Arm"
+                },
+                "y": {
+                  "fieldName": "measure(Detection Rate %)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Detected %"
+                },
+                "color": {
+                  "fieldName": "Arm",
+                  "scale": {
+                    "type": "categorical",
+                    "mappings": [
+                      {
+                        "value": "REAL (investigated series)",
+                        "color": "#009E73"
+                      },
+                      {
+                        "value": "PLACEBO (never investigated)",
+                        "color": "#8C9196"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 7,
+            "width": 6,
+            "height": 5
+          }
         },
         {
           "widget": {
             "name": "arm-detail",
-            "queries": [{"name": "main_query", "query": {"datasetName": "ds_evidence_metrics", "fields": [
-              {"name": "Arm", "expression": "`Arm`"},
-              {"name": "measure(Investigations)", "expression": "MEASURE(`Investigations`)"},
-              {"name": "measure(Detected)", "expression": "MEASURE(`Detected`)"},
-              {"name": "measure(Detection Rate %)", "expression": "MEASURE(`Detection Rate %`)"},
-              {"name": "measure(Median Lead Days)", "expression": "MEASURE(`Median Lead Days`)"}
-            ], "disaggregated": false}}],
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_evidence_metrics",
+                  "fields": [
+                    {
+                      "name": "Arm",
+                      "expression": "`Arm`"
+                    },
+                    {
+                      "name": "measure(Investigations)",
+                      "expression": "MEASURE(`Investigations`)"
+                    },
+                    {
+                      "name": "measure(Detected)",
+                      "expression": "MEASURE(`Detected`)"
+                    },
+                    {
+                      "name": "measure(Detection Rate %)",
+                      "expression": "MEASURE(`Detection Rate %`)"
+                    },
+                    {
+                      "name": "measure(Median Lead Days)",
+                      "expression": "MEASURE(`Median Lead Days`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
             "spec": {
-              "version": 2, "widgetType": "table",
-              "frame": {"title": "Arm detail", "showTitle": true},
-              "encodings": {"columns": [
-                {"fieldName": "Arm", "displayName": "Arm"},
-                {"fieldName": "measure(Investigations)", "displayName": "Investigations"},
-                {"fieldName": "measure(Detected)", "displayName": "Detected"},
-                {"fieldName": "measure(Detection Rate %)", "displayName": "Rate %", "format": {"type": "number", "decimalPlaces": {"type": "exact", "places": 1}}},
-                {"fieldName": "measure(Median Lead Days)", "displayName": "Median lead (days)"}
-              ]}
+              "version": 2,
+              "widgetType": "table",
+              "frame": {
+                "title": "Arm detail",
+                "showTitle": true
+              },
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "Arm",
+                    "displayName": "Arm"
+                  },
+                  {
+                    "fieldName": "measure(Investigations)",
+                    "displayName": "Investigations"
+                  },
+                  {
+                    "fieldName": "measure(Detected)",
+                    "displayName": "Detected"
+                  },
+                  {
+                    "fieldName": "measure(Detection Rate %)",
+                    "displayName": "Rate %",
+                    "format": {
+                      "type": "number",
+                      "decimalPlaces": {
+                        "type": "exact",
+                        "places": 1
+                      }
+                    }
+                  },
+                  {
+                    "fieldName": "measure(Median Lead Days)",
+                    "displayName": "Median lead (days)"
+                  }
+                ]
+              }
             }
           },
-          "position": {"x": 6, "y": 7, "width": 6, "height": 5}
+          "position": {
+            "x": 6,
+            "y": 7,
+            "width": 6,
+            "height": 5
+          }
         },
         {
-          "widget": {"name": "stated-limits", "multilineTextboxSpec": {"lines": [
-            "**Stated limits.** It misses roughly five of every six investigations. The placebo control fires at double digits too, so most detections would have occurred on a busy series with no defect — this is an edge, not an oracle. It predicts that an **investigation will open**, not that a recall will be issued, and not which VINs are affected. Adding semantic clustering was tested and **made detection worse** (11.2%, zero extra lead time) — that negative result is published rather than buried."
-          ]}},
-          "position": {"x": 0, "y": 12, "width": 12, "height": 3}
+          "widget": {
+            "name": "stated-limits",
+            "multilineTextboxSpec": {
+              "lines": [
+                "**Stated limits.** It misses roughly five of every six investigations. The placebo control fires at double digits too, so most detections would have occurred on a busy series with no defect \u2014 this is an edge, not an oracle. It predicts that an **investigation will open**, not that a recall will be issued, and not which VINs are affected. Adding semantic clustering was tested and **made detection worse** (11.2%, zero extra lead time) \u2014 that negative result is published rather than buried."
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 12,
+            "width": 12,
+            "height": 3
+          }
         }
       ]
     },
@@ -486,133 +2075,534 @@
       "pageType": "PAGE_TYPE_CANVAS",
       "layoutVersion": "GRID_V1",
       "layout": [
-        {"widget": {"name": "trust-title", "multilineTextboxSpec": {"lines": ["# Trust — Does the Pipeline Do What It Claims?\n"]}}, "position": {"x": 0, "y": 0, "width": 12, "height": 1}},
-        {"widget": {"name": "trust-subtitle", "multilineTextboxSpec": {"lines": [
-          "Every layer reconciles exactly: **bronze = silver + quarantine**, with no silent drops. Rows that fail a quality check are routed to a quarantine table with a reason, never discarded. This page is the proof, not the claim."
-        ]}}, "position": {"x": 0, "y": 1, "width": 12, "height": 1}},
+        {
+          "widget": {
+            "name": "trust-title",
+            "multilineTextboxSpec": {
+              "lines": [
+                "# Trust \u2014 Does the Pipeline Do What It Claims?\n"
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 12,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "trust-subtitle",
+            "multilineTextboxSpec": {
+              "lines": [
+                "Every layer reconciles exactly: **bronze = silver + quarantine**, with no silent drops. Rows that fail a quality check are routed to a quarantine table with a reason, never discarded. This page is the proof, not the claim."
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 1,
+            "width": 12,
+            "height": 1
+          }
+        },
         {
           "widget": {
             "name": "kpi-total-bronze",
-            "queries": [{"name": "main_query", "query": {"datasetName": "ds_trust_recon", "fields": [{"name": "measure(Total Bronze)", "expression": "MEASURE(`Total Bronze`)"}], "disaggregated": false}}],
-            "spec": {"version": 2, "widgetType": "counter", "encodings": {"value": {"fieldName": "measure(Total Bronze)", "displayName": "Source rows ingested"}}, "frame": {"title": "Source rows ingested", "showTitle": true}}
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_trust_recon",
+                  "fields": [
+                    {
+                      "name": "measure(Total Bronze)",
+                      "expression": "MEASURE(`Total Bronze`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "measure(Total Bronze)",
+                  "displayName": "Source rows ingested"
+                }
+              },
+              "frame": {
+                "title": "Source rows ingested",
+                "showTitle": true
+              }
+            }
           },
-          "position": {"x": 0, "y": 2, "width": 3, "height": 4}
+          "position": {
+            "x": 0,
+            "y": 2,
+            "width": 3,
+            "height": 4
+          }
         },
         {
           "widget": {
             "name": "kpi-total-silver",
-            "queries": [{"name": "main_query", "query": {"datasetName": "ds_trust_recon", "fields": [{"name": "measure(Total Silver)", "expression": "MEASURE(`Total Silver`)"}], "disaggregated": false}}],
-            "spec": {"version": 2, "widgetType": "counter", "encodings": {"value": {"fieldName": "measure(Total Silver)", "displayName": "Passed quality checks"}}, "frame": {"title": "Passed quality checks", "showTitle": true}}
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_trust_recon",
+                  "fields": [
+                    {
+                      "name": "measure(Total Silver)",
+                      "expression": "MEASURE(`Total Silver`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "measure(Total Silver)",
+                  "displayName": "Passed quality checks"
+                }
+              },
+              "frame": {
+                "title": "Passed quality checks",
+                "showTitle": true
+              }
+            }
           },
-          "position": {"x": 3, "y": 2, "width": 3, "height": 4}
+          "position": {
+            "x": 3,
+            "y": 2,
+            "width": 3,
+            "height": 4
+          }
         },
         {
           "widget": {
             "name": "kpi-total-quarantine",
-            "queries": [{"name": "main_query", "query": {"datasetName": "ds_trust_recon", "fields": [{"name": "measure(Total Quarantined)", "expression": "MEASURE(`Total Quarantined`)"}], "disaggregated": false}}],
-            "spec": {"version": 2, "widgetType": "counter", "encodings": {"value": {"fieldName": "measure(Total Quarantined)", "displayName": "Quarantined"}}, "frame": {"title": "Quarantined", "showTitle": true}}
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_trust_recon",
+                  "fields": [
+                    {
+                      "name": "measure(Total Quarantined)",
+                      "expression": "MEASURE(`Total Quarantined`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "measure(Total Quarantined)",
+                  "displayName": "Quarantined"
+                }
+              },
+              "frame": {
+                "title": "Quarantined",
+                "showTitle": true
+              }
+            }
           },
-          "position": {"x": 6, "y": 2, "width": 3, "height": 4}
+          "position": {
+            "x": 6,
+            "y": 2,
+            "width": 3,
+            "height": 4
+          }
         },
         {
           "widget": {
             "name": "kpi-quarantine-rate",
-            "queries": [{"name": "main_query", "query": {"datasetName": "ds_trust_recon", "fields": [{"name": "measure(Quarantine Rate %)", "expression": "MEASURE(`Quarantine Rate %`)"}], "disaggregated": false}}],
-            "spec": {"version": 2, "widgetType": "counter", "encodings": {"value": {"fieldName": "measure(Quarantine Rate %)", "displayName": "Quarantine rate", "formatTemplate": "{{ @formatted }}%"}}, "frame": {"title": "Quarantine rate", "showTitle": true}}
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_trust_recon",
+                  "fields": [
+                    {
+                      "name": "measure(Quarantine Rate %)",
+                      "expression": "MEASURE(`Quarantine Rate %`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "measure(Quarantine Rate %)",
+                  "displayName": "Quarantine rate",
+                  "formatTemplate": "{{ @formatted }}%"
+                }
+              },
+              "frame": {
+                "title": "Quarantine rate",
+                "showTitle": true
+              }
+            }
           },
-          "position": {"x": 9, "y": 2, "width": 3, "height": 4}
+          "position": {
+            "x": 9,
+            "y": 2,
+            "width": 3,
+            "height": 4
+          }
         },
-        {"widget": {"name": "section-reconciliation", "multilineTextboxSpec": {"lines": ["## Reconciliation, by entity\n"]}}, "position": {"x": 0, "y": 6, "width": 12, "height": 1}},
+        {
+          "widget": {
+            "name": "section-reconciliation",
+            "multilineTextboxSpec": {
+              "lines": [
+                "## Reconciliation, by entity\n"
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 6,
+            "width": 12,
+            "height": 1
+          }
+        },
         {
           "widget": {
             "name": "recon-table",
-            "queries": [{"name": "main_query", "query": {"datasetName": "ds_trust_recon", "fields": [
-              {"name": "entity", "expression": "`entity`"},
-              {"name": "bronze_n", "expression": "`bronze_n`"},
-              {"name": "silver_n", "expression": "`silver_n`"},
-              {"name": "quarantine_n", "expression": "`quarantine_n`"},
-              {"name": "reconciled", "expression": "`reconciled`"}
-            ], "disaggregated": true}}],
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_trust_recon",
+                  "fields": [
+                    {
+                      "name": "entity",
+                      "expression": "`entity`"
+                    },
+                    {
+                      "name": "bronze_n",
+                      "expression": "`bronze_n`"
+                    },
+                    {
+                      "name": "silver_n",
+                      "expression": "`silver_n`"
+                    },
+                    {
+                      "name": "quarantine_n",
+                      "expression": "`quarantine_n`"
+                    },
+                    {
+                      "name": "reconciled",
+                      "expression": "`reconciled`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
             "spec": {
-              "version": 2, "widgetType": "table",
-              "frame": {"title": "bronze = silver + quarantine, verified per entity", "showTitle": true},
-              "encodings": {"columns": [
-                {"fieldName": "entity", "displayName": "Entity"},
-                {"fieldName": "bronze_n", "displayName": "Bronze"},
-                {"fieldName": "silver_n", "displayName": "Silver"},
-                {"fieldName": "quarantine_n", "displayName": "Quarantine"},
-                {"fieldName": "reconciled", "displayName": "Check",
-                 "style": {"type": "basic", "rules": [
-                   {"condition": {"operand": {"type": "data-value", "value": "MISMATCH"}, "operator": "="}, "backgroundColor": {"hex": "#D55E00"}},
-                   {"condition": {"operand": {"type": "data-value", "value": "reconciled"}, "operator": "="}, "backgroundColor": {"hex": "#009E73"}}
-                 ]}}
-              ]}
+              "version": 2,
+              "widgetType": "table",
+              "frame": {
+                "title": "bronze = silver + quarantine, verified per entity",
+                "showTitle": true
+              },
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "entity",
+                    "displayName": "Entity"
+                  },
+                  {
+                    "fieldName": "bronze_n",
+                    "displayName": "Bronze"
+                  },
+                  {
+                    "fieldName": "silver_n",
+                    "displayName": "Silver"
+                  },
+                  {
+                    "fieldName": "quarantine_n",
+                    "displayName": "Quarantine"
+                  },
+                  {
+                    "fieldName": "reconciled",
+                    "displayName": "Check",
+                    "style": {
+                      "type": "basic",
+                      "rules": [
+                        {
+                          "condition": {
+                            "operand": {
+                              "type": "data-value",
+                              "value": "MISMATCH"
+                            },
+                            "operator": "="
+                          },
+                          "backgroundColor": {
+                            "hex": "#D55E00"
+                          }
+                        },
+                        {
+                          "condition": {
+                            "operand": {
+                              "type": "data-value",
+                              "value": "reconciled"
+                            },
+                            "operator": "="
+                          },
+                          "backgroundColor": {
+                            "hex": "#009E73"
+                          }
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
             }
           },
-          "position": {"x": 0, "y": 7, "width": 12, "height": 5}
+          "position": {
+            "x": 0,
+            "y": 7,
+            "width": 12,
+            "height": 5
+          }
         },
-        {"widget": {"name": "section-quarantine-reasons", "multilineTextboxSpec": {"lines": ["## Why rows are quarantined\n"]}}, "position": {"x": 0, "y": 12, "width": 12, "height": 1}},
+        {
+          "widget": {
+            "name": "section-quarantine-reasons",
+            "multilineTextboxSpec": {
+              "lines": [
+                "## Why rows are quarantined\n"
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 12,
+            "width": 12,
+            "height": 1
+          }
+        },
         {
           "widget": {
             "name": "quarantine-reasons",
-            "queries": [{"name": "main_query", "query": {"datasetName": "ds_trust_quarantine", "fields": [
-              {"name": "reason", "expression": "`reason`"},
-              {"name": "entity", "expression": "`entity`"},
-              {"name": "n", "expression": "`n`"}
-            ], "disaggregated": true}}],
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_trust_quarantine",
+                  "fields": [
+                    {
+                      "name": "reason",
+                      "expression": "`reason`"
+                    },
+                    {
+                      "name": "entity",
+                      "expression": "`entity`"
+                    },
+                    {
+                      "name": "n",
+                      "expression": "`n`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
             "spec": {
-              "version": 3, "widgetType": "bar",
-              "frame": {"title": "Quarantine reasons, by entity", "showTitle": true},
+              "version": 3,
+              "widgetType": "bar",
+              "frame": {
+                "title": "Quarantine reasons, by entity",
+                "showTitle": true
+              },
               "encodings": {
-                "x": {"fieldName": "reason", "scale": {"type": "categorical"}, "displayName": "Reason"},
-                "y": {"fieldName": "n", "scale": {"type": "quantitative"}, "displayName": "Rows"},
-                "color": {"fieldName": "entity", "scale": {"type": "categorical"}, "displayName": "Entity"}
+                "x": {
+                  "fieldName": "reason",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "Reason"
+                },
+                "y": {
+                  "fieldName": "n",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Rows"
+                },
+                "color": {
+                  "fieldName": "entity",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "Entity"
+                }
               }
             }
           },
-          "position": {"x": 0, "y": 13, "width": 12, "height": 5}
+          "position": {
+            "x": 0,
+            "y": 13,
+            "width": 12,
+            "height": 5
+          }
         },
-        {"widget": {"name": "section-match-confidence", "multilineTextboxSpec": {"lines": ["## Fleet-match confidence\n"]}}, "position": {"x": 0, "y": 18, "width": 12, "height": 1}},
+        {
+          "widget": {
+            "name": "section-match-confidence",
+            "multilineTextboxSpec": {
+              "lines": [
+                "## Fleet-match confidence\n"
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 18,
+            "width": 12,
+            "height": 1
+          }
+        },
         {
           "widget": {
             "name": "match-basis",
-            "queries": [{"name": "main_query", "query": {"datasetName": "ds_exposure", "fields": [
-              {"name": "match_basis", "expression": "`match_basis`"},
-              {"name": "count(*)", "expression": "COUNT(`*`)"}
-            ], "disaggregated": false}}],
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_exposure",
+                  "fields": [
+                    {
+                      "name": "match_basis",
+                      "expression": "`match_basis`"
+                    },
+                    {
+                      "name": "count(*)",
+                      "expression": "COUNT(`*`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
             "spec": {
-              "version": 3, "widgetType": "bar",
-              "frame": {"title": "Exposure rows by match basis", "showTitle": true},
+              "version": 3,
+              "widgetType": "bar",
+              "frame": {
+                "title": "Exposure rows by match basis",
+                "showTitle": true
+              },
               "encodings": {
-                "x": {"fieldName": "match_basis", "scale": {"type": "categorical"}, "displayName": "Match basis"},
-                "y": {"fieldName": "count(*)", "scale": {"type": "quantitative"}, "displayName": "Exposure rows"},
-                "color": {"fieldName": "match_basis", "scale": {"type": "categorical", "mappings": [
-                  {"value": "EXACT", "color": "#009E73"},
-                  {"value": "MODEL_VARIANT", "color": "#E69F00"}
-                ]}}
+                "x": {
+                  "fieldName": "match_basis",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "Match basis"
+                },
+                "y": {
+                  "fieldName": "count(*)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Exposure rows"
+                },
+                "color": {
+                  "fieldName": "match_basis",
+                  "scale": {
+                    "type": "categorical",
+                    "mappings": [
+                      {
+                        "value": "EXACT",
+                        "color": "#009E73"
+                      },
+                      {
+                        "value": "MODEL_VARIANT",
+                        "color": "#E69F00"
+                      }
+                    ]
+                  }
+                }
               }
             }
           },
-          "position": {"x": 0, "y": 19, "width": 6, "height": 5}
+          "position": {
+            "x": 0,
+            "y": 19,
+            "width": 6,
+            "height": 5
+          }
         },
         {
-          "widget": {"name": "match-basis-caption", "multilineTextboxSpec": {"lines": [
-            "**EXACT** matches NHTSA's make/model/year string exactly — the deterministic guarantee applies here. **MODEL_VARIANT** (the majority, ~3 in 4 rows) covers cases where NHTSA's model string differs from vPIC's (e.g. `F-250` vs `F-250 SD`) — still a real match, scored by Model B (83.7% precision / 96.3% recall), but not the same certainty as an exact string match. Only 91 of 163 fleet make/model/year combinations resolve as EXACT."
-          ]}},
-          "position": {"x": 6, "y": 19, "width": 6, "height": 5}
+          "widget": {
+            "name": "match-basis-caption",
+            "multilineTextboxSpec": {
+              "lines": [
+                "**EXACT** matches NHTSA's make/model/year string exactly \u2014 the deterministic guarantee applies here. **MODEL_VARIANT** (the majority, ~3 in 4 rows) covers cases where NHTSA's model string differs from vPIC's (e.g. `F-250` vs `F-250 SD`) \u2014 still a real match, scored by Model B (83.7% precision / 96.3% recall), but not the same certainty as an exact string match. Only 91 of 163 fleet make/model/year combinations resolve as EXACT."
+              ]
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 19,
+            "width": 6,
+            "height": 5
+          }
         }
       ]
     }
   ],
   "uiSettings": {
     "theme": {
-      "canvasBackgroundColor": {"light": "#F6F7F9", "dark": "#0B0D12"},
-      "widgetBackgroundColor": {"light": "#FFFFFF", "dark": "#14171F"},
-      "widgetBorderColor": {"light": "#FFFFFF", "dark": "#14171F"},
-      "fontColor": {"light": "#14171F", "dark": "#E8EAF0"},
-      "selectionColor": {"light": "#2F5FD8", "dark": "#7AA2FF"},
+      "canvasBackgroundColor": {
+        "light": "#F6F7F9",
+        "dark": "#0B0D12"
+      },
+      "widgetBackgroundColor": {
+        "light": "#FFFFFF",
+        "dark": "#14171F"
+      },
+      "widgetBorderColor": {
+        "light": "#FFFFFF",
+        "dark": "#14171F"
+      },
+      "fontColor": {
+        "light": "#14171F",
+        "dark": "#E8EAF0"
+      },
+      "selectionColor": {
+        "light": "#2F5FD8",
+        "dark": "#7AA2FF"
+      },
       "visualizationColors": [
-        "#0072B2", "#E69F00", "#009E73", "#CC79A7", "#D55E00", "#56B4E9", "#F0E442"
+        "#0072B2",
+        "#E69F00",
+        "#009E73",
+        "#CC79A7",
+        "#D55E00",
+        "#56B4E9",
+        "#F0E442"
       ],
       "widgetHeaderAlignment": "LEFT"
     }
