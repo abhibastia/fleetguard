@@ -65,7 +65,7 @@ use those. Check the queue for a `park_it` campaign with no service campaign aga
 
 ## 2. The narrative
 
-Nine beats. The spine is **detect → scope → decide → dispatch → prove**, and every beat should
+Ten beats. The spine is **detect → scope → decide → dispatch → prove**, and every beat should
 answer "why would a fleet operator care".
 
 ### Beat 1 · Evidence — open here, not at the end
@@ -144,6 +144,30 @@ path. `opened_by` is a real human.
 The write just made lands in Postgres → Lakebase CDF → Unity Catalog. **CDF capture 7.1–15.6 s**;
 **Postgres commit → gold fact 2.5–4.5 minutes** (measured 155 s and 269 s, n=2 — quote the range,
 never one averaged number).
+
+### Beat 10 · The audit trail and the trace are the same trail — close on this
+
+The strongest governance point in the project, and it is one query. Every agent write records the
+serving endpoint's own request id, which is the key of the inference table, so **who authorised
+the write** and **what the model actually saw and said** join in Unity Catalog:
+
+```sql
+SELECT a.action_id, a.actor_principal AS authorised_by, a.trace_id,
+       p.requester AS called_as, p.execution_duration_ms AS ms, p.status_code
+FROM bootcamp_students.fleetguard.gold_agent_action a
+JOIN bootcamp_students.fleetguard.fleetguard_agent_payload p
+  ON p.databricks_request_id = a.trace_id
+```
+
+Run live 2026-09-09 — `action_id 7`, `authorised_by` and `called_as` **the same human**,
+`29726 ms`, `200`. That equality is the point: the model never touches the database, so the
+identity that authorised the write and the identity the request ran as must match, and here that
+is checkable rather than asserted.
+
+**Two caveats to state.** The inference table ingests in **batches with a >30 minute lag**, so a
+write made during the demo will not appear in this join immediately — show it against an existing
+row. And rows written before 2026-09-09 have `trace_id` NULL: the column and the write path both
+existed, but nothing supplied the id until E-03 was wired (`ISSUES.md`).
 
 ---
 
