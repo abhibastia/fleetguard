@@ -26,6 +26,76 @@ no error and passed the obvious check.
 
 ## Tooling / process
 
+### I-090 — a costed work order that was not completed, created by the seeder's own determinism
+*Date:* 2026-09-09 · *Status:* ✅ resolved
+
+**Found by** running `scripts/seed_demo_state.py` a second time to prove it was idempotent —
+not by reading it. The first live run left `WO-7b0d5c14a8fc` at `IN_PROGRESS` **with `$75`
+logged against it**, which the script's own step-4 comment calls a data error.
+
+**Cause.** One pre-existing row (COMPLETED and costed, from the 2026-09-08 verification) hashed
+to `IN_PROGRESS` under `target_status()`, so the status pass moved it *out* of COMPLETED and it
+kept its cost. Steps 3 and 4 each behaved correctly in isolation: step 4 only ever logs costs
+against COMPLETED rows, and step 3 had no reason to know about costs.
+
+**Why the obvious fix was the wrong one.** Repairing the row by hand looks sufficient and is
+not — the hash is deterministic, so **the very next run would have recreated it**, and the
+manual repair would have been silently undone. The guard therefore went into step 3 (never move
+a costed work order out of COMPLETED) and the invariant is now **asserted** in the reconciliation
+block, so it is a check rather than an avoided case.
+
+**Lesson.** Determinism makes a seeder idempotent *and* makes its bugs self-restoring. A
+data-repair that is not also a code change is a repair with a timer on it.
+
+### I-089 — `overdue_work_orders` was 0 on all 60 depots because every due date was identical — **SILENT**
+*Date:* 2026-09-09 · *Status:* ✅ resolved
+
+**The state.** Every one of the 230 work orders in Lakebase carried `due_date = 2026-09-15`.
+Both overdue definitions are correct and agree with each other (`depots.py`: `status NOT IN
+('COMPLETED','CANCELLED') AND due_date < CURRENT_DATE`; `dates.ts`'s `isOverdue`, aligned by
+I-087) — but with no date in the past, both correctly returned **zero, everywhere**.
+
+**What that hid.** The Depots tab's overdue column, its "overdue only" filter, and the OVERDUE
+badge **I-087 had just been fixed to render correctly** all had nothing to display. A feature
+fixed one day was still unexercisable the next, and nothing anywhere reported a problem: zero
+is a legitimate value, the tests pass, and the column renders.
+
+**Cause.** `due_in_days` is a *per-campaign* field on `ApprovalRequest`, so every work order a
+campaign launches shares one due date. With only two campaigns ever launched, the whole table
+held two dates, both in the future. Not a bug in the approval path — an artefact of how the
+data was created showing up as a dead feature downstream.
+
+**Fix.** B2's seeder staggers due dates over 14 offsets, three of them negative: **44 overdue
+work orders across 28 depots**. Backend and frontend were confirmed to agree *before* seeding,
+so making the number non-zero could not make the two surfaces contradict each other.
+
+**Lesson.** A feature can be correct, tested, and completely unexercised, and the symptom of
+that is a plausible number rather than an error. I-087 fixed the rendering of a state the data
+could not produce.
+
+### I-088 — `postgres list-roles` reports "no role" for every identity, including the owner — **SILENT**
+*Date:* 2026-09-09 · *Status:* ✅ resolved
+
+**The check.** Establishing whether the three judges hold Lakebase login roles — the question
+behind A1 / I-084, which had been sitting as "the project's live risk".
+
+**The trap.** `databricks postgres list-roles projects/<p>/branches/<b>` returns records whose
+`name` is an opaque resource path (`.../roles/rol-yve7-agv39fm28y`). The **human identity is in
+`status.postgres_role`**. Matching an email against `name` returns **NO ROLE for all 32 roles**
+— a complete, confident, uniform false negative.
+
+**Why it nearly landed.** "None of the judges have Lakebase roles" is exactly the alarming
+answer the risk section predicted, so it reads as confirmation rather than as a bug. It was
+caught only because the same query also said the **owner** had no role — an identity whose
+access is demonstrably working, which made the result impossible rather than merely bad.
+
+**The real answer, once matched on the right field:** 32 roles, 29 human, and **all three judges
+are among them** — which substantially retires I-084's demo-day risk rather than confirming it.
+
+**Two lessons.** Include a known-good control in any lookup that could silently return nothing —
+the owner's row is what falsified this. And a result that agrees with the risk you already
+believe in deserves *more* scrutiny than one that contradicts it, not less.
+
 ### I-087 — every work order due **today** rendered as OVERDUE, but only for viewers behind UTC — **SILENT**, and invisible from the author's own screen
 *Date:* 2026-09-09 · *Status:* ✅ resolved
 

@@ -52,8 +52,25 @@ env:
   # path) can actually be exercised rather than only described. Verified as a real, active
   # workspace identity before adding: an address that matches nobody is a silently dead entry,
   # since the check is a string comparison against the authenticated principal.
+  #
+  # ALL THREE JUDGES ADDED 2026-09-09 (decision A2). The approval flow is the strongest thing
+  # in the demo and leaving it locked would have been a choice, not an oversight — a judge who
+  # can only watch cannot exercise the human gate §5.3 is built around. Each address was
+  # checked with `databricks users list --filter "userName eq ..."` before being added here and
+  # came back active: sangwanrahul 8961111858221146, raghavendra.yama 8865098657037914,
+  # zach 7399784953077169. The comparison is case-insensitive (`approvers()`), so the casing
+  # here does not matter.
+  #
+  # WHAT THIS COSTS: each approval writes one service campaign plus one work order per exposed
+  # vehicle — up to ~200 rows — in a single transaction, and replicates to CDF, which is
+  # append-only and cannot be scrubbed afterwards. Budget cleanup after judging, and do not
+  # confuse it with the app ACL: `CAN_USE` is a separate mechanism that neither grants nor
+  # withholds approval.
+  #
+  # THIS FILE IS NOT LIVE UNTIL THE APP IS REDEPLOYED. Changing it here and stopping is the
+  # same silent no-op as I-083's scope block — the running app keeps the old value.
   - name: FLEETGUARD_APPROVERS
-    value: abhisek.bastia17@gmail.com,raghavendra.yama@gmail.com
+    value: abhisek.bastia17@gmail.com,raghavendra.yama@gmail.com,sangwanrahul@icloud.com,zach@zachwilson.tech
 
 # OBO SCOPES ARE NOT CONFIGURED HERE — do not add them back to this file.
 #

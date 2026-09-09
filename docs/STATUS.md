@@ -29,7 +29,7 @@ next-actions list in priority order.** Design lives in `FleetGuard_Proposal.md`,
 | **8 — App + external surface** | 🟡 **Public surface live** | FastAPI serves `/api/*` **and** the built React console from one service — no CORS, SPA deep-link fallback. Four views: queue (+ assistant panel), campaign approval, **Emerging signals**, evidence. Verified end to end against live Lakebase. **Deployed to Render 2026-09-02** — https://fleetguard-console-abhi.onrender.com, chat panel included. **End-to-end review + visual redesign, 2026-09-03** — 8 bugs found and fixed, 49 new tests, console restyled (same colour-rationing rule, more depth/craft); verified against a live headless-browser check of both the local build and the redeployed Render site. **Auth mode flipped 2026-09-03** from `app-login`+snapshot to `render-u2m`+live Lakebase (E-14's account-admin blocker resolved) — the host now holds real per-user Databricks credentials via U2M OAuth rather than none at all. Anonymous visitors still land on Evidence, not a login wall (I-057) — that route is unauthenticated regardless of mode. **THE DATABRICKS APP IS BUILT, DEPLOYED AND VERIFIED IN A REAL BROWSER — 2026-09-08.** `fleetguard-console`, url `https://fleetguard-console-1352785079224954.aws.databricksapps.com`, **currently STOPPED** (brought up to fix I-086, stopped again once verified; `databricks apps start fleetguard-console`, ~2 min, to bring it back). Deployed from `app/backend/` with `app/backend/app.yaml`; the console bundle is committed so no Node build runs on the Apps runtime. **Seven routes verified under a programmatic OBO token that morning** — `/api/me` resolved the caller with `token_source: databricks-apps`, then queue 50 · signals 50 (9 live, 4 fleet-relevant) · service-campaigns 1 · depot-risk 60 · work-orders 25 · evidence 1.44×/z 2.62 — matching the local surface exactly. **That evening the first real *browser* sign-in failed on every Lakebase route** with `403 Forbidden — Invalid scope, required scopes: postgres`, surviving restart, sign-out/sign-in and an explicit re-application of `user_api_scopes`. **Root-caused and FIXED the same evening (I-086):** OBO scope lives in **three** planes, not two — workspace allowlist, app resource, **and a sticky per-user consent grant** that was captured before I-083's scope fix landed and never widened afterwards. Revoking it via the self-service `DELETE /api/2.0/oauth-app-integrations/<id>/user-consent/me` and re-consenting in a fresh browser session fixed it; `user_consented_scopes` now carries `postgres`/`sql`/`model-serving` and the console works end to end in the browser. **Two corrections came out of this:** it was never a regression (the consent record proves no browser session had ever held `postgres` — the morning pass was programmatic, and "verified live" had not recorded which client produced it), and it never needed account-admin access (`/user-consent/me` is self-service; one `Not Found` on a different object had been generalised into a wall on the whole problem). **The App holds no privileges of its own:** `db.py` mints the Lakebase credential from the *caller's* forwarded token, so there is no `database` or `serving-endpoint` resource on the app and every read runs as the signed-in human, with Postgres RLS applying as it does to a UI click. E-13's auth seam did its job — the move needed configuration plus one line, not a rewrite. Three obstacles, none reproducible off-platform: **I-082** (Apps injects `DATABRICKS_CLIENT_ID`/`SECRET`, so passing the caller's token makes the SDK refuse — needs `auth_type="pat"`), **I-083** (`user_authorization` in `app.yaml` is silently ignored; scopes go on the app resource, **and the app must be restarted** or a granted scope returns the identical 403 as a missing one). **HOSTING DIRECTION CHANGED 2026-09-08 — read this before the Render detail above.** Render is **no longer the assumed demo surface**: near-term verification is the **local browser** against live Lakebase (`scripts/run_local_static_dev.sh`, verified end to end and screenshotted 2026-09-08), and **Databricks Apps is now the primary target (~20 Sept)**, not a second surface alongside Render. The Render deployment and all three of its auth paths (`app-login`, `render-u2m`, the GitHub OAuth wiring) are **deliberately kept and still working** — the cost of keeping them is zero, re-adding them later is not — so everything above remains true, just no longer the plan of record. The `render-u2m` browser login is still unconfirmed live and no longer blocks anything. See Phase 11 for the rescope this triggered. |
 | **9 — Model A + backtest** | ✅ **DONE — result is negative** | **The semantic hypothesis is falsified (I-049).** Subdivision *lowered* detection 13.3% → 11.2%, left lift flat (1.24× → 1.26×), and gave **0.0 days** extra lead on shared detections. Published result stays the volume-anomaly measurement: **16.0% vs 11.1%, 1.44×, p≈0.009**. Done-when explicitly required publishing a possibly-negative number as-is; met. |
 | **10 — Governance** | ✅ **Visible slice DONE** | Postgres RLS on `fleetguard_vehicle`, `ENABLE`+`FORCE`, proved under real toggled states including the exposure join. Fail-open, nobody enrolled yet — mechanism real, enrollment is future work. Not the full ABAC/DQ-monitor matrix, by design. |
-| **11 — Deployment hardening** | 🟡 **Rescoped 2026-09-08** | **Hosting direction changed: Render is no longer the assumed demo surface.** Near-term verification is the **local browser** against live Lakebase (`scripts/run_local_static_dev.sh`); the eventual target is **Databricks Apps**. **Render integration is deliberately KEPT, not removed** — `render.yaml`, the GitHub-OAuth `app-login` path and `render-u2m` all stay in the tree and working, because the cost of keeping them is zero and re-adding them later is not. This removes "Render always-on + pinger" from the phase. **The `table_update` trigger is BUILT** (`fleetguard-cdf-to-gold`, job `851598550157757`, notebook `src/lakebase/21_cdf_to_gold_facts.py`) — the last unbuilt link in the data loop. It derives `gold_agent_action` and `gold_defect_signal_current` from the CDF history tables and reconciles exactly against live Postgres (**2 = 2**, **50 = 50**). **UNPAUSED and verified firing on its own, 2026-09-08** — the project's first non-manual job, and the done-when is now met by observation rather than by construction: a real agent write and a real delete each propagated to UC **with no manual intervention**. Two documented "facts" turned out to be wrong on contact (**I-080**, **I-081**). **Measured commit→gold-fact: 155 s and 269 s (n=2, report as ≈2.5–4.5 min).** Still outstanding: **seeded demo state**. |
+| **11 — Deployment hardening** | 🟡 **Rescoped 2026-09-08** | **Hosting direction changed: Render is no longer the assumed demo surface.** Near-term verification is the **local browser** against live Lakebase (`scripts/run_local_static_dev.sh`); the eventual target is **Databricks Apps**. **Render integration is deliberately KEPT, not removed** — `render.yaml`, the GitHub-OAuth `app-login` path and `render-u2m` all stay in the tree and working, because the cost of keeping them is zero and re-adding them later is not. This removes "Render always-on + pinger" from the phase. **The `table_update` trigger is BUILT** (`fleetguard-cdf-to-gold`, job `851598550157757`, notebook `src/lakebase/21_cdf_to_gold_facts.py`) — the last unbuilt link in the data loop. It derives `gold_agent_action` and `gold_defect_signal_current` from the CDF history tables and reconciles exactly against live Postgres (**2 = 2**, **50 = 50**). **UNPAUSED and verified firing on its own, 2026-09-08** — the project's first non-manual job, and the done-when is now met by observation rather than by construction: a real agent write and a real delete each propagated to UC **with no manual intervention**. Two documented "facts" turned out to be wrong on contact (**I-080**, **I-081**). **Measured commit→gold-fact: 155 s and 269 s (n=2, report as ≈2.5–4.5 min).** **Seeded demo state DONE 2026-09-09 — the phase is complete.** `scripts/seed_demo_state.py` drives the **real API**, not direct INSERTs, so every assignment passes the depot-consistency check and every write leaves a genuine `fleetguard_audit_log` row from the handler an operator's click uses. 711 writes; audit log **11 → 722 rows**, work orders **230 → 331** across **3** campaigns, costs **1 → 144** ($84,409.68). Re-running writes **0** — verified, not assumed. |
 | **12 — Second connector** | ❌ **Cut** | Deliberately dropped for schedule. |
 | **13 — Commercial-fleet-value roadmap (work orders, cost, audit, depots, trends)** | ✅ **6/8 DONE, 1 deliberately shelved (2026-09-04/05, post-MVP)** | Not in the original 12 phases — grew out of a session UX walkthrough plus a "does this give a commercial fleet real value" analysis. Work-order lifecycle + technician roster; "Launched" campaigns view + table sort/filter; per-work-order actual-cost logging + component/depot breakdown (I-069); audit log made readable; depot risk heatmap (no blended score, real component numbers); recall trend chart (this app's first chart, hand-rolled SVG). All writes gated by `FLEETGUARD_APPROVERS`, fully audited, verified end to end against live Lakebase + CDF, not just API responses. **All merged to `main` and pushed.** **Role-based views was built, verified live, then deliberately not merged** — see "Next" item 0.5 for the full reasoning (little new judging credit for re-proving Phase 10's RLS, zero visible footprint in the default demo state, and a real schema-migration cost to fix a live-discovered gap). Kept on `feature/role-based-views`, available later. Only its local `static-dev` setup script landed on `main` (`c5b3af0`). Remaining, not started: notification digest. |
 
@@ -61,8 +61,12 @@ live count exactly.
 **Lakebase** (`databricks_postgres.bootcamp_students`): 12 `fleetguard_*` tables, **139,000+ rows**
 (`fleetguard_defect_signal` populated 2026-09-02 — 48 signals; empty since Phase 5 until then)
 (vehicle 20,000 · exposure 118,323 · campaign 592 · depot 60 · + service campaigns/work orders/audit).
-Per-user identity verified: 25 Databricks identities exist as Postgres login roles, `current_user`
-resolves to the caller, and `row_security` is `on`. **CDF** (`bootcamp_students.bootcamp_cdc`): 12 `lb_fleetguard_*_history` tables,
+**Operational tables seeded 2026-09-09** (B2): service campaigns **3**, work orders **331**
+(all assigned, 144 costed), audit log **722**.
+Per-user identity: **32 Postgres roles on `.../branches/production`, 29 of them human**, including
+all three judges — `current_user` resolves to the caller and `row_security` is `on`. **Read the
+identity from `status.postgres_role`, never from the role's `name`**, which is an opaque
+`rol-xxxx-...` id; matching on `name` reports "no role" for everyone including the owner (I-088). **CDF** (`bootcamp_students.bootcamp_cdc`): 12 `lb_fleetguard_*_history` tables,
 exact names, no collision suffixes. **`fleetguard_technician` added 2026-09-04** (120 rows, ~2 per
 depot, real roster backing work-order assignment) — picked up by CDF automatically via
 `REPLICA IDENTITY FULL`, same as every other table, no extra CDF configuration step needed.
@@ -280,15 +284,26 @@ failed during the build or exists because something adjacent to it failed silent
 
 ## Risks, honestly
 
-0. **The App is proved for one person, and the failure mode is the bad one (I-084).** This is
-   the project's live risk as of 2026-09-08, replacing the ones below that were retired. Every
-   verification of the Databricks App ran under the owner's identity. If Lakebase does not
-   auto-provision a Postgres login role, a judge authenticates successfully, sees the console
-   shell, gets their real identity back from `/api/me` — and then every data route 500s. **A
-   failure that arrives after visible success reads as a broken project, not a missing grant.**
-   That is I-050's lesson one layer up, and it is unresolved because it cannot be tested from
-   this account. One second-identity sign-in retires it; no amount of further owner-side
-   testing can.
+0. ~~**The App is proved for one person, and the failure mode is the bad one (I-084).**~~
+   **LARGELY RETIRED 2026-09-09 — by checking, not by testing.** The risk was: if Lakebase does
+   not auto-provision a Postgres login role, a judge authenticates successfully, sees the
+   console shell, gets their real identity back from `/api/me` — and then every data route
+   500s. A failure that arrives *after* visible success reads as a broken project, not a
+   missing grant.
+
+   **It cannot happen to the judging audience.** All three judges
+   (`raghavendra.yama@gmail.com`, `sangwanrahul@icloud.com`, `zach@zachwilson.tech`) already
+   hold Lakebase login roles on `summer-bootcamp-2026-v2/branches/production`. Nothing needs
+   provisioning for any of them.
+
+   **What remains, and it is off the critical path:** whether Lakebase auto-provisions for a
+   never-seen identity. No judge can answer it — they all have roles — so this is a robustness
+   question for after the demo, not a threat to it. The App is still proved end to end under
+   only one identity, and that much is unchanged.
+
+   **The lesson is about method, not the platform.** This sat as "the project's live risk" for a
+   day while the answer was one CLI call away. The check that retired it is *cheaper* than the
+   sign-in that was being waited on, and it was available the whole time.
 
 1. ~~**Phase 5 is completely untested.**~~ **FULLY RETIRED 2026-09-01** — schema, load, CDF
    replication and capture latency are all measured. This was the project's largest risk.
@@ -602,10 +617,12 @@ Nothing is half-finished; there is no in-flight edit to reconstruct.
 scale-to-zero. The only continuously-billing resource is the **AI Search endpoint at
 ~$6.72/day** — a known, accepted cost (I-018), roughly $115 between now and the demo.
 
-**One thing is waiting on another person, and it is the only blocker of its kind:** TA Raghu
-(`raghavendra.yama@gmail.com`, who is **also one of the judges**) has `CAN_USE` on the App and
-has been asked to sign in and browse. See **A1** below for what his answer will and will not
-prove — he already has a Lakebase role, so his pass cannot close A1 on its own.
+**One thing is waiting on another person, and as of 2026-09-09 it no longer blocks anything:**
+TA Raghu (`raghavendra.yama@gmail.com`, who is **also one of the judges**) has `CAN_USE` on the
+App and has been asked to sign in and browse. See **A1** — he already has a Lakebase role, so
+his pass cannot close A1 on its own, and neither can the other two judges, who also have roles.
+**A1's demo-day risk is retired regardless of his reply**; what remains is a robustness question
+off the critical path.
 
 **To pick up work, go straight to [WHAT IS LEFT BEFORE THE DEMO](#what-is-left-before-the-demo).**
 Everything between here and there is history, kept for the record.
@@ -619,6 +636,9 @@ Everything between here and there is history, kept for the record.
 | **B1 / I-079 fixed in code** | The detector's exact make/model join is now tiered, with `match_basis` carried to the UI. **The stored table is NOT rebuilt** — that is B3's job. |
 | **I-087 found and fixed** | Work orders due *today* rendered as OVERDUE for any viewer behind UTC. Correct in the author's timezone, wrong in the workspace's own region. |
 | **UC Functions + MCP — declined** | Investigated and **deliberately not built**. Reasoning recorded in **C4** so it is not re-proposed. |
+| **B2 done — Phase 11 complete** | `scripts/seed_demo_state.py`, 711 writes **through the real API**. Audit log 11 → **722** rows, work orders 230 → **331** across 3 campaigns, costs 1 → **144**. Re-run makes **0 writes**. Revived a dead feature: `overdue_work_orders` was **0 on all 60 depots** because every due date was identical. |
+| **A2 decided — all three judges can approve** | Four addresses in `app.yaml`, each verified as a live workspace identity first. Found and fixed the half that would have failed on the day: **only Raghu could open the app**; the other two judges now have `CAN_USE`. Needs a **redeploy** to take effect. |
+| **A1 largely retired** | **All three judges already hold Lakebase roles**, so I-084's "succeeds at login, 500s on every data route" cannot happen to the judging audience. What is left is a robustness question no judge can answer. |
 
 **MVP has been complete since 7 September, five days early.** The vertical slice runs end to
 end — recall lands → exposure ranked → human approves → work orders → CDF → UC → browser — the
@@ -693,6 +713,27 @@ will see a consent screen** listing `postgres`/`sql`/`model-serving` and must ac
 known, expected step rather than an untested one, and the app will 403 exactly as it did in
 I-086 if they decline.
 
+**A1 REASSESSED 2026-09-09 — the demo-day risk is largely retired; what is left is narrower
+than the section above implies.** Checked directly: **all three judges already hold Lakebase
+login roles** on `summer-bootcamp-2026-v2/branches/production` — `raghavendra.yama@gmail.com`,
+`sangwanrahul@icloud.com` and `zach@zachwilson.tech` are all present among the 29 human
+identities with roles (32 roles total, the rest being service principals and built-ins). So
+**I-084's failure mode cannot happen to the judging audience**: none of them can authenticate,
+see the shell, and then have every data route 500 for want of a Postgres role, because none of
+them needs one provisioned.
+
+What survives is the narrow robustness question — whether Lakebase auto-provisions for an
+identity that has *never* used it. **No judge can answer it**, precisely because all three
+already have roles, so neither Raghu's pending sign-in nor the other two will close A1. Most of
+the ~296-person cohort still qualifies as a tester if the question is worth answering; it is no
+longer on the demo's critical path.
+
+**Check `status.postgres_role`, not `name` (I-088).** `postgres list-roles` returns an opaque resource
+name (`.../roles/rol-yve7-agv39fm28y`); the identity is in `status.postgres_role`. Matching on
+`name` reports **NO ROLE for every identity including the owner**, whose access demonstrably
+works — a clean false negative that reads like a real finding, and was only caught because the
+owner's result was impossible.
+
 **A1 state as of 2026-09-09 — in flight, but it will not close A1 on its own.** TA Raghu
 (`raghavendra.yama@gmail.com`) has been granted **`CAN_USE`** on the app and asked to sign in and
 browse. Three things a cold session must not misread:
@@ -708,13 +749,24 @@ browse. Three things a cold session must not misread:
   list are independent mechanisms — `CAN_USE` grants no protection here. He has been asked not
   to approve; if that write is wanted deliberately, budget the cleanup.
 
-**A2. Decide whether judges can approve.** `FLEETGUARD_APPROVERS` holds **two** addresses as of
-`dfcc13c` — the owner and `raghavendra.yama@gmail.com` — and nobody else, so a *judge* still gets
-**403 on approve**. The approval gate is application logic and workspace admin does not bypass
-it; nor does the app ACL, which is a separate mechanism (`CAN_USE` neither grants nor withholds
-approval). The approval flow is arguably the strongest thing in the demo; leaving it locked is a
-choice, not an oversight. One env-var change on whichever surface is used — and it needs a
-redeploy to take effect, so decide before the pre-demo deploy rather than on the day.
+**~~A2. Decide whether judges can approve~~ — ✅ DECIDED AND APPLIED 2026-09-09: yes, all three.**
+`FLEETGUARD_APPROVERS` in `app/backend/app.yaml` now holds **four** addresses — the owner plus
+`raghavendra.yama@gmail.com`, `sangwanrahul@icloud.com`, `zach@zachwilson.tech`. Each was
+verified as a **real, active workspace identity** before being added (`databricks users list
+--filter "userName eq ..."`; ids 8865098657037914 / 8961111858221146 / 7399784953077169),
+because the check is a string comparison and an address matching nobody is a silently dead entry.
+
+**The decision had a second half that would have failed at demo time.** Being an approver is
+useless without being able to open the app, and **only Raghu had `CAN_USE`** — the other two
+judges could not reach the console at all. Granted with **`apps update-permissions`**, not
+`set-permissions`: the latter *replaces* the whole ACL and would have dropped the existing
+entries, the same footgun shape as `serving-endpoints update-config` replacing `served_entities`.
+Final ACL: owner `CAN_MANAGE`, `admins` `CAN_MANAGE`, three judges `CAN_USE`.
+
+**Two things a cold session must not forget.** `app.yaml` is **not live until the app is
+redeployed** — editing it and stopping is the same silent no-op as I-083's ignored scope block.
+And each approval writes one service campaign plus one work order per exposed vehicle (up to
+~200 rows) and replicates to **append-only** CDF, so budget cleanup after judging.
 
 ### B. Build work still outstanding
 
@@ -728,7 +780,64 @@ renders as a `VARIANT` badge, so the fix does not trade a wrong `0` for a falsel
 (`tests/test_signals_routes.py`; the router had none). **The stored table still holds the old
 zeros** — B3 rebuilds it, and running it twice is what the deferral policy exists to prevent.
 
-**B2. Seeded demo state.** Phase 11's last remaining piece.
+**~~B2. Seeded demo state~~ — ✅ DONE 2026-09-09.** Phase 11's last piece, and Phase 11 is now
+complete. Built as `scripts/seed_demo_state.py` (dry-run by default, `--apply` to write).
+
+**Why it mattered.** Measured before seeding: 230 work orders of which **229 were OPEN**, 1
+assigned, 1 costed; the audit log held **11 rows, 4 of them `LATENCY_PROBE` noise**. So the
+Work orders, Cost breakdown and Audit log tabs all demoed empty, and a judge would have read
+three *built* features as three unbuilt ones. That is the whole commercial argument of Phase 13
+rendering as nothing.
+
+**How, and why that way.** Every operational change goes through the **real API**. Assignments
+pass `work_orders.py`'s depot-consistency check, status moves stamp `completed_at` through the
+COALESCE branch, and each write produces its own audit row from the same handler a UI click
+uses. A bulk `INSERT` would have produced identical-looking tables and a **fabricated** audit
+log — the failure mode I-050 and I-051 are both about. Only two things are direct SQL, and
+neither is an event: due-date staggering (a due date is a plan) and stripping "(MVP
+verification)" from a campaign title still visible in the Launched tab.
+
+**Result, verified from a fresh connection** (I-073), not from the script's own read-back:
+
+| | before | after |
+|---|---:|---:|
+| launched campaigns | 2 | **3** |
+| work orders | 230 | **331** — 144 COMPLETED · 84 IN_PROGRESS · 94 OPEN · 9 CANCELLED |
+| assigned | 1 | **331** |
+| costed | 1 | **144**, $84,409.68, range $75–$1,400 |
+| audit log rows | 11 | **722** — ASSIGNED 331 · STATUS_CHANGE 238 · COST_LOGGED 144 |
+| overdue work orders | **0** | **44 across 28 depots** |
+
+The third campaign is `17V621000` (frontal airbag inflator, 101 vehicles / 48 depots),
+deliberately **not** a Park It recall — those stay unapproved so the live approve-and-launch
+moment still has something consequential to act on. It also takes `cost-breakdown`'s
+by-component table from 2 rows to 3. Costs are drawn from **per-component bands**, never one
+flat per-vehicle figure — that design was already tried and rejected (I-069) and the seed must
+not smuggle it back in.
+
+**A dead feature came back (I-089).** Every due date in the database was `2026-09-15`, so
+`overdue_work_orders` was **0 for all 60 depots**: the Depots overdue column, its filter, and
+the OVERDUE badge I-087 had just fixed all had nothing to show. Backend (`due_date <
+CURRENT_DATE`, excluding COMPLETED/CANCELLED) and frontend (`isOverdue`) were confirmed to agree
+before seeding, so the two surfaces cannot disagree about the same rows.
+
+**Idempotent, and one bug found by running it twice (I-090).** A re-run makes **0 writes**. The first
+live run left one work order `IN_PROGRESS` *with a cost logged* — a pre-existing row whose hash
+moved it out of COMPLETED — which step 4's own comment calls a data error. Because the hash is
+deterministic, fixing the row by hand would have been undone by the next run, so the guard went
+in the script and the invariant is now **asserted** in the reconciliation block rather than
+merely avoided.
+
+**What is NOT genuine, stated plainly.** Timestamps are today's. A real fleet would have done
+this over weeks; the seed does it in minutes. Backdating would mean writing audit rows directly
+with invented `created_at` values — fabricating the very trail the script exists to make real —
+so it is not done. The audit log therefore demos as **real and recent**, not as lived-in over
+time. Revisit before the 25th only as a deliberate decision.
+
+**CDF is append-only.** All 711 writes are permanent in `lb_fleetguard_*_history` and cannot be
+scrubbed. `fleetguard-cdf-to-gold` was **not** triggered — it watches `fleetguard_agent_action`
+and `fleetguard_defect_signal`, neither of which this touches — so no extra job runs were
+incurred.
 
 **B3. The pre-demo data refresh — the day before, not the morning of.** Chain, in order:
 ingest → bronze/silver → rebuild `gold_emerging_signal` (**now carries B1's tiered join and a
@@ -798,6 +907,16 @@ guidance alongside rows.
   — probe an API route to confirm a deploy, never the console page.
 - The Emerging tab's "**4 affecting your fleet**" is 2 batch + 2 agent-opened of 50. If B1 lands
   it becomes **6 of 50**. Do not confuse it with I-079's separate "2 → 4 of 48" (I-079).
+- **`app.yaml`'s approver list is only live after a redeploy.** Three judges are named in it as
+  of 2026-09-09 and all three hold `CAN_USE`, but a running app deployed before that change
+  still enforces the old two-address list — and the 403 looks identical either way.
+- **The demo state is seeded** (B2): 3 launched campaigns, 331 work orders, 722 audit rows, 44
+  overdue across 28 depots. The Park It recalls are deliberately **left unapproved** so the live
+  approve-and-launch moment still has something consequential to act on — do not approve them
+  while rehearsing without re-checking what is left.
+- **Audit-log timestamps are all 2026-09-09.** The rows are genuine API writes, but they were
+  made in minutes, not over weeks. If a judge sorts by time it reads as a seeding run; that is
+  the honest trade recorded in B2, not a bug to fix on the day.
 
 ---
 
