@@ -26,6 +26,40 @@ no error and passed the obvious check.
 
 ## Tooling / process
 
+### I-094 — the evaluation notebook scored a three-version-stale model by default — **SILENT**
+*Date:* 2026-09-09 · *Status:* ✅ resolved
+
+**Found by** auditing `docs/ENHANCEMENTS.md` for unbuilt items, not by anything failing. E-06
+lists *"latest-version resolution instead of a hardcoded version, so evaluation never scores a
+stale model"* as cheap hygiene; two of its three items were done and this one was not.
+
+**The bug.** `src/agent/16_evaluate_agent.py` declared
+`dbutils.widgets.text("model_version", "3", ...)`. **v6 is what serves** — versions 1–6 are
+registered (confirmed via `model-versions list`). So anyone re-running evaluation with defaults
+scored **v3**, three versions behind, and got a clean green result describing an artefact nobody
+deploys. Every fix since v3 — I-050's declared table resource, I-075's match tiers, I-076's
+fleet-vocabulary tool, I-077's prompt split — is invisible to that run.
+
+**Why it is the worst shape of wrong.** An evaluation that *fails* against the wrong model gets
+investigated. One that *passes* gets quoted. And the run printed only
+`evaluating models:/...fleetguard_agent/3` — technically honest, easy to read past, and the
+number is small enough to look like a default rather than a decision.
+
+**Fix.** The widget now defaults to blank meaning *latest*, resolved via
+`max(int(v.version) for v in search_model_versions(...))`, with an explicit widget value still
+honoured for deliberately scoring an older version. The resolved version and *why* it was chosen
+(`latest of 6 registered` vs `pinned via widget`) are printed unconditionally, because the
+underlying failure was a run that did not say what it had scored.
+
+**Verified** to the limit possible off-platform: `mlflow` is a notebook-only dependency and is not
+installed locally, so the `MlflowClient` call itself could not be executed here. The *fact* it
+depends on was confirmed via the CLI — `model-versions list` returns 1–6, max 6, matching the
+serving version. The call runs on Databricks where mlflow is present.
+
+**Lesson.** A hardcoded default is a decision that stops being re-examined the moment it is
+written. This one was correct on the day it was typed and silently wrong three deploys later,
+with nothing in between to notice — the same shape as I-051's spec drift, in a widget.
+
 ### I-093 — the "assistant is offline" state was unreachable for the case it was written for — **SILENT**
 *Date:* 2026-09-09 · *Status:* ✅ resolved
 

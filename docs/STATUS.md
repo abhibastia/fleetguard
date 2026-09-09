@@ -945,7 +945,10 @@ guidance alongside rows.
   question, because scale-to-zero is on. Warm both before anyone is watching.
 - `/` on Render is cached and can serve a stale `index.html` for minutes after a deploy (I-054)
   — probe an API route to confirm a deploy, never the console page.
-- The Emerging tab's "**4 affecting your fleet**" is 2 batch + 2 agent-opened of 50 — **verified
+- The Emerging tab now reads "**5 affecting your fleet**" of **51** — 2 batch + **3** agent-opened
+  (a third was opened 2026-09-09 verifying E-03's trace wiring; it is a truthful signal grounded in
+  the real RAM 2500 service-brake anomaly, and it is the one row carrying a `trace_id`). Was
+  "**4 of 50**" — **verified
   live 2026-09-09, it is still 4.** B1's *code* has landed and deployed, but the stored
   `fleet_vehicles` values are pre-fix until **B3 rebuilds `gold_emerging_signal`**; only then does
   it become 6 of 50. The warehouse says 2 of 48 and Lakebase says 4 of 50 — both correct, counting

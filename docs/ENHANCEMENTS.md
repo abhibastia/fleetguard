@@ -150,7 +150,20 @@ is how "no unsourced claims" becomes machine-checkable rather than aspirational.
 ## Tier 2 — adopt with scope discipline
 
 ### E-07 · Human feedback / labeling sessions
-**Status: ADOPT, SMALL SLICE.** This is the scratchpad's "closed feedback loop", and
+**Status: NOT BUILT — closed 2026-09-09.** Left as ADOPT with no implementation and no
+reversal for a week, which is I-051's pattern happening in the backlog rather than in the spec:
+an intention that reads as a description. Closing it explicitly instead.
+
+**Why not:** the entry's own honest limit is the reason. A labeling session with one reviewer is
+a *mechanism* demonstration, not evidence of quality, and the project already has the stronger
+version of what this was for — **E-05's evaluation harness** (`src/agent/16_evaluate_agent.py`,
+10 adversarial cases with real scorers) and a **765-pair golden set built from NHTSA's own recall
+text**, which is external ground truth rather than self-labelling. Adding a one-reviewer labeling
+session alongside those would add a weaker signal and invite it to be quoted as validation.
+
+Revisit if a second reviewer ever exists; with n=1 the ceiling is a screenshot.
+
+*Original rationale, kept:* This is the scratchpad's "closed feedback loop", and
 `create_label_schema` + `create_labeling_session` + `log_feedback` is a genuine capability.
 
 **Honest limit:** a labeling session with one reviewer is a *mechanism* demonstration, not
@@ -168,7 +181,22 @@ synthesising it would mean grading the model against questions derived from its 
 Keep the two datasets separate and say why.
 
 ### E-09 · LangGraph as the agent's orchestration
-**Status: ADOPT — for a specific reason, not for alignment.** The reason is the **human
+**Status: SATISFIED WITHOUT IT — closed 2026-09-09.** Not rejected, and not skipped for
+schedule: **the requirement it was adopted for is met.**
+
+E-09 was adopted for exactly one reason — the write path must halt, surface a proposed action,
+and resume on approval — and explicitly *not* because the course uses LangGraph. That
+suspend-and-resume now exists as the **action-envelope pattern** (`agent_actions.py`,
+ARCHITECTURE §7.1): the model emits an envelope and stops; the FastAPI app validates it and
+performs the write under the *caller's own* OBO token. That is a stronger form of the same
+control than a graph interrupt, because the suspension crosses a **process and identity
+boundary** — the model has no database path at all, so it cannot resume itself even in
+principle. A LangGraph interrupt would keep both halves inside one process under one identity.
+
+Adopting LangGraph now would replace a working, verified mechanism with a differently-shaped one
+that satisfies the same requirement less strictly, two weeks before submission.
+
+*Original rationale, kept:* The reason is the **human
 approval gate**: FleetGuard's write path must halt, surface a proposed action, and resume on
 approval. That is a graph interrupt/resume, which LangGraph handles natively and which is
 awkward in a plain tool loop. Adopting it because the course uses it would be poor

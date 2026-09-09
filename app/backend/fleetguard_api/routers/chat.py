@@ -165,12 +165,27 @@ def chat(principal: CurrentPrincipal, req: ChatRequest) -> ChatReply:
             detail += f": {reason}"
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=detail)
 
-    text, actions = _extract(resp.json())
+    payload = resp.json()
+    text, actions = _extract(payload)
     if not text:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Agent returned no answer.",
         )
+
+    # The serving endpoint's own request id, written to `fleetguard_agent_action.trace_id`
+    # below. **This is what joins the audit trail to the observability trail** (E-03): it is
+    # the key of `fleetguard_agent_payload`, the inference table `agents.deploy()` creates,
+    # which holds the model's full request and response, token usage and latency. With it, one
+    # SQL join in Unity Catalog answers "which human authorised this write" *and* "what did the
+    # model actually see and say" together; without it those are two unrelated tables.
+    #
+    # `databricks_output.databricks_request_id` is the documented location; the top-level `id`
+    # mirrors it (verified on a live call 2026-09-09) and is the fallback. Both absent is fine —
+    # see the write below.
+    request_id = (payload.get("databricks_output") or {}).get(
+        "databricks_request_id"
+    ) or payload.get("id")
 
     # Execute at most one action per turn. The agent's loop could in principle emit several,
     # but a chat turn that silently performs a batch of writes is not something an operator
@@ -182,6 +197,11 @@ def chat(principal: CurrentPrincipal, req: ChatRequest) -> ChatReply:
         # Deliberately NOT wrapped in a try/except that degrades to a plain reply: a failed
         # write must surface as an error status, not as the agent's prose saying it asked for
         # something while the console quietly did nothing.
-        action_result = agent_actions.execute(principal, actions[0])
+        #
+        # `trace_id` is passed but never *required*: if the endpoint returned no request id the
+        # column is written NULL, exactly as before. An action that executed but could not be
+        # traced is a far better outcome than an action refused because it could not be traced —
+        # the write is the part with real-world consequences.
+        action_result = agent_actions.execute(principal, actions[0], trace_id=request_id)
 
     return ChatReply(reply=text, endpoint=AGENT_ENDPOINT, action_result=action_result)

@@ -31,10 +31,31 @@
 CATALOG, SCHEMA = "bootcamp_students", "fleetguard"
 MODEL_NAME = f"{CATALOG}.{SCHEMA}.fleetguard_agent"
 
-dbutils.widgets.text("model_version", "3", "Registered model version to evaluate")
-MODEL_VERSION = dbutils.widgets.get("model_version")
+# Empty default means "latest", resolved below. It used to default to the literal "3", which
+# silently scored a three-version-stale model once v6 was serving — an evaluation that runs
+# green against the wrong artefact is worse than one that fails, because nothing signals it
+# (E-06's "evaluation never scores a stale model", I-094).
+dbutils.widgets.text("model_version", "", "Registered model version (blank = latest)")
+_requested = dbutils.widgets.get("model_version").strip()
+
+if _requested:
+    MODEL_VERSION = _requested
+    _source = "pinned via widget"
+else:
+    from mlflow.tracking import MlflowClient
+
+    _versions = MlflowClient(registry_uri="databricks-uc").search_model_versions(
+        f"name='{MODEL_NAME}'"
+    )
+    if not _versions:
+        raise RuntimeError(f"no registered versions for {MODEL_NAME} — nothing to evaluate")
+    MODEL_VERSION = str(max(int(v.version) for v in _versions))
+    _source = f"latest of {len(_versions)} registered"
+
 MODEL_URI = f"models:/{MODEL_NAME}/{MODEL_VERSION}"
-print(f"evaluating {MODEL_URI}")
+# Printed loudly and unconditionally: the whole failure this replaces was a run that did not
+# say which model it had scored.
+print(f"evaluating {MODEL_URI}  ({_source})")
 
 # COMMAND ----------
 
