@@ -26,11 +26,30 @@ instead of one:
 
 ## Live demo
 
-**Primary — Databricks App:** `fleetguard-console` (real per-user OBO — Unity Catalog and
-Postgres RLS enforce under the caller's own Databricks identity, not a simulation). Kept
-stopped between sessions to avoid idle cost; ask if you want it started. **Verified end to
-end under the owner's identity only** — a second real identity has not yet signed in, so
-treat that path as unconfirmed for anyone else until it has (`docs/STATUS.md`, I-084).
+**Primary — Databricks App:** [`fleetguard-console`](https://fleetguard-console-1352785079224954.aws.databricksapps.com)
+— real per-user OBO, so Unity Catalog and Postgres RLS enforce under *your* Databricks
+identity, not a simulation.
+
+**It is kept stopped between sessions** so it isn't billing idle compute, and it will not
+answer a cold URL. **Start it yourself — about two minutes:**
+
+```bash
+databricks apps start fleetguard-console
+```
+
+You'll then see an **OAuth consent screen** listing `postgres`, `sql` and `model-serving`.
+Accept it; declining returns `403 Invalid scope` on every data page, which looks like a broken
+app rather than an unauthorised one. Please **stop it again** when you're done.
+
+**[`docs/DEMO.md`](docs/DEMO.md) is the guided tour** — pre-flight with measured timings, the
+nine beats worth seeing, every number with its source, and an explicit list of what this project
+does *not* claim.
+
+**Honest status of this path:** verified end to end, but under the owner's identity, and for the
+API routes under a programmatic token rather than a browser. No second person has signed in yet.
+The failure that would matter — authenticating successfully and then having every data route fail
+for want of a Lakebase role — **cannot happen to the reviewers**, who were checked and all hold
+one. It is unproven rather than known-broken (`docs/STATUS.md`, I-084).
 
 **Fallback — Render:** https://fleetguard-console-abhi.onrender.com — kept live, not the
 plan of record. Runs against live Lakebase via `render-u2m` (Databricks OAuth; the browser
@@ -51,8 +70,11 @@ above, sourced live from the same measurement.
   under the caller's own identity, never by the model) — traced with MLflow, evaluated
   against a held-out golden set built from NHTSA's own recall text.
 - **Lakebase Postgres** as the operational store for fleet state (vehicles, depots, service
-  campaigns, work orders, audit log) — Change Data Feed replicates every write into Unity
-  Catalog within seconds, and Postgres Row-Level Security enforces depot-scoped reads below
+  campaigns, work orders, audit log). Change Data Feed replicates every write into Unity
+  Catalog — **measured 7.1–15.6 s for the capture itself**; the derived gold facts follow a
+  `table_update` job, taking **2.5–4.5 minutes end to end** (two live cycles). The two numbers
+  are kept apart deliberately: quoting the capture latency for the whole chain would overstate
+  it by an order of magnitude. Postgres Row-Level Security enforces depot-scoped reads below
   the application, not just in it.
 - **A FastAPI + React console**, one service for API and UI, running unchanged across
   Render and Databricks Apps behind a single auth seam (`app/backend/fleetguard_api/auth/`).
@@ -62,6 +84,11 @@ above, sourced live from the same measurement.
 ```bash
 scripts/run_local_static_dev.sh          # starts the backend at :8811 against live Lakebase
 ```
+
+**The token it mints lives one hour.** After that every Lakebase-backed route returns 500 with
+`Invalid Token` — which looks exactly like a code regression if you've been editing all
+afternoon, and has been mistaken for one twice. The fix is to restart the script, not to debug
+your changes; `static-dev` holds a *static* token by design.
 
 See `app/backend/README.md` for what this sets up and why every one of its environment
 variables is there. Frontend development lives in `app/frontend/` (`npm run dev`); rebuild
@@ -74,7 +101,7 @@ the console the backend serves with `scripts/build_console.sh`.
 | `src/` | Ingestion, medallion pipelines, fleet registry, search, agent, backtest, Lakebase migrations |
 | `app/` | The FastAPI backend + React console that make up the live product |
 | `docs/` | Living architecture spec, build status, issue log, and the frozen original proposal |
-| `scripts/` | Runnable setup/build scripts — local dev server, console build, evidence/snapshot export |
+| `scripts/` | Runnable setup/build scripts — local dev server, console build, evidence/snapshot export, demo-state seeding |
 | `tests/` | Unit tests (run everywhere) and integration tests (opt-in, hit the live workspace) |
 | `dashboards/` | AI/BI dashboard definitions |
 
@@ -85,6 +112,7 @@ Read `docs/STATUS.md` first if you're picking this up cold — it's the one page
 
 | Document | Job |
 |---|---|
+| [`docs/DEMO.md`](docs/DEMO.md) | **Start here to look around** — pre-flight, the nine beats, numbers with sources, what not to claim |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | The living spec — what the system *is*, kept true with the code |
 | [`docs/STATUS.md`](docs/STATUS.md) | Where the build has got to, updated every session |
 | [`docs/ISSUES.md`](docs/ISSUES.md) | Every problem hit during the build, root cause, resolution — append-only |
