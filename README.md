@@ -42,9 +42,11 @@ You'll then see an **OAuth consent screen** listing `postgres`, `sql` and `model
 Accept it; declining returns `403 Invalid scope` on every data page, which looks like a broken
 app rather than an unauthorised one. Please **stop it again** when you're done.
 
-**The Assistant panel may say "the assistant is offline."** That is expected, not a fault: the
-agent runs on a serving endpoint kept on scale-to-zero, and a stopped endpoint does not wake on
-request. Every other tab is unaffected. Ask and it can be restored in about three minutes.
+**The Assistant's first answer takes up to a minute.** The agent runs on a serving endpoint kept
+scaled to zero, so the first question wakes it — measured 47 s. Please wait rather than assuming
+it hung. If it says *"the assistant is offline"* instead, the endpoint has gone fully stopped and
+cannot wake itself; every other tab is unaffected, and it can be restored on request in about
+three minutes.
 
 **[`docs/DEMO.md`](docs/DEMO.md) is the guided tour** — pre-flight with measured timings, the
 nine beats worth seeing, every number with its source, and an explicit list of what this project

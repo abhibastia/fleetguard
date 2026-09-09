@@ -82,9 +82,28 @@ delete — so recovery is `update_config` re-applying the served entity, with th
 **Measured: 184 s to `READY`, then 20 s for the first answer, 13 s warm.** Verified the agent
 still answers correctly — 25 vehicles / 22 depots / EXACT with the tier stated.
 
+**AMENDED same day — there are TWO idle states and the original entry conflated them.** Measured
+directly:
+
+| `deployment_state_message` | `deployment` | Wakes on request? |
+|---|---|---|
+| `Scaled to zero` | `DEPLOYMENT_READY` | **Yes — 47 s**, answers correctly |
+| `Stopped` | `DEPLOYMENT_STOPPED` | **No** — `400 the given endpoint is stopped` |
+
+`scale_to_zero_enabled` reads `True` in both, so it distinguishes nothing. The endpoint found dead
+this morning was `Stopped`; after the restore it scaled down to `Scaled to zero` within hours and
+woke normally on the next request. The likely progression is active → scaled to zero → stopped
+after longer idle.
+
+**This matters because the first version of the fix was too pessimistic.** `DEMO.md` and the
+README were briefly written to say the Assistant "may be offline" as the expected case — which
+would have led a reviewer to give up on what is actually a 47-second cold start. Corrected: wait
+for the wake, and treat *"offline"* as the rarer hard-stopped state.
+
 **Lesson.** A cost decision recorded as a *config value* ("scale-to-zero is on") is not a
-statement about whether the thing currently works. The check is the endpoint's `state`, and
-ultimately a real request — which is why this is now step 1 of `docs/DEMO.md`'s pre-flight.
+statement about whether the thing currently works — and neither is a single observation of a
+broken state. Two states that share a flag and differ in behaviour need both to be measured before
+either is documented.
 
 ### I-091 — a schema-dependent read shipped ahead of its migration; the Emerging tab 500'd — **SILENT**
 *Date:* 2026-09-09 · *Status:* ✅ resolved

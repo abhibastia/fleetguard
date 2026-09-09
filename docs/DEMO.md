@@ -17,11 +17,23 @@ Three things are asleep and **two of them do not wake on their own.**
 
 | # | Action | Time | Notes |
 |---|---|---|---|
-| 1 | `databricks serving-endpoints get agents_bootcamp_students-fleetguard-fleetguard_agent --profile abhi` | — | Check `state.ready`. If `NOT_READY` / `DEPLOYMENT_STOPPED`, do step 2 |
-| 2 | **Restore the agent endpoint** — see below | **~3 min** (measured 184 s) | **A stopped endpoint does NOT wake on request.** It returns `400 The given endpoint is stopped` and the Assistant panel shows an error |
+| 1 | `databricks serving-endpoints get agents_bootcamp_students-fleetguard-fleetguard_agent --profile abhi` | — | Read `deployment_state_message`. **Two idle states, only one is a problem** — see below |
+| 2 | **Only if it says `Stopped`:** restore it | **~3 min** (measured 184 s) | A `Stopped` endpoint does **not** wake on request — `400 The given endpoint is stopped`. `Scaled to zero` is fine and needs nothing |
 | 3 | `databricks apps start fleetguard-console --profile abhi` | **~2 min** (measured 117 s to `RUNNING`) | `apps start` returns after ~105 s but `app_status` is still `UNAVAILABLE`; poll until `RUNNING`. **Any of the three judges can run this too** — they hold `CAN_MANAGE` |
-| 4 | Ask the assistant one throwaway question | ~20 s | First answer after a restore is slower (measured 20 s vs 13 s warm) |
+| 4 | Ask the assistant one throwaway question | **20–47 s** | 20 s after a restore, **47 s waking from scaled-to-zero**, 13 s warm. Do this before anyone is watching |
 | 5 | `curl .../api/signals` → expect **200** | ~1 s | This route has broken before (I-091) and it is the proactive half of the story |
+
+**The two idle states are not the same thing, and the difference decides whether you act.**
+Measured 2026-09-09:
+
+| `deployment_state_message` | `deployment` | Wakes on request? | Action |
+|---|---|---|---|
+| **`Scaled to zero`** | `DEPLOYMENT_READY` | **Yes — 47 s cold start**, answers correctly | none; just warm it once |
+| **`Stopped`** | `DEPLOYMENT_STOPPED` | **No.** `400 the given endpoint is stopped`, twice | restore, ~3 min |
+
+`scale_to_zero_enabled` reads `True` in **both**, so the flag tells you nothing — read the
+deployment state. The likely progression is active → scaled to zero → stopped after longer idle,
+which is why touching it on submission day matters: it keeps the endpoint in the state that wakes.
 
 **Restoring the agent endpoint.** There is **no `start` or `resume` subcommand** — Model Serving
 offers only scale-to-zero or delete. Re-apply the config, building the payload *from the live
@@ -162,8 +174,9 @@ B1's tiered match.
 
 ## 4. Fragile moments
 
-- **The agent endpoint stops and does not wake.** Highest-risk item; see pre-flight. Found dead
-  during this dry run, having been believed merely scaled-to-zero.
+- **The agent endpoint has two idle states and only one is fatal.** `Scaled to zero` wakes on
+  request in ~47 s; `Stopped` does not wake at all. It was found `Stopped` during this dry run,
+  having been believed merely scaled down — so check the deployment state, not the flag.
   **DECIDED 2026-09-09: leave it on scale-to-zero and let the Assistant read as offline.** A
   stopped endpoint now renders *"The assistant is offline. The queue and approval path are
   unaffected."* rather than a raw error (I-093). The trade is accepted deliberately: keeping it
@@ -227,10 +240,13 @@ All three judges hold `CAN_MANAGE`, so none of them needs the owner available. S
 > it. If you decline, every data page returns `403 Invalid scope` and the app looks broken rather
 > than unauthorised.
 >
-> **The Assistant panel needs a second service** that is also asleep and does **not** wake on
-> request. If it says *"The assistant is offline"*, that is the honest state, not a crash — the
-> queue, approval and every other tab are unaffected. Restoring it takes about three minutes and
-> needs the author (the snippet is in §1); **message them and they can bring it up.**
+> **The Assistant's first answer is slow — allow up to a minute.** It runs on a serving endpoint
+> kept scaled to zero, so the first question wakes it (measured 47 s). Please wait rather than
+> assuming it has hung.
+>
+> If it instead says *"The assistant is offline"*, the endpoint has gone fully stopped and cannot
+> wake itself. That is an honest state, not a crash — the queue, approval and every other tab are
+> unaffected. Restoring takes about three minutes and needs the author; **message them.**
 >
 > **You can approve a campaign** — you are on the approver list. **Please don't, until after
 > submission.** Not a permissions matter: an approval writes a service campaign plus one work
