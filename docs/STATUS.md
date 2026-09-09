@@ -345,6 +345,7 @@ loses its integrity; a living doc that doesn't get edited becomes a lie.
 | `ENHANCEMENTS.md` | Evaluated backlog — adopt / defer / reject, each with a reason | Living |
 | `FleetGuard_Proposal.md` | What was *proposed*, before the build | **FROZEN** 2026-08-31 |
 | `STATUS.md` | This page — where the build has got to | Living, high-churn |
+| **`DEMO.md`** | **The demo runbook — pre-flight, the nine beats, numbers with sources, what not to claim** | Living |
 | `ISSUES.md` | Every problem hit, root cause, resolution. **Silent failures flagged.** | Append-only |
 | `../PLAN.md` | Phase sequencing and definitions of done | Living |
 | `../CLAUDE.md` | Verified facts that must not be re-derived | Living |
@@ -638,6 +639,8 @@ Everything between here and there is history, kept for the record.
 | **UC Functions + MCP — declined** | Investigated and **deliberately not built**. Reasoning recorded in **C4** so it is not re-proposed. |
 | **B2 done — Phase 11 complete** | `scripts/seed_demo_state.py`, 711 writes **through the real API**. Audit log 11 → **723** rows, work orders 230 → **331** across 3 campaigns, costs 1 → **144**. Re-run makes **0 writes**. Revived a dead feature: `overdue_work_orders` was **0 on all 60 depots** because every due date was identical. |
 | **A2 decided — all three judges can approve** | Four addresses in `app.yaml`, each verified as a live workspace identity first. Found and fixed the half that would have failed on the day: **only Raghu could open the app**; the other two judges now have `CAN_USE`. **Deployed and verified the same day** — the deploy also shipped two commits (`signals.py`/I-079, console bundle/I-087) that had reached `main` but never the App. |
+| **I-091 / I-092 — two demo-breaking failures found by a dry run** | `/api/signals` **500'd** (`match_basis` read shipped ahead of its migration) and the **agent endpoint was STOPPED**, not merely scaled to zero — requests do not wake it. Both fixed and verified. Neither was visible to any test. |
+| **`docs/DEMO.md` written** | The runbook that did not exist: pre-flight with measured timings, nine beats, every number with its source, and an explicit *what not to claim*. |
 | **A1 largely retired** | **All three judges already hold Lakebase roles**, so I-084's "succeeds at login, 500s on every data route" cannot happen to the judging audience. What is left is a robustness question no judge can answer. |
 
 **MVP has been complete since 7 September, five days early.** The vertical slice runs end to
@@ -913,7 +916,7 @@ guidance alongside rows.
 | item | state | note |
 |---|---|---|
 | AI Search `fleetguard-vs` | **running, ~$6.72/day** | ~17 days ⇒ **~$115** if left up to the demo (I-018). The only continuously-billing resource. **Do not rebuild the index inside the demo window** — it is most of a working day |
-| Agent serving endpoint | v6, **scale-to-zero ON** | `agents.deploy()` resets this to `False` on *every* deploy — re-assert it after any redeploy |
+| Agent serving endpoint | v6, **scale-to-zero ON**, restored 2026-09-09 after being found **STOPPED** | `agents.deploy()` resets this to `False` on *every* deploy — re-assert it after any redeploy. **`scale_to_zero_enabled: True` does not mean the endpoint works** (I-092): it read `True` while the entity was `DEPLOYMENT_STOPPED` and every request 400'd. Check `state.ready`, not the flag |
 | Databricks App | **STOPPED** — brought up 2026-09-09 to deploy the approver list + two stale commits, stopped again once verified | `databricks apps start fleetguard-console`, ~2 min. It will not answer a cold URL, and `CAN_USE` does not let a tester start it — **so no judge, Raghu included, can test on their own**; bring it up before anyone else tries |
 | `fleetguard-cdf-to-gold` | **UNPAUSED** | Event-driven, not scheduled; fires only on agent writes or signal loads, capped at 1 run/min |
 
@@ -923,8 +926,14 @@ guidance alongside rows.
   question, because scale-to-zero is on. Warm both before anyone is watching.
 - `/` on Render is cached and can serve a stale `index.html` for minutes after a deploy (I-054)
   — probe an API route to confirm a deploy, never the console page.
-- The Emerging tab's "**4 affecting your fleet**" is 2 batch + 2 agent-opened of 50. If B1 lands
-  it becomes **6 of 50**. Do not confuse it with I-079's separate "2 → 4 of 48" (I-079).
+- The Emerging tab's "**4 affecting your fleet**" is 2 batch + 2 agent-opened of 50 — **verified
+  live 2026-09-09, it is still 4.** B1's *code* has landed and deployed, but the stored
+  `fleet_vehicles` values are pre-fix until **B3 rebuilds `gold_emerging_signal`**; only then does
+  it become 6 of 50. The warehouse says 2 of 48 and Lakebase says 4 of 50 — both correct, counting
+  different things (Lakebase adds the 2 agent-opened rows). Do not confuse either with I-079's
+  separate "2 → 4 of 48".
+- **The agent endpoint stops, and a request does not wake it (I-092).** Restore takes **~3 min**
+  and there is no `start` subcommand. This is step 1 of `DEMO.md`'s pre-flight for a reason.
 - **The approver list IS deployed** as of 2026-09-09 (deployment `01f1ac4926e91a33831468ede9ae27cd`,
   `SUCCEEDED`): four addresses, three judges, all holding `CAN_USE`. Nothing further is needed —
   but the general rule stands for any *future* `app.yaml` edit, because an app running an older

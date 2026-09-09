@@ -26,6 +26,70 @@ no error and passed the obvious check.
 
 ## Tooling / process
 
+### I-092 — the agent serving endpoint was STOPPED, and a request does not wake it — **SILENT**
+*Date:* 2026-09-09 · *Status:* ✅ resolved
+
+**Found by** the demo dry-run's first agent question, which returned
+`502 → Agent endpoint returned 400: The given endpoint is stopped, please retry after starting
+the endpoint.` Retried: same. The request does **not** wake it.
+
+**What was believed.** `STATUS` recorded `scale_to_zero_enabled: True` and said "the first demo
+question then pays a cold start" — i.e. slow, but working. Reality: the served entity was
+`DEPLOYMENT_STOPPED` / `deployment_state_message: 'Stopped'`, `ready: NOT_READY`, while
+`scale_to_zero_enabled` still read `True`. **Scale-to-zero and stopped are different states and
+the config flag does not distinguish them** — reading the flag alone told us nothing.
+
+**Consequence had it not been caught:** the Assistant panel — the agentic half of the project and
+§13's whole requirement — would have failed live, after the console had already rendered fine.
+I-050's shape once more: failure arriving *after* visible success.
+
+**Fix.** There is **no `start`/`resume` subcommand** — Model Serving offers only scale-to-zero or
+delete — so recovery is `update_config` re-applying the served entity, with the payload built
+**from the live entity** (dropping `environment_vars` silently misfiles MLflow tracing) and
+`scale_to_zero_enabled` re-asserted, since `agents.deploy()` resets it every time.
+**Measured: 184 s to `READY`, then 20 s for the first answer, 13 s warm.** Verified the agent
+still answers correctly — 25 vehicles / 22 depots / EXACT with the tier stated.
+
+**Lesson.** A cost decision recorded as a *config value* ("scale-to-zero is on") is not a
+statement about whether the thing currently works. The check is the endpoint's `state`, and
+ultimately a real request — which is why this is now step 1 of `docs/DEMO.md`'s pre-flight.
+
+### I-091 — a schema-dependent read shipped ahead of its migration; the Emerging tab 500'd — **SILENT**
+*Date:* 2026-09-09 · *Status:* ✅ resolved
+
+**The failure.** `GET /api/signals` → **500**, `psycopg.errors.UndefinedColumn: column
+"match_basis" does not exist`. The Emerging tab — the entire proactive half of the demo — was
+dead, both locally and on the deployed App.
+
+**Cause: ordering.** I-079's fix (`548cba8`) added `match_basis` to `signals.py`'s SELECT. The
+column is created by `src/lakebase/14_load_signals.py`'s ALTER block, which is **B3's job and had
+not run**. The read shipped before the migration that creates what it reads.
+
+**Why nothing caught it — three layers, each blind for a different reason:**
+- the 348-test unit suite passes, because the router tests use fakes and never issue SQL;
+- `tests/test_data_quality.py` queries the **SQL warehouse**, not Lakebase — **no test had ever
+  connected to Postgres at all**;
+- CI has no credentials by design, so it could not have caught it either.
+
+It was found by curling thirteen routes and noticing that **one** was not 200. Twelve healthy
+routes are excellent cover for a thirteenth that is broken.
+
+**Fix.** Ran only the `ADD COLUMN IF NOT EXISTS match_basis TEXT` statement — **not** the loader's
+row rebuild, which is B3's and must not run twice. **No redeploy was needed**: the App's code was
+already correct, only the column was absent. All rows read NULL, which the model documents as
+"not recorded, not no-match", so the tab renders correctly with no tier badge until B3.
+
+**Encoded as a regression** in the new `tests/test_lakebase_schema.py`: the column list is parsed
+**out of `signals.py`'s own source** and executed against live Postgres, so it cannot drift from
+the code — a hand-copied list would reproduce the same two-places-to-update problem. Proved it can
+fail (a check that cannot fail is not a check) by running the identical query against a `pg_temp`
+table lacking the column: `UndefinedColumn`, as required, with the live table untouched.
+
+**Lesson.** A migration and the code that depends on it must ship together or be ordered
+deliberately; "the loader adds it idempotently" is only true once the loader has run. And a test
+suite that mocks its database cannot see schema drift — that needs a layer that actually connects,
+which this project did not have until now.
+
 ### I-090 — a costed work order that was not completed, created by the seeder's own determinism
 *Date:* 2026-09-09 · *Status:* ✅ resolved
 
