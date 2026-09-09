@@ -34,7 +34,14 @@ Genuinely additive work is confined to Tier 3.
 
 ### E-01 · AI Gateway belongs in front of the LLM endpoint, not the agent endpoint
 
-**Status: ADOPT — highest priority. Blocks I-015.**
+**Status: ADOPT — BLOCKED, not forgotten (as of 2026-09-09).** The only Tier 0 item still
+outstanding. Attempted 2026-09-05: creating even a disposable wrapper endpoint around a
+`system.ai.*` foundation model fails with `Model version '1' does not exist`, and the correct
+version string cannot be discovered — `model-versions list` against the `system` catalog
+returns empty, almost certainly a privilege gap (`EXECUTE` on the model / `USE_CATALOG` on
+`system`) for a non-admin on this shared metastore. Nothing was left provisioned. The honest
+remaining path is to build it from published docs and label it **unverified against this
+workspace** — which is why the ⚠️ below still stands and §4.5 is still uncorrected.
 
 `day4/02_ai_gateway_dab/databricks.yml` records a real, documented rejection:
 
@@ -71,14 +78,18 @@ the streaming question stops being load-bearing for the PII claim.
 ## Tier 1 — adopt: this *is* Phases 4/6/7, built correctly
 
 ### E-02 · `ResponsesAgent` + models-from-code + `agents.deploy()`
-**Status: ADOPT.** Not an enhancement so much as the correct shape for Phase 7. Our proposal
+**Status: BUILT.** Agent registered and serving (v6, `agents.deploy()`, `ResponsesAgent`,
+models-from-code). Not an enhancement so much as the correct shape for Phase 7. Our proposal
 names "Mosaic AI Agent Framework" generically; this is the concrete interface — structured
 tool calling, token usage, multi-turn, OpenAI compatibility, and a serving path that is one
 call. Logging as a `.py` file rather than a pickle also means the agent is reviewable in
 git, which matters for a project whose whole argument is auditability.
 
 ### E-03 · MLflow tracing with domain spans
-**Status: ADOPT. Highest value-per-hour in the list.**
+**Status: BUILT 2026-09-09 — and it was the highest value-per-hour, as claimed.** The column
+and the write path both already existed; `chat.py` simply never passed a trace id, so it was
+NULL on every row ever written. One call site. Verified live: `gold_agent_action` joins
+`fleetguard_agent_payload` on it, and E-04 hangs token cost off the same key.
 
 `autolog()` is free; the value is custom `@mlflow.trace` spans typed `RETRIEVER` / `LLM` over
 **our** steps: exposure match, severity scoring, approval gate, work-order write.
@@ -158,7 +169,11 @@ A custom `@scorer` can additionally assert the agent **called a retrieval tool a
 is how "no unsourced claims" becomes machine-checkable rather than aspirational.
 
 ### E-06 · Engineering hygiene from the reference implementation
-**Status: ADOPT — cheap, prevents known failure modes.**
+**Status: BUILT — all three items, the last on 2026-09-09.** `ModelConfig` injected at log
+time and the dataset build idempotent were done during Phase 7; **latest-version resolution
+was not**, and the evaluation notebook defaulted to v3 while v6 served — scoring a
+three-version-stale model and passing green (I-094). Cheap, and it did prevent a known
+failure mode: exactly the one it names.
 
 - **`ModelConfig` injected at log time** rather than deriving schema from `w.current_user`.
   At serving runtime that resolves to a **service-principal UUID**, not a username, so the
@@ -195,10 +210,33 @@ the n**. Claiming a validated feedback loop from a single self-labelling reviewe
 exactly the kind of unfalsifiable claim this project has spent two weeks removing.
 
 ### E-08 · Synthetic evaluation data — for the agent only
-**Status: ADOPT, NARROWLY.** `generate_evals_df` seeds an agent Q&A eval set quickly, which
-matters at 24 days.
+**Status: CLOSED 2026-09-09 — half honoured, half deliberately not built.** The entry had two
+halves and they ended differently, which is why leaving it marked ADOPT was misleading.
 
-**Do not use it for Model B.** The recall-matching golden set must be **real** recall/fleet
+**The prohibition was honoured.** Model B's golden set is **765 real recall/fleet pairs built
+from NHTSA's own recall text** — external ground truth, not synthesised. That was the important
+half and it held.
+
+**The adoption is not built, and should not be.** `generate_evals_df` was adopted to seed an
+agent Q&A set "quickly, which matters at 24 days" — a schedule argument, and the schedule
+pressure it answered no longer exists. What exists instead is **better than what it would have
+produced**: `src/agent/16_evaluate_agent.py` carries **10 hand-written adversarial cases**,
+each targeting one specific way the agent could mislead an operator about to pull trucks off
+the road — grounding (the numbers must be right *and* the tier stated), the
+signal/investigation/recall three-state distinction, the human approval gate, retrieval and
+privacy, refusing to invent, and one **regression case encoding a real multi-turn 400 found live
+on 2026-09-04**.
+
+Generated Q&A cannot produce that set. It samples what the documents *say*; these cases encode
+what this project has *watched go wrong* — I-050's confident "no vehicles affected", I-075's
+bare variant count, I-058's naive scorer. A synthetic set added alongside would be larger,
+weaker, and would dilute a suite whose value is that every case has a scar behind it.
+
+**Revisit** only if the agent gains tools whose failure modes nobody has seen yet — generated
+breadth is worth something against unknown-unknowns, and worth nothing against the ten known
+ones already covered.
+
+*Original rationale, kept:* **Do not use it for Model B.** The recall-matching golden set must be **real** recall/fleet
 pairs with known correct answers — that is a classification ground truth, not a Q&A pair, and
 synthesising it would mean grading the model against questions derived from its own inputs.
 Keep the two datasets separate and say why.
@@ -229,7 +267,8 @@ justification; adopting it because our core flow has a suspend-and-resume step i
 
 ### E-11 · Conversational surface and persona model — **decided 2026-09-01**
 
-**Status: ADOPT the split below. Reject persona routing by agent.**
+**Status: BUILT — the split, as decided. Persona routing rejected and still rejected.**
+Chat panel ships beside the queue, not as the queue.
 
 Question raised: should FleetGuard have a chatbot UI, with employees, managers and
 consumers reaching it through a supervisor agent?
@@ -284,7 +323,9 @@ pretending to be both — and it is why E-10 below is now *upgraded* rather than
 
 ### E-12 · Hosting — Render for building, Databricks Apps for submitting — **decided 2026-09-01**
 
-**Status: ADOPT. Confirms §8.7's phased rollout; the auth seam becomes an MVP requirement.**
+**Status: BUILT, then superseded in direction 2026-09-08.** Both surfaces exist and work;
+**Databricks Apps is now the primary target** and Render is kept as a working fallback rather
+than the plan of record. The phased rollout this predicted is what happened.
 
 Three options were considered.
 
@@ -374,7 +415,8 @@ account admin ever registers a client.
 
 ### E-13 · The auth seam — **MVP requirement**
 
-**Status: ADOPT — in MVP scope, and the reason E-12 is cheap.**
+**Status: BUILT — and it paid for itself.** The seam is why moving to Databricks Apps needed
+configuration plus one line rather than a rewrite (`app/backend/fleetguard_api/auth/`).
 
 The two hosting environments differ in **exactly one** way:
 
@@ -447,7 +489,25 @@ complaint volume — a different control-construction problem, not a schedule it
 Both were the obvious improvement; both were measured rather than assumed.
 
 ### E-10 · Genie + UC metric views, as a pair
-**Status: UPGRADED to post-MVP committed (was: defer).** E-11 gives Genie a defined job —
+**Status: SPLIT 2026-09-09 — metric-view half BUILT, Genie half DEFERRED.** The two were
+adopted as a pair and did not stay one; recording them separately rather than leaving a single
+status that is half true.
+
+**Metric views: BUILT 2026-09-03.** `bootcamp_students.fleetguard.evidence_metrics`
+(`dashboards/metric_views/evidence_metrics.sql`) governs `Detection Rate %`, `Lift` and
+`Median Lead Days` once, and the dashboard's Evidence page reads all six of its widgets via
+`MEASURE(...)` instead of carrying its own copy of the arithmetic. Verified live 2026-09-09:
+`MEASURE(Lift)` returns **1.443439**. It was built for the reason this entry gives — the lift
+calculation had been independently recomputed in three places (I-064/I-065).
+
+**Genie: DEFERRED, and the reason has strengthened.** The argument here was that Genie needs a
+metric view to be constrained rather than inventing joins — still true, and now satisfiable. But
+E-11 gave the *operator* persona a conversational surface already, and a Genie space would
+duplicate that agent's job for the same user. The honest fit is an analyst persona nobody has
+asked for. Revisit by attaching a Genie space to the existing dashboard if an open-ended-analyst
+need actually appears; do not build it to demonstrate the feature.
+
+*Original rationale, kept:* E-11 gives Genie a defined job —
 the VP Ops analytics surface — rather than leaving it a loose platform feature, which is why
 this moves up.
 
@@ -456,8 +516,10 @@ view** is constrained to defined measures. Defining `exposure_rate`, `open_work_
 `mean_time_to_remediate` once gives the dashboard and the NL interface a single semantic
 layer.
 
-Metric views appear **zero** times in our docs today. Real gap, moderate value, non-trivial
-cost. **Not in MVP.**
+~~Metric views appear **zero** times in our docs today.~~ **No longer true** — corrected
+2026-09-09. That sentence was accurate when written on 2026-09-01 and was quietly falsified by
+`evidence_metrics` shipping on the 3rd, which is precisely the drift this document exists to
+catch in the *proposal* and had started doing itself.
 
 ---
 
