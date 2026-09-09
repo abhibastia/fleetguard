@@ -26,6 +26,42 @@ no error and passed the obvious check.
 
 ## Tooling / process
 
+### I-095 — a "privilege wall" that was a wrong query, and an enhancement whose method does not exist
+*Date:* 2026-09-09 · *Status:* ✅ resolved
+
+**Two errors, stacked**, found by re-testing E-01 rather than trusting its recorded status.
+
+**Error 1 — the block was a misdiagnosis.** E-01 had been marked blocked since 2026-09-05 on the
+grounds that the `system.ai` model version could not be discovered: *"`model-versions list`
+against the `system` catalog returns empty, most likely a privilege gap (`EXECUTE` on the model /
+`USE_CATALOG` on `system`)."* Re-checked with the right commands: the `system` catalog is visible,
+`system.ai` is visible, `registered-models list` returns **93 models**, and
+`model-versions list system.ai.databricks-claude-opus-4-8` returns **version 1**. No privilege gap
+exists. This is the third instance today of a wrong query being read as an access wall (I-088,
+I-092), and the most expensive — it parked a Tier 0 item for four days.
+
+**Error 2 — the enhancement's method is not a thing that exists.** E-01 proposed "create our own
+**pay-per-token** endpoint wrapping `system.ai.<model>`". You cannot. Measured across three create
+attempts: `foundation_model` is **read-only on write** (`unknown field`), and an `entity_name` of
+`system.ai.*` is treated as a custom model and demands `workloadSizeId` — **provisioned
+throughput**, dedicated GPU capacity. Pay-per-token endpoints are the pre-provisioned
+`databricks-*` ones. Nothing was left provisioned; `serving-endpoints list` confirms only the
+agent endpoint remains.
+
+**Why the original error message misled.** The 2026-09-05 attempt got `Model version '1' does not
+exist`, which reads as "the version is missing" and sent the investigation toward discovery and
+permissions. The version exists; the request was the wrong *shape* — a custom-model request for a
+foundation model. An error naming the thing you supplied is not necessarily an error about that
+thing.
+
+**Resolution.** E-01's *purpose* — stop claiming a PII guardrail the project does not have — is
+achieved by correcting `ARCHITECTURE.md` §8, which costs nothing. The endpoint was only the
+proposed means.
+
+**Lesson.** A recorded blocker ages badly in two directions at once: the reason can be wrong, and
+the plan it was blocking can be wrong too. "Blocked" is a claim with a date on it, and re-testing
+one cost twenty minutes against four days of it sitting as the top open item.
+
 ### I-094 — the evaluation notebook scored a three-version-stale model by default — **SILENT**
 *Date:* 2026-09-09 · *Status:* ✅ resolved
 

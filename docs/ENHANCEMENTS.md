@@ -34,22 +34,41 @@ Genuinely additive work is confined to Tier 3.
 
 ### E-01 · AI Gateway belongs in front of the LLM endpoint, not the agent endpoint
 
-**Status: ADOPT — BLOCKED, not forgotten (as of 2026-09-09).** The only Tier 0 item still
-outstanding. Attempted 2026-09-05: creating even a disposable wrapper endpoint around a
-`system.ai.*` foundation model fails with `Model version '1' does not exist`, and the correct
-version string cannot be discovered — `model-versions list` against the `system` catalog
-returns empty, almost certainly a privilege gap (`EXECUTE` on the model / `USE_CATALOG` on
-`system`) for a non-admin on this shared metastore. Nothing was left provisioned. The honest
-remaining path is to build it from published docs and label it **unverified against this
-workspace** — which is why the ⚠️ below still stands and §4.5 is still uncorrected.
+**Status: PURPOSE ACHIEVED, METHOD IMPOSSIBLE — closed 2026-09-09.** The goal was to correct a
+false claim in §4.5. That is done. The proposed *remedy* turns out not to be buildable, and the
+previously recorded reason for the block was wrong.
 
-`day4/02_ai_gateway_dab/databricks.yml` records a real, documented rejection:
+**The recorded blocker was a misdiagnosis.** It said the version string could not be discovered —
+"`model-versions list` against the `system` catalog returns empty, most likely a privilege gap".
+Re-checked: the `system` catalog is visible, `system.ai` is visible, it holds **93 registered
+models**, and `system.ai.databricks-claude-opus-4-8` lists **version 1** without complaint. There
+is no privilege gap. Same shape as I-088 and I-092 — a wrong query read as an access wall.
 
-> *"External model, provisioned throughput, and pay-per-token endpoints are fully supported;
-> **agent endpoints currently only support inference tables**."*
+**The real reason, measured.** You cannot create your own pay-per-token endpoint wrapping a
+`system.ai` model:
+- `foundation_model` is **read-only on write** — the API returns `unknown field` for it. It is
+  the resolved representation you see on `get`, not something you can set.
+- An `entity_name` of `system.ai.*` is treated as a **custom model** and demands
+  `workloadSizeId` — i.e. **provisioned throughput**: dedicated GPU capacity with real recurring
+  cost, for a project whose entire recurring spend is one $6.72/day index.
 
-So `guardrails`, `rate_limits` and `usage_tracking_config` **cannot** be applied to an agent
-endpoint deployed with `agents.deploy()`.
+Pay-per-token endpoints are the **pre-provisioned `databricks-*` ones**; you do not get to make
+your own. Three create attempts (top-level `served_entities`, nested under `config`, explicit
+`foundation_model`) all failed on this, and no endpoint was left behind.
+
+**The shared endpoint is not an option either.** `databricks-claude-opus-4-8` *does* carry an AI
+Gateway — but only `usage_tracking_config`, no guardrails — and it is workspace infrastructure
+serving ~296 students. Attaching a PII guardrail there would silently change everyone's traffic.
+
+**What actually shipped: the correction.** E-01 existed to stop the project claiming a guardrail
+it does not have. `ARCHITECTURE.md` §8 now states plainly that no AI Gateway PII guardrail
+protects this agent, why it cannot, and what does and does not mitigate PII instead. That was
+always the deliverable; the endpoint was only the proposed means, and it costs nothing to be
+honest instead.
+
+**Also settles I-015 by removing its subject.** The streaming-versus-output-guardrail tension
+does not exist when there is no output guardrail. `/api/chat` stays non-streaming for its own
+reasons.
 
 **Why this is a problem for us.** Proposal §4.5 claims AI Gateway PII guardrails on the
 agent. Combined with **I-015** — output guardrails do not apply to streaming responses —

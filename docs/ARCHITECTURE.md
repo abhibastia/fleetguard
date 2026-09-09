@@ -356,8 +356,30 @@ Stated so they are not mistaken for omissions.
 - **No pre-2010 recall coverage.** Deliberate — operators don't run vehicles that old.
 - **No `ai_extract` on the ingest path.** `COMPDESC` already ships structured; re-deriving it
   across 2.24M rows is pure cost.
-- **No streaming agent output** while the PII output guardrail is claimed — AI Gateway output
-  guardrails do not apply to streaming responses. Pick one.
+- **No AI Gateway PII guardrail — and it is not available to this project at all.** The frozen
+  proposal §4.5 claims one; that claim is wrong and this is the correction (E-01). Two facts,
+  both measured 2026-09-09:
+  1. **Agent endpoints do not support guardrails.** An endpoint deployed with `agents.deploy()`
+     supports `inference_table_config` only — not `guardrails`, `rate_limits` or
+     `usage_tracking_config`.
+  2. **We cannot put one in front of the LLM either.** The proposed fix was our own
+     pay-per-token endpoint wrapping `system.ai.databricks-claude-opus-4-8`, carrying the
+     guardrail at the point where retrieved narratives enter a prompt. That endpoint **cannot
+     be created**: `foundation_model` is read-only on write (`unknown field`), and an
+     `entity_name` of `system.ai.*` is treated as a custom model and demands a workload size —
+     i.e. **provisioned throughput**, dedicated GPU capacity, which is absurd for this project.
+     Pay-per-token endpoints are the pre-provisioned `databricks-*` ones; you do not get to
+     make your own.
+
+  The shared `databricks-claude-opus-4-8` *does* carry an AI Gateway, but only
+  `usage_tracking_config`, and it is workspace infrastructure serving ~296 students — attaching
+  a guardrail there would change everyone's traffic and is not ours to do.
+
+  **What protects PII instead, honestly:** nothing at the gateway layer. The mitigations that
+  exist are that complaint narratives are already public NHTSA data, retrieval is scoped, and
+  the agent never writes free text to an external surface. **Do not claim a PII guardrail.**
+  Streaming is therefore no longer load-bearing for this: `/api/chat` is non-streaming for the
+  separate reason in I-015, and the guardrail it was protecting does not exist.
 - **No writes outside `bootcamp_students.fleetguard`**, with one explicitly authorised
   exception: the CDF destination `bootcamp_students.bootcamp_cdc`.
 
