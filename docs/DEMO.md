@@ -215,10 +215,11 @@ All three judges hold `CAN_MANAGE`, so none of them needs the owner available. S
 > **The Assistant panel needs a second service** that is also asleep and does **not** wake on
 > request. If chat errors, see the restore snippet in §1 — about three minutes.
 >
-> **You can approve a campaign** — you are on the approver list. Be aware it writes a service
-> campaign plus one work order per exposed vehicle (up to ~200 rows) and replicates to an
-> append-only log that cannot be scrubbed. Please do it deliberately rather than to see what the
-> button does.
+> **You can approve a campaign** — you are on the approver list. **Please don't, until after
+> submission.** Not a permissions matter: an approval writes a service campaign plus one work
+> order per exposed vehicle (up to ~200 rows) into an append-only log that cannot be scrubbed, so
+> a pre-submission approval permanently changes the state the project is graded on. **Afterwards,
+> please do** — the human approval gate is the strongest thing here and it deserves exercising.
 >
 > **Please stop the app when you're done:** `databricks apps stop fleetguard-console`.
 

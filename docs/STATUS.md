@@ -642,6 +642,7 @@ Everything between here and there is history, kept for the record.
 | **B2 done — Phase 11 complete** | `scripts/seed_demo_state.py`, 711 writes **through the real API**. Audit log 11 → **723** rows, work orders 230 → **331** across 3 campaigns, costs 1 → **144**. Re-run makes **0 writes**. Revived a dead feature: `overdue_work_orders` was **0 on all 60 depots** because every due date was identical. |
 | **A2 decided — all three judges can approve** | Four addresses in `app.yaml`, each verified as a live workspace identity first. Found and fixed the half that would have failed on the day: **only Raghu could open the app**; the other two judges now have `CAN_MANAGE` (upgraded 2026-09-09 so all three can start the app themselves). **Deployed and verified the same day** — the deploy also shipped two commits (`signals.py`/I-079, console bundle/I-087) that had reached `main` but never the App. |
 | **I-091 / I-092 — two demo-breaking failures found by a dry run** | `/api/signals` **500'd** (`match_basis` read shipped ahead of its migration) and the **agent endpoint was STOPPED**, not merely scaled to zero — requests do not wake it. Both fixed and verified. Neither was visible to any test. |
+| **Approval timing decided** | Judges may approve **after submission, not before** — a pre-submission approval writes ~200 rows into append-only CDF and permanently alters the state the project is graded on. Raghu's standing instruction is still the blanket "please don't"; it needs superseding explicitly. |
 | **Judges given `CAN_MANAGE`** | Upgraded from `CAN_USE` so they can **start the app themselves** — a bootcamp project should not need the owner awake to be looked at. `CAN_USE` cannot start stopped compute and there is no level in between, so this is the smallest grant that works; it also carries deploy/update/delete. `app.yaml` was checked for secrets first — there are none. |
 | **`docs/DEMO.md` written** | The runbook that did not exist: pre-flight with measured timings, nine beats, every number with its source, and an explicit *what not to claim*. |
 | **A1 largely retired** | **All three judges already hold Lakebase roles**, so I-084's "succeeds at login, 500s on every data route" cannot happen to the judging audience. What is left is a robustness question no judge can answer. |
@@ -751,10 +752,15 @@ owner's result was impossible.
 - ~~**The app must be started for him**~~ — **superseded 2026-09-09: all three judges now hold
   `CAN_MANAGE` and can start it themselves.** Deliberate, at the user's direction: this is a
   bootcamp project and judges should not need the owner awake to look at it.
-- **He is in `FLEETGUARD_APPROVERS`** (added `dfcc13c`), so Approve would **succeed** for him,
-  writing a service campaign plus ~200 work orders and firing CDF. The app ACL and the approver
-  list are independent mechanisms — `CAN_USE` grants no protection here. He has been asked not
-  to approve; if that write is wanted deliberately, budget the cleanup.
+- **He is in `FLEETGUARD_APPROVERS`**, so Approve **succeeds** for him, writing a service campaign
+  plus ~200 work orders and firing CDF. The app ACL and the approver list are independent
+  mechanisms — an app permission neither grants nor withholds approval.
+  **DECIDED 2026-09-09: not before submission, fine afterwards.** The reason is timing, not
+  permission: a pre-submission approval dirties the state B2 deliberately seeded and lands ~200
+  rows in **append-only** CDF that cannot be scrubbed, so the graded artefact would no longer be
+  the one that was built. After submission there is nothing left to protect and exercising the
+  approval flow is genuinely useful — it is the strongest thing in the project. Tell him so
+  explicitly; his current instruction is the blanket "please don't", which will otherwise stand.
 
 **~~A2. Decide whether judges can approve~~ — ✅ DECIDED AND APPLIED 2026-09-09: yes, all three.**
 `FLEETGUARD_APPROVERS` in `app/backend/app.yaml` now holds **four** addresses — the owner plus
