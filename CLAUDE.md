@@ -390,8 +390,15 @@ guard (I-098). Bundle YAML is a claim you then have to keep true; rejected
 experiments belong in `src/` and `docs/ISSUES.md`.
 - **All 17 jobs + the pipeline now run bundle-uploaded source** under
   `/Workspace/Users/abhisek.bastia17@gmail.com/.bundle/fleetguard/prod/files/`. The old
-  hand-synced `/Workspace/Users/…/fleetguard/` tree is **dead** — do not import into it, and
-  do not read it as current. It is what drifted (I-096).
+  hand-synced `/Workspace/Users/…/fleetguard/` tree was what drifted (I-096) and is now
+  **DELETED** (2026-09-11). Checked before deleting: all 40 files existed in `git`, 26
+  byte-identical and 14 repo-ahead — **nothing was unique to the workspace**. Do not recreate
+  it; `bundle deploy` owns the workspace copy of `src/` now.
+  **Consequence, accepted deliberately: the 7 excluded jobs can no longer run** —
+  `build-backtest-scope`, `embed-backtest-complaints`, `hybrid-query-test`, `inspect-eval`,
+  `lead-time-backtest-v2`, `measure-cdf-latency`, `semantic-subdivision`. They were the only
+  things still reading that tree. Their code is in `src/` and unaffected; to run one again,
+  add it to the bundle rather than re-importing by hand.
 - **One `prod` target, `mode: production`, and no `dev` target — on purpose.**
   `mode: development` name-prefixes every resource (`[dev abhisek] fleetguard-…`) into a
   namespace already holding ~300 jobs from ~296 other students, which breaks the
@@ -419,6 +426,19 @@ experiments belong in `src/` and `docs/ISSUES.md`.
   eliminate. Always redirect `--source-dir` to a scratch path *inside the repo* (it must be
   relative to the bundle root — an absolute path outside errors with
   `Rel: can't make … relative to resources`), keep only the YAML, then delete the scratch.
+- **CD (`bundle deploy` on merge) is NOT built, and the blocker is account access, not effort
+  (I-100, measured 2026-09-11).** The right mechanism is **GitHub workload identity federation
+  (OIDC)** — the runner exchanges a short-lived GitHub token for a Databricks OAuth token, so
+  **no secret is stored in the repo**, which is the only shape that does not reverse `ci.yml`'s
+  no-credentials rule. It needs a federation policy created with
+  `databricks account service-principal-federation-policy create` — an **account-level** object.
+  This account cannot: `databricks account service-principals list --profile abhi` returns
+  **`Not Found`** (workspace-scoped profile, no account profile exists) and
+  `current-user me` reports groups **`['users']`** — not even a workspace admin. Same ownership
+  gap as I-084/I-085. **Do not "fix" this with a PAT in GitHub secrets** — it reaches a
+  ~296-student metastore. If CD is ever built: stop at `bundle deploy`, never
+  `bundle run fleetguard_console` (that restarts the App under its users), and gate on a GitHub
+  Environment with required reviewers.
 - Lakebase CDF is still **not** a bundle resource (I-017) — nor are the AI Search
   endpoint/index, the agent serving endpoint, or the `evidence_metrics` metric view. §8.5's
   "a single `bundle deploy` produces a consistent environment" has **four** documented
@@ -469,10 +489,14 @@ experiments belong in `src/` and `docs/ISSUES.md`.
   `bundle deploy`**, which re-asserts every bound resource from YAML on every run. Change
   `resources/*.yml` and deploy:
   ```bash
-  databricks bundle validate --strict -t prod --profile abhi
   databricks bundle summary -t prod --profile abhi   # nothing should be "to be created"
-  databricks bundle deploy -t prod --profile abhi
+  ./scripts/deploy.sh abhi prod                      # validates + deploys + verifies provenance
   ```
+  **Use the script, not a bare `bundle deploy`.** It refuses a dirty tree: `bundle deploy`
+  uploads the working tree but records `HEAD`, so an uncommitted deploy puts code in the
+  workspace that exists in no commit — silently (I-098, which recurred within hours of being
+  documented). It deliberately does **not** deploy the App; that stays
+  `databricks bundle run fleetguard_console`.
   Adding a *new* workspace object that should be managed: create the resource file, then
   `databricks bundle deployment bind <key> <id>` — and run `jobs get <id>` first to confirm
   `creator_user_name` is ours. The jobs namespace is flat across ~296 students; a mis-typed

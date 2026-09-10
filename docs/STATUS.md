@@ -691,6 +691,7 @@ Everything between here and there is history, kept for the record.
 | **E-03: the trace loop is closed and the join is proven** | `chat.py` now passes the endpoint's `databricks_request_id` into `fleetguard_agent_action.trace_id`, which was NULL for every row ever written. Verified live in Unity Catalog: `gold_agent_action` joins `fleetguard_agent_payload` on it, returning one row where **`authorised_by` and `called_as` are the same human** — the write-path claim made checkable rather than asserted. Inference-table ingest lags **>30 min**, so a demo-time write will not appear immediately. |
 | **E-06 / I-094: evaluation was scoring a stale model** | `16_evaluate_agent.py` defaulted to v3 while **v6** serves, so default runs passed green against a three-version-old artefact. Now resolves latest and prints which version it scored. |
 | **Deployed 2026-09-10** | Deployment `01f1acf2955f17fc8a1e21d22a2dd846`, `SUCCEEDED`. Carried the new console bundle **and `chat.py`**, which had never been deployed — so I-093's offline state and E-03's trace wiring both went live with it. Bundle hashes on the App match the local build exactly; 7 routes green; signals 50/4; audit log serving all **724** rows. App stopped again. |
+| **Raghu confirmed full page-level access (2026-09-11)** | Extends the 2026-09-10 entry below from "his sign-in worked" to **he browsed all the pages**. That retires the last of I-084's *demo-day* risk: a non-owner authenticated through the browser OAuth path, consented, and every route rendered under his own identity. **It does NOT close A1, and A1 was written in advance to say so** — Raghu holds a Lakebase login role, so his pass proves the app ACL, the consent flow and the non-owner code paths, and says nothing about whether Lakebase auto-provisions a role for an identity that has never used it. All three judges hold roles, so no judge can answer that question; it is a robustness item off the critical path, and any of the ~296-person cohort without a role could still settle it. |
 | **Reviewer feedback acted on (Raghu, 2026-09-10)** | **His sign-in worked** — first non-owner OBO session, live data, `databricks-apps` token source. Two asks, both built: **search on every table** (no view had free text; the audit log was 724 rows behind two dropdowns, and only 200 were even fetched) and a **Home page** (the console opened on a table of 50 recalls with no orientation). Verified in a browser, both themes. |
 | **E-01 closed — the last Tier 0 item** | Re-tested instead of trusting its status. The recorded "privilege gap" **does not exist** (`system.ai` visible, 93 models, version 1 listed) — and the enhancement's method does not exist either: you **cannot create a pay-per-token endpoint** wrapping `system.ai.*` (that path demands provisioned throughput / GPU). Purpose achieved for free instead: `ARCHITECTURE.md` §8 now states plainly that **no AI Gateway PII guardrail protects this agent**, and why. **I-095.** |
 | **E-08 closed** | Half honoured, half deliberately not built: Model B's golden set is real NHTSA recall text as the entry demanded, but the synthetic agent Q&A set is **not** built — 10 hand-written adversarial cases, each encoding a failure this project actually watched happen, beat generated breadth. |
@@ -1011,23 +1012,30 @@ guidance alongside rows.
   stale `index.html` for minutes after a successful deploy on the old Render host (I-054); the
   general lesson holds anywhere a CDN or proxy sits in front, and an unknown path returns
   **200 HTML** via the SPA catch-all, so `/` proves nothing either way.
-- The Emerging tab reads "**4 affecting your fleet**" of **50** — 2 batch + 2 agent-opened. A third
-  was opened 2026-09-09 to verify E-03's trace wiring and **removed 2026-09-10** after a reviewer's
-  screenshot showed three RAM 2500 rows reading as clutter; it duplicated the detector's own
-  subject. The trace loop stays proved — `gold_agent_action` keeps the traced action and CDF
-  history is append-only. **Verified
-  live 2026-09-09, it is still 4.** B1's *code* has landed and deployed, but the stored
-  `fleet_vehicles` values are pre-fix until **B3 rebuilds `gold_emerging_signal`**; only then does
-  it become 6 of 50. The warehouse says 2 of 48 and Lakebase says 4 of 50 — both correct, counting
-  different things (Lakebase adds the 2 agent-opened rows). Do not confuse either with I-079's
-  separate "2 → 4 of 48".
+- The Emerging tab reads "**6 affecting your fleet**" of **50** — 4 batch + 2 agent-opened.
+  **Updated 2026-09-11: it was 4 of 50 until the B3 rehearsal rebuilt `gold_emerging_signal`.**
+  B1/I-079's tiered match reached `main` on 2026-09-09 but the *stored* values stayed pre-fix,
+  so RAM PROMASTER and Chevrolet Silverado 1500 both showed **0** against 2,418 and 766 real
+  vehicles. Rebuilt and loaded (I-099), verified live in both stores.
+  **The two stores still count different things, and both are right:** the warehouse
+  (`gold_emerging_signal`) says **4 of 48**, Lakebase says **6 of 50**, because Lakebase also
+  holds the 2 agent-opened rows. If a doc says "2 of 48" or "4 of 50" it predates 2026-09-11.
+  A third agent-opened signal existed briefly — opened 2026-09-09 to verify E-03's trace wiring,
+  **removed 2026-09-10** after a reviewer's screenshot showed three RAM 2500 rows reading as
+  clutter, since it duplicated the detector's own subject. The trace loop stays proved:
+  `gold_agent_action` keeps the traced action and CDF history is append-only.
 - **The agent endpoint stops, and a request does not wake it (I-092).** Restore takes **~3 min**
   and there is no `start` subcommand. This is step 1 of `DEMO.md`'s pre-flight for a reason.
 - **The approver list IS deployed** as of 2026-09-09 (deployment `01f1ac4926e91a33831468ede9ae27cd`,
   `SUCCEEDED`): four addresses, three judges, all holding `CAN_MANAGE`. Nothing further is needed —
   but the general rule stands for any *future* `app.yaml` edit, because an app running an older
   deployment enforces the older list and its 403 is identical to a missing grant.
-- **Always `databricks sync --dry-run` before deploying.** This deploy silently carried two
+- **~~Always `databricks sync --dry-run` before deploying.~~ SUPERSEDED 2026-09-10 — `sync` is
+  no longer how anything deploys.** The bundle owns the workspace copy of the source, so the
+  equivalent pre-flight is `databricks bundle summary -t prod` (nothing should read *to be
+  created*) and, for the App, remembering that `bundle deploy` alone ships **no** app
+  deployment — `databricks bundle run fleetguard_console` is the step that does (I-097). The
+  lesson the original recorded still stands, and is now structural rather than a habit: this deploy silently carried two
   further commits that had reached `main` but never the App — `signals.py` (I-079) and the
   console bundle (I-087). The dry run names the exact file set; nothing else does.
 - **The demo state is seeded** (B2): 3 launched campaigns, 331 work orders, 723 audit rows, 44

@@ -16,8 +16,10 @@
 #     should be. Integration tests (`-m integration`, tests/test_data_quality.py) require
 #     `--run-integration` and are skipped by default via tests/conftest.py — that default is
 #     what makes this workflow safe to run on every push.
-#   - It does not deploy. Deployment stays a deliberate manual act
-#     (`databricks apps deploy`), because deploying restarts the app under whoever is using it.
+#   - It does not deploy. Deployment stays a deliberate manual act (`databricks bundle deploy`,
+#     then `databricks bundle run fleetguard_console` for the App), because deploying restarts
+#     the app under whoever is using it. The CD half of §9 is not missing by choice — it needs
+#     an account-level OIDC federation policy this account cannot create; see I-100.
 #   - **It does not run `databricks bundle validate`.** Measured 2026-09-10: with an empty
 #     config file and no environment credentials, `bundle validate --strict -t prod` fails on
 #     `default auth: cannot configure default credentials` before checking anything — pinning
