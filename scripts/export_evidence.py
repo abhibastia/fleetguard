@@ -1,9 +1,9 @@
 """Export the measured backtest into a committed snapshot the public console can serve.
 
-Why a snapshot rather than a request-time query: the evidence page is the **public** surface
-(§8a). Reading `gold_lead_time_summary` at request time would require a Databricks credential
-on Render, which the architecture explicitly forbids — the URL is public. So the numbers are
-pulled here, by a developer with their own credentials, and committed with provenance.
+Why a snapshot rather than a request-time query: the evidence page is the one surface that
+answers without an identity (§8a), so it cannot query anything at request time — there is no
+caller credential to run `gold_lead_time_summary` under. So the numbers are pulled here, by a
+developer with their own credentials, and committed with provenance.
 
 That is still a strict improvement over hand-typed constants: the figures are *derived* from
 the source table, the derivation is in this file, and the snapshot records where and when it
