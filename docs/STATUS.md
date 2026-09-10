@@ -667,8 +667,10 @@ off the critical path.
 written 2026-09-11 and ranked. It supersedes *WHAT IS LEFT BEFORE THE DEMO* below, which is
 dated 2026-09-08 and partly overtaken; that section is kept for its detail, not its priorities.
 
-**Its first item is not technical:** nothing in this repo records what the 24 Sept submission
-actually asks for. Confirm that before spending time on anything else.
+**Its first item is the rubric**, recovered 2026-09-11 from the proposal feedback (100/100,
+Grade A) and mapped against what was actually built. Read that mapping before anything else —
+it names the one graded line whose basis has since narrowed (Velocity), and the one that only
+became true on 2026-09-10 (deployment via Asset Bundles).
 Everything between here and there is history, kept for the record.
 
 #### What changed on 2026-09-09
@@ -764,17 +766,70 @@ Ranked by what would hurt most if skipped, with the reasoning, so a cold session
 without re-deriving the argument. Everything is done or deliberately cut; none of this is
 building — it is verification, closing decisions, and one gap that is not technical at all.
 
-### 0. Confirm what the submission actually asks for — **no requirements are recorded anywhere**
+### 0. The rubric — recovered 2026-09-11 from the proposal feedback, and mapped to what was built
 
-Searched the repo: `README`, `PLAN.md`, `STATUS.md` and `docs/` contain **no statement of what
-the 24 Sept submission is** — no rubric, no deliverable list, no form. Everything here optimises
-a *demo*, on the assumption that the repo plus the running App plus `DEMO.md` is the artefact.
-**That assumption has never been written down or checked.**
+**Partially closes what was an open gap.** `docs/feedback-final-proposal-fleetguard.pdf` (the
+**proposal** grade, 2026-08-30 — **100/100, Grade A, "Required Revisions: None"**) carries the
+rubric, its weights, and a 14-line requirements checklist. Until now nothing in the repo stated
+what was being graded.
 
-This is first because it is the only item that could invalidate the others. If the submission
-wants, say, a written report or a recorded walkthrough, that is days of work nobody has
-scheduled. **Cost to close: one message to the TA. Do it before spending time on anything
-below.**
+**Caveat that must not be lost: this is feedback on the *proposal*, not the final-submission
+rubric.** It is the best available proxy and the categories are almost certainly stable, but
+whether the 24 Sept submission wants additional artefacts — a written report, a recorded
+walkthrough — is **still unconfirmed**. That question is one message to the TA and is still
+worth asking.
+
+**The grader's own instruction for what comes next:**
+
+> *"Proceed to build with confidence; the next priority is implementing the pipelines and
+> validating the stated latency and backtest outcomes in a live environment."*
+
+All three are done: pipelines built, latency measured live (CDF 7.1–15.6 s; end-to-end
+2.5–4.5 min), backtest measured live (16.0% vs 11.1%, 1.44×, p ≈ 0.009 — including the negative
+semantic result, I-049).
+
+| Rubric category | Weight | Built state |
+|---|---:|---|
+| Project definition and data sources | 15 | ✅ all six sources live and measured |
+| Spark data pipeline | 10 | ✅ — one documented deviation: `ai_extract` moved out of silver to per-surfaced-signal (I-009) |
+| Third-party API integration | 10 | ✅ `recallsByVehicle` polling job |
+| Lakebase data model | 10 | ✅ 11 tables, CDF replicating |
+| Action-taking AI agent | 15 | ✅ six tools, human-gated write |
+| Analytics pipeline | 10 | ⚠️ see **A** below |
+| Frontend and deployment | 10 | ✅ — see **B** below, this one only became true on 2026-09-10 |
+| Big Data characteristics | 10 | ⚠️ see **C** below |
+| Architecture diagram | 10 | ✅ plus `_current` as-built versions |
+
+**A. The analytics pipeline's second fact table was renamed, and its shape changed.** The rubric
+credits *"agent_activity_fact and signal_lifecycle_fact"*. Built: `gold_agent_action` (3 rows)
+and **`gold_defect_signal_current`** (50 rows). The second is a **current-state snapshot, not a
+lifecycle history**. The lifecycle data is not lost — `lb_fleetguard_defect_signal_history`
+holds 50 inserts + 48 update pre/post-image pairs — it is simply not materialised as a fact
+table. Defensible, but say it plainly rather than let a grader find a table that does not match
+the name they were given.
+
+**B. "Explicit deployment via Asset Bundles" was credited at proposal time and was NOT true for
+the entire build — until 2026-09-10.** The rubric's Frontend-and-deployment line names it
+directly. The bundle migration closed a gap in something already graded, which is the strongest
+argument that the work was worth doing.
+
+**C. Velocity is the one graded line whose basis measurement has since narrowed — know this
+before anyone asks.** The rubric reads *"Velocity (<1 minute) justified for operational stream
+with concrete trigger settings"*, and the grader described the stream as *"Lakebase writes →
+Lakebase CDF → DLT facts → dashboards"*.
+
+Measured since: **the concrete trigger settings in the proposal (15 s / 5 s) are impossible** —
+`jobs create` rejects them, the platform floor is 60 s (I-081). So:
+
+- **CDF replication itself: 7.1–15.6 s — genuinely sub-minute** ✅
+- **The full chain to a gold fact: 2.5–4.5 min** (two live cycles, 155 s and 269 s) ✗
+
+The requirement still Meets on the streaming capture, which is the ingest the V is about. But
+**the end-to-end figure is minutes, and must never be quoted as sub-minute.** `README` and
+`ARCHITECTURE` already keep the two numbers apart deliberately; the frozen proposal does not,
+which is exactly what its contradictions header exists for. If a judge asks "you claimed
+sub-minute", the honest answer is: *the capture is, the derived fact is not, and here is the
+measurement of both.*
 
 ### 1. A full demo dry run against the live App — **the highest-value technical action**
 
