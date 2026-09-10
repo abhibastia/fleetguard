@@ -1,22 +1,21 @@
 """Export the operator console's data into a committed snapshot.
 
-**Why this exists.** The Render deployment cannot hold a Databricks credential. Measured
-2026-09-02 on this account: service-principal creation is admin-only, personal access tokens
-are disabled for this user ("User does not have permission to use tokens"), Lakebase roles
-are all `LAKEBASE_OAUTH_V1` with no password auth, and the account-level OAuth app needed for
-U2M requires account admin (E-14). Every route to a durable machine credential is closed
-without an administrator granting one.
+**Why this exists.** It lets the console run with no Databricks credential at all. Built for a
+public host that could hold none — measured 2026-09-02 on this account, every route to a
+durable machine credential is closed without an administrator granting one: service-principal
+creation is admin-only, personal access tokens are disabled for this user ("User does not have
+permission to use tokens"), and Lakebase roles on the project in use are OAuth-only.
 
-So the public console runs on a snapshot, exactly as the evidence page already does. The data
-is real — pulled from live Lakebase by a developer who *does* have credentials — it is simply
-point-in-time rather than live.
+That host is gone (Render, removed 2026-09-10), but the capability is worth keeping: a console
+that runs offline, or for a demo that cannot reach the workspace. The data is real — pulled
+from live Lakebase by a developer who *does* have credentials — it is simply point-in-time.
 
 **This is a fidelity trade, and the console says so.** Snapshot mode is announced in the UI
 rather than hidden, because a demo that silently shows stale data as live is the same class
 of dishonesty as an agent reporting a failed query as "no results" (I-050).
 
-When a service principal becomes available, set `FLEETGUARD_DATA_MODE=lakebase` and the same
-code paths query live. Nothing else changes.
+`FLEETGUARD_DATA_MODE=lakebase` (the default) runs the same code paths against live Lakebase.
+Nothing else changes.
 
 Usage:
     .venv/bin/python scripts/export_demo_snapshot.py --profile abhi

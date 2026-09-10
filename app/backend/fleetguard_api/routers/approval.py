@@ -18,10 +18,10 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 
 from .. import snapshot
+from ..authz import may_approve
 from ..db import PG_SCHEMA, UniqueViolation, connect, rows_to_dicts
 from ..deps import CurrentPrincipal
 from ..scoping import resolve_scope
-from . import auth_routes
 
 router = APIRouter(tags=["approval"])
 
@@ -69,16 +69,15 @@ def approve_campaign(
     #
     # 1. Signing in proves you are someone. It does not prove you may dispatch work orders
     #    against a fleet, so approval is restricted to an explicit allowlist — checked
-    #    regardless of *how* the caller authenticated. This used to be conditional on
-    #    `auth_routes.enabled()` (GitHub/app-login only), which meant a real-Databricks-token
-    #    principal (render-u2m, or eventually databricks-apps OBO) skipped the allowlist
-    #    entirely. That was fine when "has a Databricks identity in this workspace" implied
-    #    "is a trusted operator" — it stopped being fine once the workspace turned out to be
-    #    shared with the judges/cohort too (found 2026-09-03): every one of them would have
-    #    been able to launch service campaigns, not just view them. `FLEETGUARD_APPROVERS`
-    #    unset now means nobody can approve, on any surface — an explicit decision, not a
-    #    silent default.
-    if not auth_routes.may_approve(approver):
+    #    regardless of *how* the caller authenticated. This used to be conditional on whether
+    #    an app-owned login flow was configured, which meant a principal carrying a real
+    #    Databricks token skipped the allowlist entirely. That was fine when "has a Databricks
+    #    identity in this workspace" implied "is a trusted operator" — it stopped being fine
+    #    once the workspace turned out to be shared with the judges/cohort too (found
+    #    2026-09-03): every one of them would have been able to launch service campaigns, not
+    #    just view them. `FLEETGUARD_APPROVERS` unset now means nobody can approve, on any
+    #    surface — an explicit decision, not a silent default.
+    if not may_approve(approver):
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
             f"{approver} is signed in but not an approver on this deployment.",

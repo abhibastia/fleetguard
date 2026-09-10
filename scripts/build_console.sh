@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Build the React console and place it where FastAPI serves it.
 #
-# One service serves both API and console, so there is no CORS and no second Render service.
-# Render runs this at deploy time; run it locally to test the production arrangement.
+# One service serves both API and console, so there is no CORS and no second service to
+# deploy. Nothing runs this for you: the Databricks Apps runtime has no Node, so the output
+# is committed. Re-run it whenever anything under app/frontend/ changes, or the App serves
+# stale UI while every test still passes.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

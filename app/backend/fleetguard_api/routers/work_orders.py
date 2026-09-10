@@ -7,7 +7,7 @@ For an operator, "did the vehicle actually get fixed" is the whole point of the 
 loop; this router is what makes that visible.
 
 Status and assignment changes are gated the same way approving a campaign is —
-`auth_routes.may_approve`, unconditional on `principal.source` (fixed 2026-09-04,
+`authz.may_approve`, unconditional on `principal.source` (fixed 2026-09-04,
 `tests/test_approval_gate.py`) — because marking a safety-recall work order "completed" when
 it wasn't, or reassigning it to someone who never touched it, is a real compliance risk, not
 casual data entry. Reading the list is open to any signed-in identity, same asymmetry as the
@@ -31,10 +31,10 @@ from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel
 
 from .. import snapshot
+from ..authz import may_approve
 from ..db import PG_SCHEMA, connect, rows_to_dicts
 from ..deps import CurrentPrincipal
 from ..scoping import resolve_scope
-from . import auth_routes
 
 router = APIRouter(tags=["work-orders"])
 
@@ -202,7 +202,7 @@ def update_work_order(
             status.HTTP_403_FORBIDDEN,
             "updating a work order requires an identified user; this token carries no identity",
         )
-    if not auth_routes.may_approve(approver):
+    if not may_approve(approver):
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
             f"{approver} is signed in but not an approver on this deployment.",

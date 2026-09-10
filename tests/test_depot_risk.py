@@ -16,7 +16,7 @@ from fleetguard_api.auth.tokens import Principal
 from fleetguard_api.routers import depots
 from fleetguard_api.routers.depots import depot_risk
 
-USER = Principal(token="tok", user_name="ops@example.com", source="render-u2m")
+USER = Principal(token="tok", user_name="ops@example.com", source="databricks-apps")
 
 THREE_DEPOTS = [
     {

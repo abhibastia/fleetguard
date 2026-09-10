@@ -342,9 +342,27 @@ pretending to be both — and it is why E-10 below is now *upgraded* rather than
 
 ### E-12 · Hosting — Render for building, Databricks Apps for submitting — **decided 2026-09-01**
 
-**Status: BUILT, then superseded in direction 2026-09-08.** Both surfaces exist and work;
-**Databricks Apps is now the primary target** and Render is kept as a working fallback rather
-than the plan of record. The phased rollout this predicted is what happened.
+**Status: BUILT, superseded in direction 2026-09-08, and Render REMOVED 2026-09-10.**
+
+**Final outcome.** Render did the job this decision picked it for — it carried the build
+through the MVP window, exactly as predicted. Then Databricks Apps became the primary target
+(2026-09-08), which left Render as a fallback nobody was going to demo from, and on 2026-09-10
+it was removed from `main` entirely. The two supported surfaces are now **Databricks Apps** and
+a **local server** (`scripts/run_local_static_dev.sh`).
+
+The complete working Render deployment — blueprint, the `render-u2m` U2M OAuth flow, the
+`app-login` GitHub flow, and the session machinery behind both — is preserved on the
+`deploy/render` branch. It is an archive, never merged.
+
+**What this cost, honestly.** The `render-u2m` login was built, deployed, and never confirmed
+working in a browser: it stalled on an account admin granting the `all-apis` scope, and a
+custom OAuth app integration can be assigned no narrower scope that covers what this app needs
+(see E-14's update). So the second of the two Render auth paths was carried on `main` for a
+week in a state that could not be demonstrated. What did survive is the thing that mattered —
+the auth seam (E-13), which made removing two of its four providers a config-and-delete change
+rather than a rewrite of every handler.
+
+*Everything below is the decision as made on 2026-09-01, left intact as the record.*
 
 Three options were considered.
 
@@ -388,6 +406,9 @@ cold or it happens live.
 | Now → 7 Sept (MVP) | **Render** | Free, fast iteration while code changes hourly |
 | ~20 Sept | Deploy to **Databricks Apps**, keep **stopped** | Proves the deployment without burning compute |
 | 25–30 Sept demo | **Databricks App** (started for the window) | The only place OBO is genuine; Render stays as fallback link |
+
+*(The last row's fallback never applied: Render was removed 2026-09-10 — see this entry's
+status block above.)*
 
 ### E-14 · U2M / Path D is RETIRED — **decided 2026-09-02**
 
@@ -583,6 +604,9 @@ evidence.
 **Hosting for MVP is Render** (E-12). Databricks Apps deployment is ~20 Sept, kept stopped
 until the demo window. The App is *not* MVP scope, but the **auth seam that makes it cheap
 is** — see E-13.
+
+*Superseded 2026-09-10: Render is gone and the App is the primary surface. The seam was the
+part worth having, and it is what made the removal cheap. See E-12's status block.*
 
 ### Explicitly NOT in MVP
 

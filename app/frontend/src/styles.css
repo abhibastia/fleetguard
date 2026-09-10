@@ -1269,69 +1269,6 @@ thead th.sortable:hover {
   height: 16px;
 }
 
-/* ── sign-in ────────────────────────────────────────────────────────────────────────── */
-
-.signin {
-  display: flex;
-  justify-content: center;
-  padding-top: 6vh;
-}
-
-.signin-card {
-  position: relative;
-  width: 100%;
-  max-width: 430px;
-  padding: 28px;
-  overflow: hidden;
-}
-
-/* A faint accent glow anchored behind the heading — the one place in the console where an
-   ambient wash is allowed, because this page carries no data whose severity it could dilute. */
-.signin-card::before {
-  content: "";
-  position: absolute;
-  top: -60px;
-  left: -40px;
-  width: 220px;
-  height: 220px;
-  background: radial-gradient(circle, color-mix(in srgb, var(--accent) 16%, transparent), transparent 70%);
-  pointer-events: none;
-}
-
-.signin-card > * {
-  position: relative;
-}
-
-.signin-card h2 {
-  margin: 0 0 6px;
-  font-size: 22px;
-  font-weight: 650;
-  letter-spacing: -0.015em;
-}
-
-.signin-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 9px;
-  margin-top: 20px;
-  padding: 11px 16px;
-  border-radius: var(--r-sm);
-  background: var(--accent);
-  color: var(--on-accent);
-  font-weight: 620;
-  text-decoration: none;
-  box-shadow: var(--shadow-sm), 0 6px 16px -8px color-mix(in srgb, var(--accent) 65%, transparent);
-  transition:
-    background 0.12s var(--ease),
-    transform 0.12s var(--ease);
-}
-
-.signin-btn:hover {
-  background: var(--accent-hover);
-  transform: translateY(-1px);
-}
-
 /* Snapshot notice — the console says what it is serving rather than implying live data. */
 .snapshot-note {
   display: flex;
@@ -1385,25 +1322,6 @@ thead th.sortable:hover {
   background: var(--accent);
   border-color: var(--accent);
   color: var(--on-accent);
-}
-
-/* Sign-in as a header action rather than a wall — see App.tsx for why the landing page
-   changed. */
-.signin-link {
-  color: var(--accent);
-  text-decoration: none;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 5px 11px;
-  border: 1px solid var(--accent-line);
-  border-radius: var(--r-sm);
-  background: var(--accent-bg);
-  white-space: nowrap;
-  transition: background 0.12s var(--ease);
-}
-
-.signin-link:hover {
-  background: var(--surface-3);
 }
 
 

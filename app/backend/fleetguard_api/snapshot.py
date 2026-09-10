@@ -1,8 +1,10 @@
-"""Snapshot data source — the public deployment's read path.
+"""Snapshot data source — the credential-free read path.
 
-Render cannot hold a Databricks credential (see `scripts/export_demo_snapshot.py` for the
-four routes that were checked and are all closed on this account), so the public console
-serves committed data captured from live Lakebase by a developer who *does* have one.
+Lets the console run with no Databricks credential at all, serving committed data captured
+from live Lakebase by a developer who *does* have one. Built for a host that could hold no
+credential (see `scripts/export_demo_snapshot.py` for the four routes that were checked and
+are all closed on this account); kept because "show the console without a token" is useful
+on its own — offline work, and a demo that cannot reach the workspace.
 
 **Two rules govern this module.**
 

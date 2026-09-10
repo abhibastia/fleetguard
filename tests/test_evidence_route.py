@@ -1,8 +1,8 @@
 """The evidence route is unauthenticated *on purpose* — lock that in, both directions.
 
 Two failure modes this guards against, and they point opposite ways:
-  - someone puts `/evidence` behind auth, and the public page (the whole reason the Render
-    deployment exists) silently stops showing the measured result;
+  - someone puts `/evidence` behind auth, and the public page carrying the measured
+    early-warning result silently stops showing it;
   - someone widens the exemption, and `/queue` — which reads fleet exposure — becomes public.
 
 Both are one-line mistakes. Neither is obvious in review.
@@ -18,8 +18,9 @@ from fastapi.testclient import TestClient
 
 @pytest.fixture()
 def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    # render-u2m with no session is the public deployment's exact configuration.
-    monkeypatch.setitem(os.environ, "FLEETGUARD_AUTH_MODE", "render-u2m")
+    # A configured mode whose provider resolves nobody: exactly what an unauthenticated
+    # caller looks like on a real deployment, so /evidence must answer and /queue must not.
+    monkeypatch.setitem(os.environ, "FLEETGUARD_AUTH_MODE", "databricks-apps")
     from fleetguard_api import deps, main
 
     deps.get_token_provider.cache_clear()

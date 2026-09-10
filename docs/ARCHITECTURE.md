@@ -387,35 +387,60 @@ Stated so they are not mistaken for omissions.
 
 ## 8a. Hosting and the auth seam
 
-Two surfaces, one codebase, decided 2026-09-01 (E-12/E-13). **Direction changed 2026-09-08:
-the Databricks App is now the primary target and is built; Render is kept but is no longer
-the plan of record.**
+Two surfaces, one codebase, decided 2026-09-01 (E-12/E-13). **Narrowed to these two on
+2026-09-10**, when Render was removed (see below).
 
 | Surface | Auth mode | Data source | State |
 |---|---|---|---|
 | **Databricks App** `fleetguard-console` in `abhi` — *the operator console, primary* | `databricks-apps` — `x-forwarded-access-token` (OBO) | live Lakebase | **Built and verified 2026-09-08**, kept `STOPPED` between sessions (`apps start`, ~2 min). Verified under the **owner's identity only** — see **I-084**, the open risk |
-| Local dev — near-term verification surface | `static-dev` — developer's own token | live Lakebase | `scripts/run_local_static_dev.sh`; screenshotted end to end |
-| **Render** (free tier) — public evidence + signed-in console | `render-u2m` (PKCE) or `app-login` + snapshot | live Lakebase / snapshot | **Deliberately kept, not deleted.** Zero cost to keep, non-zero to re-add. `app-login` + snapshot needs no Databricks identity at all, making it the fallback if I-084 bites |
+| Local server — development and verification | `static-dev` — developer's own token | live Lakebase | `scripts/run_local_static_dev.sh`; screenshotted end to end |
 
-**Render ran on a snapshot until 2026-09-03, and no longer does.** The original constraint was
-real and enumerated, not a preference: measured 2026-09-02, every machine-credential route was
-closed on this account — `service-principals create` → *"only accessible by admins"*;
-`tokens list` → *"User does not have permission to use tokens"*; Lakebase roles all
-`LAKEBASE_OAUTH_V1` (no password auth, credentials minted from a Databricks token, one-hour
-life). The account-level OAuth app that U2M needs required an account admin, which arrived on
-2026-09-03 (E-14's blocker), so `render.yaml` now sets `FLEETGUARD_AUTH_MODE=render-u2m` and
-`FLEETGUARD_DATA_MODE=lakebase`: the host holds real per-user Databricks credentials rather
-than none at all.
+`FLEETGUARD_AUTH_MODE` accepts exactly these two values. It is required, never inferred: an
+unset or unrecognised value raises at startup rather than letting a misconfiguration pick a
+trust model.
 
-`app-login` remains the one provider whose `Principal` carries **no** Databricks token, and
-that invariant is still load-bearing wherever it is selected: `build_token_provider` **refuses
-to start** unless `FLEETGUARD_DATA_MODE=snapshot`. The two settings cannot drift apart.
+**Render was removed on 2026-09-10, and with it half the seam.** A third surface — a free-tier
+Render deployment serving the public evidence page and a signed-in console — was carried from
+2026-09-02. It ran on a committed snapshot until 2026-09-03 and on live Lakebase after, via a
+U2M OAuth (PKCE) flow this application implemented itself, because Render sits outside the
+Apps ingress and no platform injects a token there.
+
+Two things are worth recording rather than quietly dropping.
+
+*First, the constraint that produced it was real and enumerated, not a preference.* Measured
+2026-09-02, every machine-credential route was closed on this account:
+`service-principals create` → *"only accessible by admins"*; `tokens list` → *"User does not
+have permission to use tokens"*; Lakebase roles all `LAKEBASE_OAUTH_V1` (no password auth,
+credentials minted from a Databricks token, one-hour life). That is why a public host got an
+app-owned GitHub login and a data snapshot rather than a Databricks identity.
+
+*Second, the U2M replacement was never confirmed working in a browser.* It was built,
+deployed and configured correctly — the authorize URL was well-formed, with the right
+`client_id`, an exactly-matching `redirect_uri` and PKCE present — but sign-in stalled on an
+account admin granting the `all-apis` scope, and a custom OAuth app integration can be
+assigned no narrower scope covering what this app needs (`postgres` and `model-serving` are
+first-party Apps-OBO scopes, unavailable to that app type). So it sat on `main` for a week in
+a state that could not be demonstrated. Removing it closes that gap rather than leaving a
+claim the system could not back.
+
+Everything Render-specific — the blueprint, both auth flows, and the session machinery behind
+them — is preserved on the **`deploy/render`** branch, at the commit where it last ran. It is
+an archive and is never merged.
+
+**What removing it left behind is the argument for the seam.** Two of four providers went,
+along with every cookie, session store and TTL check in the codebase, and no route handler
+changed — because none of them ever read a header or a cookie. That was E-13's entire claim,
+tested by an event it was designed for.
 
 **Snapshot mode is dormant, not removed — and is kept tested for that reason.** Nothing in
-production selects it today, but it is the fallback for any surface that cannot hold a
-credential, so it stays. Verified working end to end 2026-09-07: all eleven read endpoints
-return 200 with no Databricks credential present, and `/healthz` reports `data_mode:
-snapshot` with the capture date the console labels the data from.
+production selects it today, and the surface it was built for is gone, but it remains the only
+way to run this console with no Databricks credential at all — useful offline, and for a demo
+that cannot reach the workspace. It survived Render's removal deliberately; what went with
+Render is the `app-login` provider that *required* it.
+
+Verified working end to end 2026-09-07: all eleven read endpoints return 200 with no
+Databricks credential present, and `/healthz` reports `data_mode: snapshot` with the capture
+date the console labels the data from.
 
 The committed `snapshot.json` covers only **queue, campaign detail and signals** — everything
 added later (work orders, service campaigns, cost breakdown, depot risk, recall trend, audit
@@ -427,23 +452,20 @@ exists to catch is a *new* endpoint omitting its `if snapshot.is_snapshot()` bra
 would call `connect()` with no credential and 500 the public deployment — confirmed by
 deleting one guard and watching it fail.
 
-**Authorization on Render is two-tier.** Signing in grants *read*. Approving requires
-membership of `FLEETGUARD_APPROVERS` — signing in proves who you are, not that you may
-dispatch work orders against a fleet. That gate is checked unconditionally on
-`principal.source`, so it applies to a real-Databricks-token principal exactly as it does to
-an app-only one; it used to be skipped for the former, which mattered once the workspace
-turned out to be shared with the judging cohort (fixed 2026-09-03,
-`tests/test_approval_gate.py`). Where snapshot mode *is* selected, the approval endpoint
+**Authorization is two-tier on every surface.** Reaching the console grants *read*. Approving
+requires membership of `FLEETGUARD_APPROVERS` — being authenticated proves who you are, not
+that you may dispatch work orders against a fleet. That gate (`authz.may_approve`) is checked
+unconditionally on `principal.source`, so it applies to an Apps-OBO principal exactly as it
+does to a local developer's; it used to be skipped for token-carrying principals, which
+mattered once the workspace turned out to be shared with the judging cohort (fixed
+2026-09-03, `tests/test_approval_gate.py`). Where snapshot mode *is* selected, the approval endpoint
 returns **501** rather than simulating a write: a plausible service-campaign id for a campaign
 that was never created would be a lie told by the safety-critical path.
 
-§5.1's "identity determines both rows and columns, and the frontend cannot bypass it" is a
-statement about the **Databricks App** surface, where UC and Postgres enforce it. **Since the
-2026-09-03 flip to `render-u2m` + live Lakebase, Render is materially closer to that than the
-paragraph here used to claim:** the caller's own Databricks token mints the Lakebase
-credential, so Postgres evaluates RLS under their identity, and the write path is genuinely
-live rather than disabled over immutable data. What remains app-enforced rather than
-database-enforced is `FLEETGUARD_APPROVERS` (an env-var allowlist, not a UC grant) and
+§5.1's "identity determines both rows and columns, and the frontend cannot bypass it" holds on
+both surviving surfaces, because both carry a real per-caller Databricks token: it mints the
+Lakebase credential, so Postgres evaluates RLS under the caller's own identity and the write
+path is genuinely live. What remains app-enforced rather than database-enforced is `FLEETGUARD_APPROVERS` (an env-var allowlist, not a UC grant) and
 `scoping.py`'s depot predicate — the latter backed by real RLS on `fleetguard_vehicle`, though
 with nobody currently enrolled in `fleetguard_depot_assignment` every caller is on its
 fail-open path in practice (see §10 and I-070).
@@ -473,36 +495,41 @@ Databricks *account* console; measured 2026-09-02, this account's groups are `['
 also unnecessary: U2M and OBO both end with the app holding the user's token, and Apps
 ingress performs the login for free.
 
-**U2M is revived and live, 2026-09-03, for a window where Databricks Apps is not being
-used.** The registration blocker is resolved — an account-admin registered the custom OAuth
-app integration U2M needs — closing E-14's stated reason for retiring this path. The code
-side of that "retired" decision had undersold how little was actually blocked: the auth
-seam (E-13) already had `SessionTokenProvider` built and tested for exactly this shape, so
-only the browser-facing half was missing. `auth/databricks_oauth.py` (PKCE, token exchange,
-refresh) and `routers/databricks_auth_routes.py` (`/auth/databricks/login` + `/callback`)
-now exist, and `render.yaml` on `main` runs `FLEETGUARD_AUTH_MODE=render-u2m` +
-`FLEETGUARD_DATA_MODE=lakebase`. They coexist with `app-login`'s GitHub flow rather than
-replacing it in code — `/auth/status` reports whichever one the deployment's mode selects
-(`routers/auth_routes.py::_active_provider`) — but only one is active per deployment, and
-this one now is. **Not yet confirmed:** a real browser completing the login round-trip
-against the live deploy (`docs/STATUS.md`'s "Next" list carries the checklist).
+**U2M was revived on 2026-09-03 and removed on 2026-09-10, never having been confirmed
+working.** Worth recording as a closed chapter rather than deleted, because the reason it
+failed is structural and would recur for anyone attempting the same thing.
+
+An account admin registered the custom OAuth app integration, closing E-14's stated blocker,
+and the code was built: `auth/databricks_oauth.py` (PKCE, token exchange, refresh) and
+`routers/databricks_auth_routes.py`. The server side was demonstrably correct — a well-formed
+authorize URL with the right `client_id`, an exactly-matching `redirect_uri` and PKCE present.
+Sign-in still failed, on `Scopes 'all-apis' are not assigned to the client`, and the admin
+reasonably declined to grant something that broad.
+
+**There is no narrower grant that would have worked.** A custom OAuth app integration can be
+assigned only from a fixed set of six — `all-apis`, `sql`, `offline_access`, `openid`,
+`profile`, `email`. The scopes this app actually needs (`postgres` for Lakebase,
+`model-serving` for the chat panel) are first-party Databricks Apps OBO scopes and are not
+offered to that app type at all. So the choice was `all-apis` or nothing.
+
+Removed with Render (`deploy/render`). Databricks Apps needs no custom app registration and
+no scope negotiation, which is the path this project took instead.
 
 **The judges have Databricks identities in this same shared workspace** (confirmed
-2026-09-03) — which makes `render-u2m` (and eventually `databricks-apps` OBO) the actually
-strong path for them to check the system: they sign in with their own account, and Unity
+2026-09-03) — which makes `databricks-apps` OBO the actually strong path for them to check
+the system: they sign in with their own account, and Unity
 Catalog / Postgres evaluate access under their genuine identity — §5.1's claim demonstrated,
 not simulated. Read access being open to anyone in the shared workspace is therefore the
 intended shape, not a leak.
 
 Write access is a different question, and was a real gap until this same session:
-`approval.py`'s `FLEETGUARD_APPROVERS` allowlist used to be checked only when
-`auth_routes.enabled()` (GitHub/`app-login`) was true, so any principal carrying a real
-Databricks token — `render-u2m`, and `databricks-apps` OBO once deployed — skipped it
-entirely. That was defensible when "has a Databricks identity here" implied "is a trusted
+`approval.py`'s `FLEETGUARD_APPROVERS` allowlist used to be checked only when an app-owned
+login flow was configured, so any principal carrying a real Databricks token — including
+`databricks-apps` OBO — skipped it entirely. That was defensible when "has a Databricks identity here" implied "is a trusted
 operator"; it stopped being defensible the moment the workspace turned out to include the
 judges and cohort too, since every one of them could then have launched real service
 campaigns, not just viewed them. **Fixed 2026-09-03:** the gate now applies unconditionally
-— `if not auth_routes.may_approve(approver)`, regardless of `principal.source` — so sign-in
+— `if not may_approve(approver)` (`authz.py`), regardless of `principal.source` — so sign-in
 stays open to any workspace identity while approval stays restricted to whoever
 `FLEETGUARD_APPROVERS` names. Unset means nobody can approve, on any surface, which is the
 same "no unset value silently picks a trust model" rule the auth modes already follow.
@@ -644,23 +671,20 @@ because the two don't always move together). The chart itself is hand-rolled inl
 Years with zero fleet-relevant campaigns are simply absent from the response rather than
 zero-filled, so the endpoint never asserts a count for a year it didn't actually find data for.
 
-**The "no shared identity on Render" rule stands, and has been satisfied rather than
-waived.** Its stated reason was that the URL is public and the API has a write path, so one
-shared identity would let anyone approve service campaigns. Both halves are now addressed:
-there *is* a sign-in, and the write path is disabled on that surface entirely. No Databricks
-credential exists there to share — see the table above.
+**The "no shared identity on a public host" rule was never waived, and no longer has a host
+to apply to.** Its stated reason was that a public URL plus a write path means one shared
+identity would let anyone approve service campaigns. It was satisfied on Render by a sign-in
+plus a disabled write path, and became moot on 2026-09-10 when that surface was removed. Both
+remaining surfaces carry a per-caller identity by construction; neither has a shared one to
+share.
 
-**The agent chat panel ships to Render but stays inert there.** `POST /api/chat` invokes the
-serving endpoint with the caller's *Databricks* token — which `app-login` does not issue — so
-every call returns 401 and the panel renders an explanation rather than an error. Signing in
-with GitHub proves identity to the app; it grants nothing on Databricks. That is the seam
-behaving correctly, not a defect: the panel is functional the moment it runs somewhere that
-supplies an identity, which is verified locally (`static-dev`) and is what Databricks Apps
-supplies via OBO. Giving Render a service-principal identity so the public panel "works"
-would be an **amendment to the decision above, not an exception to it** — the stated reason
-there is the write path, and the chat route has none, but it would still expose
-workspace-billed LLM inference and complaint-narrative retrieval to anyone with the URL.
-Decide it explicitly if it comes up.
+**The agent chat panel needs a real Databricks token, and now always has one.** `POST /api/chat`
+invokes the serving endpoint with the caller's own token. On the removed `app-login` surface no
+such token existed, so the panel returned 401 and rendered an explanation rather than an error
+— the seam behaving correctly, not a defect. Both surviving surfaces supply an identity
+(`static-dev` locally, OBO on Apps), so that inert state no longer occurs. `Assistant.tsx`
+keeps its own 401 handling for the different case where the caller *is* identified and the
+serving-endpoint call itself fails.
 
 **The public landing page is Evidence, not a login screen.** Google Safe Browsing flagged
 the deployment as a *"Dangerous site"* while its entire anonymous surface was a "Continue with
@@ -691,15 +715,21 @@ docstrings and four issue entries.
 
 ### Layer 1 — caller → console
 
-One seam, four providers, chosen by `FLEETGUARD_AUTH_MODE`. **Read explicitly, never inferred**
-— inference would let a misconfiguration silently select a weaker trust model.
+One seam, two providers, chosen by `FLEETGUARD_AUTH_MODE`. **Read explicitly, never inferred**
+— inference would let a misconfiguration silently select a weaker trust model, and an
+unrecognised value raises at startup rather than falling through.
 
 | mode | provider | identity arrives via | status |
 |---|---|---|---|
 | `databricks-apps` | `ForwardedHeaderTokenProvider` | `x-forwarded-access-token`, injected by the Apps ingress | verified live 2026-09-08 — **owner identity only, see I-084** |
-| `render-u2m` | `SessionTokenProvider` | U2M OAuth (PKCE); token held in a signed session cookie | built and flipped live; browser round-trip unconfirmed |
-| `app-login` | `AppLoginTokenProvider` | GitHub OAuth — **carries no Databricks credential**; startup refuses unless `FLEETGUARD_DATA_MODE=snapshot` | verified |
 | `static-dev` | `StaticTokenProvider` | `databricks auth token --profile abhi`, held statically (1 h life, I-053-adjacent) | used daily |
+
+Two more providers existed until 2026-09-10 — `SessionTokenProvider` (`render-u2m`, U2M OAuth
+in a session cookie) and `AppLoginTokenProvider` (`app-login`, GitHub OAuth carrying **no**
+Databricks credential, which is why startup refused it unless `FLEETGUARD_DATA_MODE=snapshot`).
+Both were Render-only and were removed with it (`deploy/render`), taking every cookie, session
+store and TTL check in the codebase with them. **No route handler changed** — which is the
+seam's entire claim, and the first time it was tested by an actual removal.
 
 ### Layer 2 — console → Lakebase
 
@@ -747,7 +777,7 @@ no custom app registration and sidesteps the `all-apis` blocker below.
 
 | path | why not |
 |---|---|
-| M2M `client_credentials` service principal on Render | §8a — no PAT or SP on a public host |
+| M2M `client_credentials` service principal on a public host | §8a — no PAT or SP on a public host. *Moot since 2026-09-10: no public host.* |
 | U2M with `all-apis` | account admin declined; the assignable set is only `all-apis`/`sql`/`offline_access`/`openid`/`profile`/`email`, so no narrower combination covers Lakebase **and** Model Serving |
 | Lakebase static URL from a secret | works; costs per-user identity (above) |
 | `DatabricksLakebase` MLflow resource | addresses a database *instance*; this project's Lakebase is the autoscaling project/endpoint flavour |

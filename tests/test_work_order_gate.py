@@ -23,7 +23,7 @@ def _snapshot_mode(monkeypatch):
     monkeypatch.setattr(work_orders.snapshot, "is_snapshot", lambda: True)
 
 
-@pytest.mark.parametrize("source", ["app-login", "render-u2m", "databricks-apps", "static-dev"])
+@pytest.mark.parametrize("source", ["databricks-apps", "static-dev"])
 def test_non_approver_is_refused_regardless_of_auth_source(monkeypatch, source):
     monkeypatch.setenv("FLEETGUARD_APPROVERS", "someone-else@example.com")
     principal = Principal(token="tok", user_name="not-an-approver@example.com", source=source)
@@ -34,7 +34,7 @@ def test_non_approver_is_refused_regardless_of_auth_source(monkeypatch, source):
     assert "not an approver" in exc.value.detail
 
 
-@pytest.mark.parametrize("source", ["app-login", "render-u2m", "databricks-apps"])
+@pytest.mark.parametrize("source", ["databricks-apps", "static-dev"])
 def test_approver_passes_the_gate_regardless_of_auth_source(monkeypatch, source):
     """Passing the gate means reaching the next check (snapshot -> 501), not a 403."""
     monkeypatch.setenv("FLEETGUARD_APPROVERS", "ops@example.com")
@@ -49,7 +49,7 @@ def test_unset_approvers_blocks_everyone_on_every_source(monkeypatch):
     """No FLEETGUARD_APPROVERS configured means nobody can update a work order, on any
     surface — an explicit decision the operator must make, never a silent default."""
     monkeypatch.delenv("FLEETGUARD_APPROVERS", raising=False)
-    principal = Principal(token="tok", user_name="anyone@example.com", source="render-u2m")
+    principal = Principal(token="tok", user_name="anyone@example.com", source="databricks-apps")
 
     with pytest.raises(HTTPException) as exc:
         update_work_order(principal, "WO-1", BODY)
@@ -57,7 +57,7 @@ def test_unset_approvers_blocks_everyone_on_every_source(monkeypatch):
 
 
 def test_unidentified_principal_is_refused_before_the_approver_check():
-    principal = Principal(token="", user_name=None, source="app-login")
+    principal = Principal(token="", user_name=None, source="databricks-apps")
     with pytest.raises(HTTPException) as exc:
         update_work_order(principal, "WO-1", BODY)
     assert exc.value.status_code == 403
@@ -68,7 +68,7 @@ def test_empty_body_is_refused_even_for_an_approver(monkeypatch):
     """Neither field set at all - not even an explicit null - is a request that changes
     nothing and must not silently succeed as a no-op."""
     monkeypatch.setenv("FLEETGUARD_APPROVERS", "ops@example.com")
-    principal = Principal(token="tok", user_name="ops@example.com", source="app-login")
+    principal = Principal(token="tok", user_name="ops@example.com", source="databricks-apps")
 
     with pytest.raises(HTTPException) as exc:
         update_work_order(principal, "WO-1", WorkOrderUpdate())
@@ -80,7 +80,7 @@ def test_explicit_unassign_counts_as_a_provided_field(monkeypatch):
     """assigned_to=None is a deliberate unassign, not 'nothing was provided' - it must pass
     the presence check and reach the next stage (snapshot -> 501), same as a status-only body."""
     monkeypatch.setenv("FLEETGUARD_APPROVERS", "ops@example.com")
-    principal = Principal(token="tok", user_name="ops@example.com", source="app-login")
+    principal = Principal(token="tok", user_name="ops@example.com", source="databricks-apps")
 
     with pytest.raises(HTTPException) as exc:
         update_work_order(principal, "WO-1", WorkOrderUpdate(assigned_to=None))
@@ -91,7 +91,7 @@ def test_cost_only_update_counts_as_a_provided_field(monkeypatch):
     """actual_cost is a third independent field, same presence rule as status/assigned_to -
     setting only it must pass the presence check and reach the next stage (snapshot -> 501)."""
     monkeypatch.setenv("FLEETGUARD_APPROVERS", "ops@example.com")
-    principal = Principal(token="tok", user_name="ops@example.com", source="app-login")
+    principal = Principal(token="tok", user_name="ops@example.com", source="databricks-apps")
 
     with pytest.raises(HTTPException) as exc:
         update_work_order(principal, "WO-1", WorkOrderUpdate(actual_cost=1875.50))
@@ -103,7 +103,7 @@ def test_negative_actual_cost_is_rejected(monkeypatch):
     rather than letting the live fg_wo_actual_cost_nonnegative CHECK constraint surface a raw
     psycopg error to the caller."""
     monkeypatch.setenv("FLEETGUARD_APPROVERS", "ops@example.com")
-    principal = Principal(token="tok", user_name="ops@example.com", source="app-login")
+    principal = Principal(token="tok", user_name="ops@example.com", source="databricks-apps")
 
     with pytest.raises(HTTPException) as exc:
         update_work_order(principal, "WO-1", WorkOrderUpdate(actual_cost=-1))

@@ -206,8 +206,8 @@ post-routing invariants — if one fires, the split logic is broken, not the sou
   `DATABRICKS_CLIENT_ID`/`DATABRICKS_CLIENT_SECRET` for the app's own service principal, so
   `WorkspaceClient(host=..., token=<user token>)` raises
   *"validate: more than one authorization method configured: oauth and pat"*. Pass
-  **`auth_type="pat"`** to pin the caller's token. This fails **only** inside Apps — locally
-  and on Render those env vars are absent — so it cannot be caught before deploying.
+  **`auth_type="pat"`** to pin the caller's token. This fails **only** inside Apps — running
+  locally, those env vars are absent — so it cannot be caught before deploying.
 - Resource-bound credentials (SQL Warehouse, Model Serving, Lakebase, UC Volume) are
   rotated automatically by the platform — no refresh code needed in the App.
 - An app created with `--no-compute` reports `Error: failed to reach ACTIVE, got STOPPED`.
@@ -234,11 +234,16 @@ post-routing invariants — if one fires, the split logic is broken, not the sou
   flush is ~15 s; destination tables auto-suffix on collision (`lb_users_history_1`).
   Databricks publishes **no** latency SLA for this path — don't attribute one.
 
-**Databricks U2M OAuth (user login, for the Render-phase console — confirmed 2026-08-31):**
+**Databricks U2M OAuth (custom app integration — confirmed 2026-08-31):**
+> **The console this was built for no longer exists.** It served the Render-hosted surface
+> (§8.7), which sat outside the Databricks Apps ingress and so had to obtain a user token
+> itself. Render was removed 2026-09-10; the implementation is on the **`deploy/render`**
+> branch. **The facts below stay** — they were each verified live, they apply to any custom
+> OAuth app integration, and the scope finding in particular is why this path was abandoned.
+> Nothing on `main` uses U2M today: Databricks Apps supplies the token via OBO.
 - This is a *different* flow from Apps OBO above and from the M2M `client_credentials`
-  path (§8.2/§5.2 of the proposal). Needed only because the Render-hosted console
-  (§8.7) sits outside the Databricks Apps ingress and has to obtain a real user token
-  itself.
+  path (§8.2/§5.2 of the proposal). It is what a console hosted outside the Apps ingress
+  needs in order to obtain a real user token itself.
 - Requires registering a **custom OAuth app integration** first — done in the
   **account console** ("App connections" → Add connection) or via
   `databricks account custom-app-integration create`. This is account-level, not
@@ -255,7 +260,15 @@ post-routing invariants — if one fires, the split logic is broken, not the sou
   scope vocabulary (`dashboards.genie`, `files.files`, `iam.access-control:read`,
   `iam.current-user:read` above) is a **different, more fine-grained set that is NOT
   confirmed to work on this endpoint** — don't assume it carries over. Use
-  `all-apis offline_access` as the working default for the Render phase.
+  `all-apis offline_access` as the working default.
+- **That six-value set is the *entire* assignable list, and it is why this path was abandoned
+  (measured 2026-09-04).** The scopes this app needs — `postgres` for Lakebase,
+  `model-serving` for the chat panel — are first-party **Databricks Apps OBO** scopes and are
+  not offered to a custom app integration at all. So `all-apis` is the only functional choice,
+  a `sql`-only grant permanently loses both the write path and chat, and there is no narrower
+  ask to make of an admin who declines `all-apis`. Attempting sign-in without it returns
+  `access_denied: Scopes 'all-apis' are not assigned to the client ...`. **If a future surface
+  needs user login, prefer Databricks Apps** — no registration, no scope negotiation.
 - Access token lifetime: **1 hour**. `offline_access` in scope returns a
   `refresh_token`. The exact refresh-grant request shape is standard OAuth2 but was
   **not found explicitly documented** for this endpoint — treat as needing empirical

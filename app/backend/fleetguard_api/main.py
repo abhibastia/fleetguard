@@ -26,7 +26,6 @@ from .routers import (
     audit_log,
     auth_routes,
     chat,
-    databricks_auth_routes,
     depots,
     evidence,
     queue,
@@ -68,8 +67,8 @@ def healthz() -> Health:
     """Unauthenticated liveness check.
 
     Reports the configured auth mode — never the token — so a misconfigured deployment is
-    diagnosable without a valid session. Render's free tier spins down on inactivity, so this
-    is also the endpoint to warm before a demo.
+    diagnosable without a valid identity. A stopped Databricks App takes a moment to come
+    back, so this is also the endpoint to warm before a demo.
     """
     # `data_mode` is reported for the same reason `auth_mode` is: a deployment serving a
     # snapshot must be diagnosable as such from outside, without reading its environment.
@@ -107,7 +106,6 @@ api.include_router(audit_log.router)
 api.include_router(depots.router)
 api.include_router(trends.router)
 api.include_router(auth_routes.router)
-api.include_router(databricks_auth_routes.router)
 app.include_router(api)
 
 

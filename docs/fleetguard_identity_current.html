@@ -80,7 +80,7 @@
 <div class="page">
 
   <h1>FleetGuard</h1><span class="sub">Identity &amp; authorisation architecture</span><span class="live">AS-BUILT · 2026-09-08</span>
-  <p class="strap">One swappable auth seam, four token providers, one auto-provisioned service-principal identity that cannot reach the database. Tracks <span class="m">ARCHITECTURE.md</span> §8a/§8b — supersedes <span class="m">fleetguard_identity.html</span>, the frozen 2026-08-31 proposal diagram (which had this backwards: Render as Phase 1 primary, Databricks Apps as Phase 2).</p>
+  <p class="strap">One swappable auth seam, two token providers, one auto-provisioned service-principal identity that cannot reach the database. Tracks <span class="m">ARCHITECTURE.md</span> §8a/§8b — supersedes <span class="m">fleetguard_identity.html</span>, the frozen 2026-08-31 proposal diagram (which had this backwards: a Render-hosted console as Phase 1 primary, Databricks Apps as Phase 2). Render and its two providers were removed 2026-09-10 — see the <span class="m">deploy/render</span> branch.</p>
   <div class="rule"></div>
 
   <!-- PATH A — Databricks App, now primary -->
@@ -131,33 +131,9 @@
     </div>
   </div>
 
-  <!-- PATH C — Render, kept as fallback -->
-  <div class="band pb">
-    <div class="bh"><div class="bt">Path C<span class="nm">Render · console — kept, no longer plan of record</span></div>
-      <div class="bs">Two sub-modes on one deployment, selected by <span class="m">FLEETGUARD_AUTH_MODE</span>. Zero cost to keep both; non-zero cost to rebuild either later.</div></div>
-    <div class="steps">
-      <div class="st"><div class="sh"><span class="sn">1a</span><span class="m">render-u2m</span></div>
-        <p class="k">real U2M OAuth, PKCE, live Lakebase</p>
-        <p>60-min token + <span class="m">offline_access</span> refresh</p>
-        <p>browser round-trip <b>unconfirmed</b></p></div>
-      <div class="st"><div class="sh"><span class="sn">1b</span><span class="m">app-login</span></div>
-        <p class="k">GitHub OAuth — carries <b>no</b> Databricks credential</p>
-        <p>proves who signed in, not a workspace identity</p></div>
-      <div class="st"><div class="sh"><span class="sn">2</span>Data mode gate</div>
-        <p><span class="m">app-login</span> ⇒ startup <b>refuses</b> unless <span class="m">FLEETGUARD_DATA_MODE=snapshot</span></p>
-        <p class="k">the two settings cannot drift apart</p></div>
-      <div class="st"><div class="sh"><span class="sn">3</span>Public evidence route</div>
-        <p class="m k">GET /api/evidence</p><p>reads a <b>committed JSON snapshot</b></p>
-        <p>no live credential on a public host — by design, not laziness</p></div>
-      <div class="st"><div class="sh"><span class="sn">4</span>Approval gate, either sub-mode</div>
-        <p><span class="m">FLEETGUARD_APPROVERS</span> — unconditional on <span class="m">principal.source</span></p>
-        <p class="k">snapshot mode: write routes return 501, never a simulated success</p></div>
-    </div>
-  </div>
-
-  <!-- PATH D — agent execution -->
+  <!-- PATH C — agent execution -->
   <div class="band pc">
-    <div class="bh"><div class="bt">Path D<span class="nm">Agent execution · the one service-principal identity in the system</span></div>
+    <div class="bh"><div class="bt">Path C<span class="nm">Agent execution · the one service-principal identity in the system</span></div>
       <div class="bs">Deliberately the most constrained identity. All three routes to giving it a Lakebase path were checked and closed — engine and data are separate grants.</div></div>
     <div class="steps">
       <div class="st"><div class="sh"><span class="sn">1</span>Console → serving</div>
@@ -184,13 +160,12 @@
       <table>
         <tr><td class="l">Databricks App OBO header</td><td class="r">per request · platform-rotated, never persisted</td></tr>
         <tr><td class="l">static-dev token</td><td class="r">1 hour · restart script to re-mint, not a refresh path</td></tr>
-        <tr><td class="l">Render U2M access token</td><td class="r">60 minutes · <span class="m">offline_access</span> refresh (round-trip unconfirmed)</td></tr>
         <tr><td class="l">Lakebase database credential</td><td class="r">re-minted per connection, cached per principal with a staleness check</td></tr>
         <tr><td class="l">Agent endpoint SP</td><td class="r">platform-managed · scoped by <span class="m">resources=[...]</span> at model-log time</td></tr>
       </table></div>
     <div class="bx r"><div class="bxh">Least privilege · what actually exists, not what was proposed</div>
       <table>
-        <tr><td class="l m">signed-in human</td><td class="r">every console read/write, Path A/B/C alike — RLS + <span class="m">FLEETGUARD_APPROVERS</span> apply identically</td></tr>
+        <tr><td class="l m">signed-in human</td><td class="r">every console read/write, Path A and B alike — RLS + <span class="m">FLEETGUARD_APPROVERS</span> apply identically</td></tr>
         <tr><td class="l m">app service principal (Databricks Apps default)</td><td class="r"><span class="m">DATABRICKS_CLIENT_ID/SECRET</span> — never used for Lakebase; <span class="m">auth_type="pat"</span> pins the caller's token instead (I-082)</td></tr>
         <tr><td class="l m">agent endpoint's auto-provisioned SP</td><td class="r">read-only over declared resources · <b>zero</b> Lakebase grant, by design not oversight</td></tr>
         <tr><td class="l m">no <span class="m">fleetguard_agent_sp</span> / <span class="m">_public_sp</span> / <span class="m">_pipeline_sp</span></td><td class="r">the proposal named these; none were built — the seam made them unnecessary</td></tr>

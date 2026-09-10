@@ -16,7 +16,7 @@ from fleetguard_api.auth.tokens import Principal
 from fleetguard_api.routers import queue
 from fleetguard_api.routers.queue import get_campaign, get_queue
 
-USER = Principal(token="tok", user_name="ops@example.com", source="render-u2m")
+USER = Principal(token="tok", user_name="ops@example.com", source="databricks-apps")
 
 CAMPAIGN_HEAD = [
     {

@@ -15,8 +15,8 @@
 # `PermissionDenied: ... Invalid Token` in its log — which looks exactly like a code
 # regression if you have been editing all afternoon (it was mistaken for one on 2026-09-07).
 # `static-dev` holds a *static* token by design, so the fix is to restart this script, not to
-# add refresh logic to StaticTokenProvider. If a long session keeps tripping over it, that is
-# the argument for using `render-u2m` locally instead, which does refresh in place.
+# add refresh logic to StaticTokenProvider. There is no refreshing alternative for local use:
+# the one mode that refreshed in place went with Render (see `deploy/render`).
 #
 # Usage: scripts/run_local_static_dev.sh [port]
 set -euo pipefail

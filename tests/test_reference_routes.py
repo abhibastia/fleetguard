@@ -19,7 +19,7 @@ from fleetguard_api.routers.signals import get_signals
 from fleetguard_api.routers.technicians import list_technicians
 from fleetguard_api.routers.trends import recall_trend
 
-USER = Principal(token="tok", user_name="ops@example.com", source="render-u2m")
+USER = Principal(token="tok", user_name="ops@example.com", source="databricks-apps")
 
 TECH_Q = "fleetguard_technician"
 SIGNAL_ROWS_Q = "signal_id, series_key"

@@ -21,7 +21,7 @@ from fleetguard_api import agent_actions
 from fleetguard_api.agent_actions import ACTION_SENTINEL, execute, parse_envelope
 from fleetguard_api.auth.tokens import Principal
 
-USER = Principal(token="tok", user_name="ops@example.com", source="render-u2m")
+USER = Principal(token="tok", user_name="ops@example.com", source="databricks-apps")
 ANON = Principal(token="tok", user_name=None, source="static-dev")
 
 VALID = {

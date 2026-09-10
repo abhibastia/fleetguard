@@ -92,7 +92,7 @@
 <div class="page">
 
   <h1>FleetGuard</h1><span class="sub">Vehicle defect early warning &amp; recall response — end-to-end architecture</span><span class="live">AS-BUILT · 2026-09-08</span>
-  <p class="strap">Real NHTSA defect data · Lakeflow → AI Search → MLflow → Mosaic AI Agent Framework → Lakebase → CDF → gold facts · Databricks App (primary) · Render (kept, fallback). Tracks <span class="m">ARCHITECTURE.md</span> — supersedes <span class="m">fleetguard_e2e.html</span>, the frozen 2026-08-31 proposal diagram.</p>
+  <p class="strap">Real NHTSA defect data · Lakeflow → AI Search → MLflow → Mosaic AI Agent Framework → Lakebase → CDF → gold facts · Databricks App (primary) · local server (development). Tracks <span class="m">ARCHITECTURE.md</span> — supersedes <span class="m">fleetguard_e2e.html</span>, the frozen 2026-08-31 proposal diagram.</p>
   <div class="rule"></div>
 
   <div class="cols">
@@ -267,10 +267,10 @@
         <p>kept <span class="m">STOPPED</span> between sessions — start ~2 min before use</p>
       </div>
 
-      <div class="card"><span class="badge">Kept, fallback</span><div class="ch">Render · console</div>
+      <div class="card"><span class="badge">Dev surface</span><div class="ch">Local server</div>
         <p class="k">same code, <span class="m">AuthProvider</span> swapped</p>
-        <p><span class="m">render-u2m</span> — browser round-trip unconfirmed</p>
-        <p><span class="m">app-login</span> + snapshot — needs no Databricks identity at all</p>
+        <p><span class="m">static-dev</span> — developer's own token, live Lakebase</p>
+        <p><span class="m">scripts/run_local_static_dev.sh</span> · 1-hour token, restart to re-mint</p>
       </div>
     </div>
   </div>
@@ -281,8 +281,8 @@
       <div><h4>Unity Catalog</h4><p><span class="m">bootcamp_students.fleetguard</span>, one schema — catalog creation unavailable here</p></div>
       <div><h4>Postgres RLS</h4><p><span class="m">fleetguard_vehicle</span> ENABLE+FORCE, proved toggled — fail-open, nobody enrolled yet</p></div>
       <div><h4>Golden set + MLflow Eval</h4><p>765 labelled pairs, precision/recall published on Evidence</p></div>
-      <div><h4>Testing</h4><p>276 unit tests + 21 live-workspace integration tests, every router covered</p></div>
-      <div><h4>Auth seam</h4><p>4 token providers, one swappable seam — no handler reads a header directly</p></div>
+      <div><h4>Testing</h4><p>289 unit tests + 24 live-workspace integration tests, every router covered</p></div>
+      <div><h4>Auth seam</h4><p>2 token providers, one swappable seam — removing the other two changed <b>no</b> handler</p></div>
       <div><h4>Audit</h4><p><span class="m">fleetguard_audit_log</span>, before/after state, CSV export, append-only</p></div>
     </div>
   </div>

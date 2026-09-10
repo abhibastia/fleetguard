@@ -1,4 +1,5 @@
-# Databricks Apps configuration — the second deployment surface for the same FastAPI service.
+# Databricks Apps configuration — one of the two deployment surfaces for this FastAPI service
+# (the other is a local server; see scripts/run_local_static_dev.sh).
 #
 # This file is the whole App-side cost of E-12/E-13. The auth seam already carries a
 # `databricks-apps` mode (`ForwardedHeaderTokenProvider`, reading `x-forwarded-access-token`),
@@ -10,11 +11,11 @@
 # `postgres.generate_database_credential`), and `chat.py` calls the serving endpoint with the
 # caller's token too. So the app's service principal needs no `database` or `serving-endpoint`
 # resource: every read and write runs as the signed-in human, and Postgres RLS applies to them
-# exactly as it does in the local and Render surfaces. That is why `user_authorization` below
-# is load-bearing and the `resources:` block is absent.
+# exactly as it does when running locally. That is why `user_authorization` below is
+# load-bearing and the `resources:` block is absent.
 #
 # Deployed as the `app/backend/` directory, so `fleetguard_api` is importable at the root and
-# no `--app-dir` is needed (unlike render.yaml, which runs from the repo root).
+# no `--app-dir` is needed.
 
 command:
   - "uvicorn"
@@ -28,18 +29,19 @@ env:
   # Required and never inferred — an unset value must not silently pick a trust model.
   # `databricks-apps` selects ForwardedHeaderTokenProvider, which is only safe behind the
   # Apps ingress that injects the header. That is exactly why the mode is explicit rather
-  # than sniffed from the environment.
+  # than sniffed from the environment. The only other accepted value is `static-dev`, for a
+  # local server.
   - name: FLEETGUARD_AUTH_MODE
     value: databricks-apps
-  # Live Lakebase, not the committed snapshot. Safe here because, unlike `app-login`, this
-  # mode really does carry a Databricks credential per request.
+  # Live Lakebase, not the committed snapshot: this mode carries a real Databricks credential
+  # per request, so there is a caller identity to run every query under.
   - name: FLEETGUARD_DATA_MODE
     value: lakebase
   - name: FLEETGUARD_PG_PROJECT
     value: projects/summer-bootcamp-2026-v2
   # db.py requires this to mint a Lakebase credential and raises without it. Apps injects a
-  # host of its own, but this is set explicitly so the value is the same one render.yaml and
-  # the local dev script use, rather than whatever the runtime happens to supply.
+  # host of its own, but this is set explicitly so the value is the same one the local dev
+  # script uses, rather than whatever the runtime happens to supply.
   - name: DATABRICKS_HOST
     value: https://dbc-7b106152-caf3.cloud.databricks.com
   # Who may APPROVE. Read access is open to any identity that can reach the app; dispatching

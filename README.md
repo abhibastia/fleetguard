@@ -58,11 +58,14 @@ The failure that would matter — authenticating successfully and then having ev
 for want of a Lakebase role — **cannot happen to the reviewers**, who were checked and all hold
 one. It is unproven rather than known-broken (`docs/STATUS.md`, I-084).
 
-**Fallback — Render:** https://fleetguard-console-abhi.onrender.com — kept live, not the
-plan of record. Runs against live Lakebase via `render-u2m` (Databricks OAuth; the browser
-login round-trip is itself unconfirmed) or against a committed snapshot via GitHub sign-in.
-The **Evidence** tab needs no sign-in on either surface — it's the published backtest result
-above, sourced live from the same measurement.
+**The other way to run it** is locally, against the same live Lakebase — see *Run it locally*
+below. Those are the two supported surfaces. A third, a public Render deployment with its own
+OAuth login, was removed on 2026-09-10 and is preserved on the `deploy/render` branch; the
+`render-u2m` browser login it carried was never confirmed working, having stalled on an
+account-admin scope grant.
+
+The **Evidence** tab needs no identity on either surface — it's the published backtest result
+above, sourced from the same measurement.
 
 ## What it's built on
 
@@ -85,8 +88,8 @@ above, sourced live from the same measurement.
   the application, not just in it — proved live, with two honest limits: no principal is
   enrolled by default, so it is fail-open until someone is, and a reviewer holding
   `bypassrls` will not see it apply to their own session (`docs/DEMO.md` §5).
-- **A FastAPI + React console**, one service for API and UI, running unchanged across
-  Render and Databricks Apps behind a single auth seam (`app/backend/fleetguard_api/auth/`).
+- **A FastAPI + React console**, one service for API and UI, running unchanged on Databricks
+  Apps and on a local server behind a single auth seam (`app/backend/fleetguard_api/auth/`).
 
 ## Run it locally
 

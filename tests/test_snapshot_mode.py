@@ -1,10 +1,10 @@
 """Snapshot mode must serve every read endpoint without a Databricks credential.
 
-**Why this exists even though production no longer uses it.** `render.yaml` runs
-`FLEETGUARD_DATA_MODE=lakebase`, so snapshot mode is dormant — but it is dormant, not
-removed: it is the fallback for any surface that cannot hold a credential, and it still works
-(verified 2026-09-07, all endpoints 200). Dormant-but-functional code with no test is how you
-discover on a redeploy that it stopped working three weeks ago.
+**Why this exists even though nothing selects it.** Both deployment surfaces run
+`FLEETGUARD_DATA_MODE=lakebase`, so snapshot mode is dormant — but it is dormant, not removed:
+it is the only way to run this console with no Databricks credential at all, and it still
+works (verified 2026-09-07, all endpoints 200). Dormant-but-functional code with no test is
+how you discover on a redeploy that it stopped working three weeks ago.
 
 The failure this actually guards against is adding a new endpoint and forgetting its
 `if snapshot.is_snapshot()` branch. Without the guard the handler calls `connect()`, which on

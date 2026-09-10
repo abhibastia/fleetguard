@@ -45,7 +45,10 @@ export function Home({ onNavigate }: { onNavigate: (view: string) => void }) {
   const exposed = queue?.reduce((n, q) => n + q.vehicles_exposed, 0) ?? null;
   const overdue = depots?.reduce((n, d) => n + d.overdue_work_orders, 0) ?? null;
   const outstanding = depots?.reduce((n, d) => n + d.outstanding_work_orders, 0) ?? null;
-  const signedOut = queue === null && depots === null && signals === null;
+  // Every fleet read failed. Both surfaces attach identity outside this app, so this is
+  // not "you are signed out" — it is a token the backend could not use, or a backend that
+  // is not answering. Say that, rather than offering a sign-in that does not exist here.
+  const fleetUnavailable = queue === null && depots === null && signals === null;
 
   return (
     <div className="home">
@@ -90,11 +93,12 @@ export function Home({ onNavigate }: { onNavigate: (view: string) => void }) {
         </section>
       )}
 
-      {signedOut ? (
+      {fleetUnavailable ? (
         <section className="panel">
           <h3 style={{ marginTop: 0 }}>Live fleet state</h3>
           <p className="muted" style={{ marginBottom: 0 }}>
-            Sign in to see the operating picture. The measured result above needs no session.
+            Live fleet data is not available right now. The measured result above is served
+            from the application itself and needs no fleet connection.
           </p>
         </section>
       ) : (

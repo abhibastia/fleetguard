@@ -1,11 +1,14 @@
-"""The approver allowlist must gate every auth source, not just GitHub/app-login.
+"""The approver allowlist must gate every auth source, without exception.
 
-Found 2026-09-03: the gate used to be `if auth_routes.enabled() and not may_approve(...)`,
-which skipped the FLEETGUARD_APPROVERS check entirely for any principal carrying a real
-Databricks token (render-u2m, and eventually databricks-apps OBO) — fine when "has a
-Databricks identity in this shared workspace" implied "is a trusted operator", wrong once
-the workspace turned out to include the judges/cohort too. These tests exercise the gate
-directly (no Lakebase, no FastAPI request cycle) so the fix can't silently regress per source.
+Found 2026-09-03: the gate used to be conditional on an app-owned login flow being
+configured, which skipped the FLEETGUARD_APPROVERS check entirely for any principal carrying
+a real Databricks token — fine when "has a Databricks identity in this shared workspace"
+implied "is a trusted operator", wrong once the workspace turned out to include the
+judges/cohort too. These tests exercise the gate directly (no Lakebase, no FastAPI request
+cycle) so the fix can't silently regress per source.
+
+Parametrized over every source the seam can still produce. Two more (`app-login`,
+`render-u2m`) went with Render on 2026-09-10; the invariant is unchanged, the list is shorter.
 """
 
 from __future__ import annotations
@@ -26,7 +29,7 @@ def _snapshot_mode(monkeypatch):
     monkeypatch.setattr(approval.snapshot, "is_snapshot", lambda: True)
 
 
-@pytest.mark.parametrize("source", ["app-login", "render-u2m", "databricks-apps", "static-dev"])
+@pytest.mark.parametrize("source", ["databricks-apps", "static-dev"])
 def test_non_approver_is_refused_regardless_of_auth_source(monkeypatch, source):
     monkeypatch.setenv("FLEETGUARD_APPROVERS", "someone-else@example.com")
     principal = Principal(token="tok", user_name="not-an-approver@example.com", source=source)
@@ -37,7 +40,7 @@ def test_non_approver_is_refused_regardless_of_auth_source(monkeypatch, source):
     assert "not an approver" in exc.value.detail
 
 
-@pytest.mark.parametrize("source", ["app-login", "render-u2m", "databricks-apps"])
+@pytest.mark.parametrize("source", ["databricks-apps", "static-dev"])
 def test_approver_passes_the_gate_regardless_of_auth_source(monkeypatch, source):
     """Passing the gate means reaching the next check (snapshot -> 501), not a 403."""
     monkeypatch.setenv("FLEETGUARD_APPROVERS", "ops@example.com")
@@ -52,7 +55,7 @@ def test_unset_approvers_blocks_everyone_on_every_source(monkeypatch):
     """No FLEETGUARD_APPROVERS configured means nobody can approve, on any surface — an
     explicit decision the operator must make, never a silent default."""
     monkeypatch.delenv("FLEETGUARD_APPROVERS", raising=False)
-    principal = Principal(token="tok", user_name="anyone@example.com", source="render-u2m")
+    principal = Principal(token="tok", user_name="anyone@example.com", source="databricks-apps")
 
     with pytest.raises(HTTPException) as exc:
         approve_campaign(principal, "CAMP1", BODY)
@@ -60,7 +63,7 @@ def test_unset_approvers_blocks_everyone_on_every_source(monkeypatch):
 
 
 def test_unidentified_principal_is_refused_before_the_approver_check():
-    principal = Principal(token="", user_name=None, source="app-login")
+    principal = Principal(token="", user_name=None, source="databricks-apps")
     with pytest.raises(HTTPException) as exc:
         approve_campaign(principal, "CAMP1", BODY)
     assert exc.value.status_code == 403
