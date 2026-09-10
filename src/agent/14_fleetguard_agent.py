@@ -735,15 +735,29 @@ for x in sig["signals"]:
         f"    {x['make']} {x['model']} | {x['component']} | z={x['peak_z']} | fleet={x['fleet_vehicles']}"
     )
 
-# Pinned to the values measured 2026-09-02 against gold_emerging_signal. Asserting the
-# NUMBERS, not merely that the call returned — the whole point of I-050. If the signals
-# table is rebuilt these will move, and that should force a deliberate edit here.
+# Pinned to the values measured against gold_emerging_signal. Asserting the NUMBERS, not
+# merely that the call returned — the whole point of I-050. If the signals table is rebuilt
+# these will move, and that should force a deliberate edit here.
+#
+# REPINNED 2026-09-11 after the signals rebuild, and the mechanism worked exactly as intended:
+# these assertions are what caught the change. B1/I-079's tiered fleet match reached `main` on
+# 2026-09-09 but the stored table still held the old exact-only zeros until now, so
+# `fleet_vehicles` moved for two signals and the ordering (`ORDER BY fleet_vehicles DESC`)
+# moved with it:
+#   affecting_this_fleet   2 -> 4   (RAM PROMASTER and CHEVROLET SILVERADO 1500 were 0)
+#   signals[0]          1,256 -> 2,418   (RAM 2500 EXACT -> RAM PROMASTER MODEL_VARIANT)
+#   detected_total         48 -> 48      (unchanged — no new complaint data landed; see I-099)
+#
+# The new leader is a MODEL_VARIANT match, deliberately: 2,418 includes 315 PROMASTER CITY
+# vans, which is why `match_basis` travels with the count instead of being blended away.
 assert sig["detected_total"] == 48, f"expected 48 signals, got {sig['detected_total']}"
-assert sig["affecting_this_fleet"] == 2, (
-    f"expected 2 fleet-relevant, got {sig['affecting_this_fleet']}"
+assert sig["affecting_this_fleet"] == 4, (
+    f"expected 4 fleet-relevant, got {sig['affecting_this_fleet']}"
 )
 assert sig["signals"], "fleet_only returned nothing — the proactive demo would be empty"
-assert sig["signals"][0]["fleet_vehicles"] == 1256, "expected RAM 2500 (1,256 vehicles) first"
+assert sig["signals"][0]["fleet_vehicles"] == 2418, (
+    "expected RAM PROMASTER (2,418 vehicles, MODEL_VARIANT) first"
+)
 
 prop = fga.propose_service_campaign("17V629000", "Park It steering defect")
 print(f"\npropose_service_campaign -> {prop['status']}  exact={prop['exact_vehicles']}")
