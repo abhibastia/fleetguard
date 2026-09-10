@@ -281,12 +281,32 @@ SELECT make, model, comp_top,
 FROM signal_narrative_sample
 """)
 
-spark.sql("""
-ALTER TABLE gold_emerging_signal ADD COLUMNS IF NOT EXISTS (
-  failure_mode STRING COMMENT 'ai_extract, per signal not per complaint — descriptive only, never a detection input',
-  severity_language STRING COMMENT 'ai_extract, per signal not per complaint — descriptive only, never a detection input'
-)
-""")
+# SPARK SQL HAS NO `IF NOT EXISTS` ON `ADD COLUMN(S)` — the guard is in Python (I-099).
+#
+# This read `ALTER TABLE ... ADD COLUMNS IF NOT EXISTS (...)`, which is a **parse error**, not
+# a no-op: `[PARSE_SYNTAX_ERROR] Syntax error at or near 'EXISTS'`. Measured live 2026-09-11 on
+# a scratch table — `ADD COLUMNS IF NOT EXISTS (b STRING)` and `ADD COLUMN IF NOT EXISTS b
+# STRING` both fail; only plain `ADD COLUMNS (...)` parses.
+#
+# It is a Postgres idiom carried into Spark SQL. Postgres *does* support it, and
+# `src/lakebase/14_load_signals.py` uses `ADD COLUMN IF NOT EXISTS match_basis TEXT` correctly
+# — same project, same session, two different dialects, one habit.
+#
+# **Why it survived on `main` unexecuted:** this job ran the hand-synced workspace copy, which
+# predated the line. Repointing it at repo source (I-096) is what finally executed it. The
+# stale copy was not merely out of date; it was masking a build failure.
+_existing = {f.name for f in spark.table("gold_emerging_signal").schema.fields}
+_wanted = {
+    "failure_mode": "ai_extract, per signal not per complaint — descriptive only, never a detection input",
+    "severity_language": "ai_extract, per signal not per complaint — descriptive only, never a detection input",
+}
+_missing = [(c, d) for c, d in _wanted.items() if c not in _existing]
+if _missing:
+    _cols = ",\n  ".join(f"{c} STRING COMMENT '{d}'" for c, d in _missing)
+    spark.sql(f"ALTER TABLE gold_emerging_signal ADD COLUMNS (\n  {_cols}\n)")
+    print(f"added columns: {[c for c, _ in _missing]}")
+else:
+    print("failure_mode / severity_language already present — no ALTER needed")
 
 spark.sql("""
 MERGE INTO gold_emerging_signal t

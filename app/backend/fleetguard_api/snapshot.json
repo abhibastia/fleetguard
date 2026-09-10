@@ -3468,11 +3468,43 @@
     }
   },
   "signals": {
-    "total": 48,
+    "total": 50,
     "live": 9,
-    "fleet_relevant": 2,
+    "fleet_relevant": 6,
     "as_of_month": "2026-08-01",
     "signals": [
+      {
+        "signal_id": "RAM|PROMASTER|ENGINE AND ENGINE COOLING:2026-01",
+        "series_key": "RAM|PROMASTER|ENGINE AND ENGINE COOLING",
+        "make": "RAM",
+        "model": "PROMASTER",
+        "component": "ENGINE AND ENGINE COOLING",
+        "run_start": "2026-01-01",
+        "run_end": "2026-02-01",
+        "run_len": 2,
+        "max_z": "7.00",
+        "complaint_count": 17,
+        "harm_share": "0.059",
+        "fleet_vehicles": 2418,
+        "is_live": false,
+        "status": "OPEN"
+      },
+      {
+        "signal_id": "AGENT-c1594dc7e41f",
+        "series_key": "FORD|F-250|SERVICE BRAKES, HYDRAULIC",
+        "make": "FORD",
+        "model": "F-250",
+        "component": "SERVICE BRAKES, HYDRAULIC",
+        "run_start": null,
+        "run_end": null,
+        "run_len": null,
+        "max_z": null,
+        "complaint_count": 3,
+        "harm_share": null,
+        "fleet_vehicles": 2116,
+        "is_live": null,
+        "status": "OPEN"
+      },
       {
         "signal_id": "RAM|2500|SERVICE BRAKES:2025-12",
         "series_key": "RAM|2500|SERVICE BRAKES",
@@ -3486,6 +3518,38 @@
         "complaint_count": 64,
         "harm_share": "0.047",
         "fleet_vehicles": 1256,
+        "is_live": false,
+        "status": "OPEN"
+      },
+      {
+        "signal_id": "AGENT-71556b31962d",
+        "series_key": "RAM|2500|STEERING",
+        "make": "RAM",
+        "model": "2500",
+        "component": "STEERING",
+        "run_start": null,
+        "run_end": null,
+        "run_len": null,
+        "max_z": null,
+        "complaint_count": 3,
+        "harm_share": null,
+        "fleet_vehicles": 1256,
+        "is_live": null,
+        "status": "OPEN"
+      },
+      {
+        "signal_id": "CHEVROLET|SILVERADO 1500|FORWARD COLLISION AVOIDANCE:2026-02",
+        "series_key": "CHEVROLET|SILVERADO 1500|FORWARD COLLISION AVOIDANCE",
+        "make": "CHEVROLET",
+        "model": "SILVERADO 1500",
+        "component": "FORWARD COLLISION AVOIDANCE",
+        "run_start": "2026-02-01",
+        "run_end": "2026-03-01",
+        "run_len": 2,
+        "max_z": "5.37",
+        "complaint_count": 22,
+        "harm_share": "0.000",
+        "fleet_vehicles": 766,
         "is_live": false,
         "status": "OPEN"
       },
@@ -3570,22 +3634,6 @@
         "status": "OPEN"
       },
       {
-        "signal_id": "FORD|EXPEDITION|STRUCTURE:2026-06",
-        "series_key": "FORD|EXPEDITION|STRUCTURE",
-        "make": "FORD",
-        "model": "EXPEDITION",
-        "component": "STRUCTURE",
-        "run_start": "2026-06-01",
-        "run_end": "2026-07-01",
-        "run_len": 2,
-        "max_z": "6.67",
-        "complaint_count": 15,
-        "harm_share": "0.133",
-        "fleet_vehicles": 0,
-        "is_live": true,
-        "status": "OPEN"
-      },
-      {
         "signal_id": "FORD|EXPEDITION|SEAT BELTS:2026-06",
         "series_key": "FORD|EXPEDITION|SEAT BELTS",
         "make": "FORD",
@@ -3597,6 +3645,22 @@
         "max_z": "6.67",
         "complaint_count": 34,
         "harm_share": "0.235",
+        "fleet_vehicles": 0,
+        "is_live": true,
+        "status": "OPEN"
+      },
+      {
+        "signal_id": "FORD|EXPEDITION|STRUCTURE:2026-06",
+        "series_key": "FORD|EXPEDITION|STRUCTURE",
+        "make": "FORD",
+        "model": "EXPEDITION",
+        "component": "STRUCTURE",
+        "run_start": "2026-06-01",
+        "run_end": "2026-07-01",
+        "run_len": 2,
+        "max_z": "6.67",
+        "complaint_count": 15,
+        "harm_share": "0.133",
         "fleet_vehicles": 0,
         "is_live": true,
         "status": "OPEN"
@@ -3746,22 +3810,6 @@
         "status": "OPEN"
       },
       {
-        "signal_id": "CHEVROLET|SILVERADO 1500|FORWARD COLLISION AVOIDANCE:2026-02",
-        "series_key": "CHEVROLET|SILVERADO 1500|FORWARD COLLISION AVOIDANCE",
-        "make": "CHEVROLET",
-        "model": "SILVERADO 1500",
-        "component": "FORWARD COLLISION AVOIDANCE",
-        "run_start": "2026-02-01",
-        "run_end": "2026-03-01",
-        "run_len": 2,
-        "max_z": "5.37",
-        "complaint_count": 22,
-        "harm_share": "0.000",
-        "fleet_vehicles": 0,
-        "is_live": false,
-        "status": "OPEN"
-      },
-      {
         "signal_id": "KIA|EV6|UNKNOWN OR OTHER:2026-02",
         "series_key": "KIA|EV6|UNKNOWN OR OTHER",
         "make": "KIA",
@@ -3869,22 +3917,6 @@
         "max_z": "7.34",
         "complaint_count": 28,
         "harm_share": "0.000",
-        "fleet_vehicles": 0,
-        "is_live": false,
-        "status": "OPEN"
-      },
-      {
-        "signal_id": "RAM|PROMASTER|ENGINE AND ENGINE COOLING:2026-01",
-        "series_key": "RAM|PROMASTER|ENGINE AND ENGINE COOLING",
-        "make": "RAM",
-        "model": "PROMASTER",
-        "component": "ENGINE AND ENGINE COOLING",
-        "run_start": "2026-01-01",
-        "run_end": "2026-02-01",
-        "run_len": 2,
-        "max_z": "7.00",
-        "complaint_count": 17,
-        "harm_share": "0.059",
         "fleet_vehicles": 0,
         "is_live": false,
         "status": "OPEN"
@@ -4243,6 +4275,6 @@
       }
     ]
   },
-  "captured_at": "2026-09-02T14:23:41+00:00",
+  "captured_at": "2026-09-10T22:38:42+00:00",
   "source": "databricks_postgres.bootcamp_students (Lakebase)"
 }

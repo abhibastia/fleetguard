@@ -127,14 +127,36 @@ conn.commit()
 with conn.cursor() as cur:
     cur.execute(
         f"SELECT COUNT(*), COUNT(*) FILTER (WHERE is_live), "
-        f"COUNT(*) FILTER (WHERE fleet_vehicles > 0) FROM {PG_SCHEMA}.{TABLE}"
+        f"COUNT(*) FILTER (WHERE fleet_vehicles > 0), "
+        f"COUNT(*) FILTER (WHERE source = 'DETECTOR'), "
+        f"COUNT(*) FILTER (WHERE source = 'AGENT') FROM {PG_SCHEMA}.{TABLE}"
     )
-    total, live, fleet = cur.fetchone()
+    total, live, fleet, detector, agent = cur.fetchone()
 
-print(f"loaded: {total} signals · {live} live · {fleet} fleet-relevant")
+print(
+    f"loaded: {total} signals ({detector} DETECTOR + {agent} AGENT) · {live} live · {fleet} fleet-relevant"
+)
 
-# Reconciliation, not vibes: Postgres must agree with the source exactly.
-assert total == len(pdf), f"expected {len(pdf)} in Postgres, found {total}"
+# RECONCILE AGAINST THE ROWS THIS LOADER OWNS, NOT THE WHOLE TABLE (I-099).
+#
+# This asserted `total == len(pdf)` — that Postgres holds exactly what the batch just wrote.
+# But `fleetguard_defect_signal` is **co-owned by design**: the agent write path opens signals
+# into it too (`source = 'AGENT'`, with `opened_by` naming the human who authorised it), which
+# is the whole reason §8.3's trigger uses `ANY_UPDATED`. So the moment anyone exercises the
+# agent's write path — the most demo-relevant thing in the project — this job fails forever.
+#
+# Measured 2026-09-11: 48 DETECTOR + 2 AGENT = 50, and the loader aborted with
+# "expected 48 in Postgres, found 50" **after committing a correct load**. A green upsert
+# reported as a red job, which on demo eve reads as a broken pipeline.
+#
+# `source` is `NOT NULL DEFAULT 'DETECTOR'` with a CHECK constraint, so this partition is
+# exhaustive. Equality on the DETECTOR slice still catches the real failure the original was
+# reaching for — a signal that dropped out of gold and lingers here, since the write is
+# `ON CONFLICT DO UPDATE` and never deletes.
+assert detector == len(pdf), (
+    f"expected {len(pdf)} DETECTOR rows in Postgres, found {detector} "
+    f"({agent} AGENT rows are not this loader's and are excluded)"
+)
 assert fleet > 0, "no fleet-relevant signals — the proactive panel would demo empty"
 conn.close()
 print("signal load reconciled")

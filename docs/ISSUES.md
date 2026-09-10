@@ -26,6 +26,106 @@ no error and passed the obvious check.
 
 ## Tooling / process
 
+### I-099 — the pre-demo data refresh does not refresh, and two jobs on `main` had never run — **SILENT**
+*Date:* 2026-09-11 · *Status:* 🟡 partially resolved — two bugs fixed, the refresh gap is **open**
+
+**Found by** rehearsing B3 (the pre-demo data refresh) two weeks early instead of the night
+before. Three separate failures, none of which any test could have caught.
+
+#### (a) The refresh refreshes nothing — **OPEN**
+
+Ran the documented chain: ingest → bronze/silver. The ingest genuinely worked —
+`FLAT_CMPL.txt` re-downloaded at 1.6 GB with today's mtime, so NHTSA had changed upstream and
+`If-Modified-Since` correctly returned 200 rather than 304. The pipeline then ran and reported
+`COMPLETED` on **every** flow.
+
+**Zero rows changed.** All seven tables identical to the baseline, and
+`MAX(_ingested_at)` on `bronze_complaints` still reads **2026-08-31** with
+`COUNT(DISTINCT _source_file) = 1`.
+
+**Cause.** Bronze reads `FROM STREAM read_files(...)` — Auto Loader — which tracks processed
+files by *path* in its checkpoint. `01_download_flat_files.py` writes each source to a fixed
+path (`cmpl/FLAT_CMPL.txt`) and overwrites in place. A modified file at a known path is never
+reprocessed. Success is reported because nothing failed; there was simply nothing Auto Loader
+considered new.
+
+**Why the obvious fixes are wrong here.** These flat files are **full snapshots, not deltas**.
+`cloudFiles.allowOverwrites` or versioned filenames would re-ingest all 2.24M rows *on top of*
+the existing ones, and **silver does not dedupe** — `silver_complaint` documents "one row per
+CMPLID" as a property of the source, with no `QUALIFY`/`ROW_NUMBER` enforcing it. Both would
+double the corpus rather than refresh it.
+
+**The architecturally correct fix is a pipeline full refresh**, which truncates and reloads
+from the current files. **It is not safe to run casually:** a full refresh also rebuilds
+`silver_complaint_chunk` (1.7M chunks), which feeds the AI Search index — and an index rebuild
+is **~7 h** (`ARCHITECTURE.md` §9.2: never inside a demo window). That decision is deliberately
+left to a human with a calendar. **Recorded, not fixed.**
+
+**What this means for B3 as written:** the runbook's chain cannot deliver new data, and would
+have reported success while doing so on demo eve. The rest of B3 — rebuilding the signals from
+existing silver — works and was completed (below).
+
+#### (b) `ALTER TABLE … ADD COLUMNS IF NOT EXISTS` is a parse error in Spark SQL — **FIXED**
+
+`10_emerging_signals.py` failed with
+`[PARSE_SYNTAX_ERROR] Syntax error at or near 'EXISTS'`. Measured live on a scratch table:
+`ADD COLUMNS IF NOT EXISTS (b STRING)` **fails**, `ADD COLUMN IF NOT EXISTS b STRING`
+**fails**, plain `ADD COLUMNS (c STRING)` **works**. There is no `IF NOT EXISTS` on
+`ADD COLUMN(S)` in Spark SQL.
+
+It is a **Postgres idiom carried into Spark SQL** — Postgres does support it, and
+`src/lakebase/14_load_signals.py` uses `ADD COLUMN IF NOT EXISTS match_basis TEXT` perfectly
+correctly. Same project, two dialects, one habit. A repo-wide scan found this was the only
+occurrence in Spark SQL; all 17 others are Postgres and legal.
+
+**The important part is why it survived.** The line was on `main` and had **never executed** —
+the job ran the hand-synced workspace copy, which predated it. Repointing the job at repo
+source (I-096) is what finally ran it. **The stale copy was not merely out of date; it was
+masking a build failure.** Fixed with a Python guard reading the table schema, which is
+idempotent in a way the SQL cannot be.
+
+#### (c) The signals loader asserts against a table it does not own — **FIXED**
+
+`14_load_signals.py` aborted with `expected 48 in Postgres, found 50` — **after committing a
+correct load**. A green upsert reported as a red job.
+
+`fleetguard_defect_signal` is **co-owned by design**: the batch loader writes
+`source = 'DETECTOR'` and the agent write path writes `source = 'AGENT'` with `opened_by`
+naming the authorising human. That co-ownership is the documented reason §8.3's trigger uses
+`ANY_UPDATED`. Measured: **48 DETECTOR + 2 AGENT = 50**, both AGENT rows opened by the owner
+through the real write path.
+
+So `assert total == len(pdf)` means *"nobody has ever used the agent's write path"* — the most
+demo-relevant capability in the project permanently breaks the batch loader. Now reconciles on
+the `DETECTOR` slice, which still catches the failure the original was reaching for (a signal
+that dropped out of gold and lingers, since the write is `ON CONFLICT DO UPDATE` and never
+deletes).
+
+#### What the rehearsal did deliver
+
+B1/I-079's tiered fleet match reached `main` on 2026-09-09 but the **stored table still held
+the old exact-only zeros**. Rebuilt and loaded, reproducing B1's predicted values exactly:
+
+| | before | after | basis |
+|---|---:|---:|---|
+| RAM PROMASTER | **0** | **2,418** | MODEL_VARIANT |
+| CHEVROLET SILVERADO 1500 | **0** | **766** | MODEL_VARIANT |
+| RAM 2500 | 1,256 | 1,256 | EXACT |
+| TOYOTA TUNDRA | 232 | 232 | EXACT |
+
+Console-facing: **6 fleet-relevant of 50**, matching STATUS's B3 prediction of "6 of 50, not 4"
+exactly. `gold_emerging_signal` stays at 48 detected — no new data landed, per (a).
+
+The agent smoke test's pins moved and **that is the mechanism working**: they are what caught
+the change. Repinned `affecting_this_fleet` 2 → 4 and `signals[0].fleet_vehicles` 1,256 → 2,418
+(the leader is now a MODEL_VARIANT match). `detected_total` stays 48.
+
+`evidence.json` was re-exported and **deliberately reverted**: every backtest figure was
+byte-identical and only `generated_at` moved. Bumping a published freshness stamp when the
+inputs and outputs are unchanged would overstate it on the one page that exists to be trusted.
+
+---
+
 ### I-098 — the bundle carried two model-version pins into config, re-creating I-094 one layer up — **SILENT**
 *Date:* 2026-09-11 · *Status:* ✅ resolved
 
