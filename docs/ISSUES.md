@@ -185,7 +185,15 @@ now records the measurement instead of the hope.
 
 **Still open (recorded, not fixed):** the deployed `state/metadata.json` names commit
 `f2c2c43`, which is `main`'s tip and contains no bundle at all — the deploy ran from an
-uncommitted tree. Drift has moved from "workspace vs repo" to "last deploy vs HEAD", with the
+uncommitted tree.
+
+> **RECURRED THE SAME DAY, which settles what kind of fix this needs.** While shipping I-099,
+> `bundle deploy` was run *before* `git commit` in the same command — reproducing this exactly:
+> deployed state said `bd8bd24f9` while the deployed files were `4c49d0853`. Caught by checking
+> rather than by anything in the system, and corrected by redeploying from the committed tree.
+> Documenting the hazard did not prevent it **hours later, by the person who documented it**.
+> This wants a pre-deploy guard — refuse to deploy from a dirty tree, or record the tree hash
+> rather than `HEAD` — not another paragraph telling someone to be careful. Drift has moved from "workspace vs repo" to "last deploy vs HEAD", with the
 same absence of any check. And `docs/STATUS.md`'s documented emergency pause for
 `fleetguard-cdf-to-gold` is now silently reverted by the next `bundle deploy`.
 
