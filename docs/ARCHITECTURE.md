@@ -865,6 +865,50 @@ offline checks that would otherwise be missing live in `tests/test_bundle_resour
 notebook paths that resolve, job names that keep the `fleetguard-` prefix, an App that still
 declares `postgres`.
 
+### 9.1a The CD half — designed, blocked by account permissions, not by choice
+
+The frozen proposal (§9) says *"GitHub Actions runs `databricks bundle deploy` on merge to
+main."* **The CI half exists; the CD half does not**, and the reason is a measured permission
+fact rather than an oversight. Stating it here because the claim is in the proposal and a
+reader can reasonably ask.
+
+**The design that would be correct.** Not a stored token — **GitHub workload identity
+federation (OIDC)**, which Databricks now documents as the recommended mechanism for automated
+workloads. The runner requests a short-lived GitHub OIDC token and exchanges it for a Databricks
+OAuth token, so **no credential is stored in the repository at all**. That is the only shape
+that adds CD without reversing `ci.yml`'s explicit "no credentials are configured here, and none
+should be". It needs `permissions: id-token: write`, `DATABRICKS_AUTH_TYPE: github-oidc`, a
+`DATABRICKS_CLIENT_ID`, and a federation policy whose subject is
+`repo:<org>/<repo>:environment:<env>`.
+
+**Why it cannot be built from this account** (measured 2026-09-11):
+
+| check | result |
+|---|---|
+| `databricks account service-principals list --profile abhi` | **`Not Found`** — `abhi` is workspace-scoped; no account-level profile exists |
+| `databricks current-user me` → groups | **`['users']`** — not a workspace admin, let alone account admin |
+| workspace-level SP secret management | documented as **admin-only** (`service-principal-secrets-proxy`) |
+
+The federation policy is an **account-level** object
+(`databricks account service-principal-federation-policy create`), and the account belongs to
+the bootcamp owner, not this project. The M2M-secret alternative needs the same access. The one
+path that would work unaided is a **PAT in GitHub secrets** — rejected: it places a token
+reaching a ~296-student metastore into a repository, to save a command that is run a few times
+a week.
+
+**Two design constraints that survive whoever builds it:**
+
+1. **CD must stop at `bundle deploy`.** It must **not** run `bundle run fleetguard_console` —
+   that restarts the App under whoever is using it, which is the original reason deployment is
+   manual (I-097). The App step stays human even with CD.
+2. **Gate it on a GitHub Environment with required reviewers.** This does double duty: it is
+   what scopes the OIDC subject, and it is the human gate — the same shape as §5.3's approval
+   model, applied to deployment.
+
+**One thing CD would fix for free.** A runner always deploys from a clean checkout at a known
+SHA, which structurally closes the deploy-provenance gap in I-098 — the one that recurred
+within hours of being documented, and therefore wants a mechanism rather than discipline.
+
 ### 9.2 Cost, rebuild, verification
 
 **Cost.** `fleetguard-vs` (AI Search, STANDARD, 1 unit) at **~$6.72/day** is the only

@@ -16,6 +16,7 @@ no error and passed the obvious check.
 |---|---|---|---|
 | I-028 | Phase 5 | **RESOLVED 2026-08-31.** User confirmed authorisation to use the existing CDF mapping `databricks_postgres.bootcamp_students` → `bootcamp_students.bootcamp_cdc`. Naming decided as `fleetguard_<entity>` → `lb_fleetguard_<entity>_history` (see I-036). Phase 5 unparked. | ✅ resolved |
 | I-018 | Cost | **Sized (see I-025).** Embedding is ~275M tokens ≈ **$28–36 one-off** — not the problem. The AI Search *endpoint* is **~$403/month recurring** and is the real exposure. Mitigation is index lifecycle (billing stops 24h after the last index is deleted), not corpus trimming. Still open only as a decision on how long to leave the index up. | **open** |
+| I-100 | CI/CD | The proposal's CD half (`bundle deploy` on merge to main) **cannot be built from this account**. The right mechanism — GitHub OIDC workload identity federation, which stores no secret — needs an account-level federation policy; this identity has no account profile and is in group `users` only. Design and the rejected PAT fallback are recorded. Needs the account owner. | **open** |
 | I-017 | Platform | Lakebase CDF is **not** a Declarative Automation Bundle resource, so Phase 5 enablement can't be captured in `bundle deploy`. Manual runbook step; CI/CD must not assume otherwise. | **watch** |
 | I-016 | Platform | Table properties (retention, `VACUUM`) on Lakebase CDF sync-managed destination tables are undocumented — may not be settable. Fallback is a downstream Delta copy under our own retention. Confirm during Phase 5. | **open** |
 | I-015 | Platform | Unity AI Gateway **output** guardrails (incl. PII detection on responses) do not apply to streaming responses. If the console streams agent output, the §4.5 PII second layer silently does not exist. Decide: no streaming, or drop the claim. | **open** |
@@ -25,6 +26,57 @@ no error and passed the obvious check.
 ---
 
 ## Tooling / process
+
+### I-100 — the proposal's CD half cannot be built from this account
+*Date:* 2026-09-11 · *Status:* **open** — blocked externally, design recorded
+
+**Found by** asking the obvious follow-up to the bundle migration: the proposal §9 promises
+*"GitHub Actions runs `databricks bundle deploy` on merge to main"*, and after I-096/I-098 the
+CI half is real while the CD half still is not. Checked what it would actually take, rather
+than assuming it was merely undone.
+
+**The correct design is now cheaper than it used to be, and it is not a stored token.**
+Databricks documents **workload identity federation (OIDC)** for GitHub Actions: the runner
+requests a short-lived GitHub OIDC token and exchanges it for a Databricks OAuth token, so no
+secret is stored in the repository. This matters specifically here — `ci.yml` states that no
+Databricks credentials belong in CI, and OIDC is the only shape that adds CD **without
+reversing that decision**. Shape: `permissions: id-token: write`,
+`DATABRICKS_AUTH_TYPE: github-oidc`, `DATABRICKS_CLIENT_ID`, and a federation policy with
+subject `repo:<org>/<repo>:environment:<env>` and the account id as audience.
+
+**The blocker is account-level access, measured not assumed:**
+
+| check | result |
+|---|---|
+| `databricks account service-principals list --profile abhi` | **`Not Found`** — the profile is workspace-scoped; no account profile exists |
+| `databricks current-user me` → `groups` | **`['users']`** — not a workspace admin, let alone account admin |
+| `databricks service-principal-secrets` | does not exist at workspace level; the proxy form is documented **admin-only** |
+
+`databricks account service-principal-federation-policy create` is an account-level call, and
+the account belongs to the bootcamp owner (`zach@zachwilson.tech`), not this project — the same
+ownership gap as I-084/I-085, in a new place. The M2M client-secret alternative needs the same
+access.
+
+**Rejected fallback:** a PAT for the owner in GitHub secrets. It would work today and needs
+nobody's permission, and that is the problem — it places a token reaching a ~296-student shared
+metastore into a repository, to automate a command run a few times a week. Not worth it 13 days
+from submission.
+
+**Two constraints recorded so they survive whoever builds it:**
+
+1. **CD must stop at `bundle deploy`** and must **not** run `bundle run fleetguard_console` —
+   that restarts the App under whoever is using it, which is why deployment is manual in the
+   first place (I-097). The App step stays human even under CD.
+2. **Gate on a GitHub Environment with required reviewers.** It does double duty: it is what
+   scopes the OIDC subject, and it is the human gate — §5.3's approval model applied to
+   deployment.
+
+**Worth noting as an argument for building it eventually:** a runner always deploys from a
+clean checkout at a known SHA, which structurally closes I-098's provenance gap — the one that
+recurred within hours of being written down, and therefore needs a mechanism rather than more
+prose.
+
+---
 
 ### I-099 — the pre-demo data refresh does not refresh, and two jobs on `main` had never run — **SILENT**
 *Date:* 2026-09-11 · *Status:* 🟡 partially resolved — two bugs fixed, the refresh gap is **open**
