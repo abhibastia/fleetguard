@@ -1,9 +1,10 @@
 /**
  * The only place the console talks to the backend.
  *
- * Every call sends credentials, because identity travels as a session cookie on Render and
- * as a platform-injected header on Databricks Apps — the frontend never handles a token
- * itself, and must never be given one. That is the auth seam (E-13) seen from this side.
+ * Every call sends credentials, because identity is attached by the surface the console is
+ * served from — a platform-injected header on Databricks Apps, a developer-supplied token
+ * on the local server. The frontend never handles a token itself, and must never be given
+ * one. That is the auth seam (E-13) seen from this side.
  */
 
 const BASE = "/api";
@@ -185,15 +186,11 @@ export interface Health {
 }
 
 export interface AuthStatus {
-  enabled: boolean;
   signed_in: boolean;
   user_name: string | null;
+  // Drives the Approve button. Both surfaces authenticate outside this app, so there is no
+  // login flow to describe here — only who the caller is and whether they may write.
   may_approve: boolean;
-  // Which login flow this deployment runs ("github" | "databricks") and where to send the
-  // browser for it. The console renders off these instead of a hardcoded GitHub button, so
-  // it's correct under either FLEETGUARD_AUTH_MODE without a frontend redeploy.
-  provider: string;
-  login_url: string | null;
 }
 
 export interface Me {

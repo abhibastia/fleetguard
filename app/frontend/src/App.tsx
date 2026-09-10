@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { api, type AuthStatus, type Health, type Me } from "./lib/api";
 import { applyTheme, currentTheme, type Theme } from "./lib/theme";
 import { AuditLog } from "./views/AuditLog";
@@ -9,7 +9,6 @@ import { Evidence } from "./views/Evidence";
 import { Home } from "./views/Home";
 import { Queue } from "./views/Queue";
 import { ServiceCampaigns } from "./views/ServiceCampaigns";
-import { SignIn } from "./views/SignIn";
 import { Signals } from "./views/Signals";
 import { Trends } from "./views/Trends";
 import { WorkOrders } from "./views/WorkOrders";
@@ -161,9 +160,6 @@ function ThemeToggle() {
 
 export function App() {
   const [view, setView] = useState<View>(viewFromHash);
-  // Whether the visitor arrived with an explicit destination. Only a *default* landing is
-  // ours to change; a shared link must go where it says.
-  const [landed] = useState(() => window.location.hash !== "");
   const [me, setMe] = useState<Me | null>(null);
   const [auth, setAuth] = useState<AuthStatus | null>(null);
   const [health, setHealth] = useState<Health | null>(null);
@@ -210,35 +206,6 @@ export function App() {
   // Campaign detail is reached *from* the queue, so it keeps the queue tab marked current
   // rather than leaving no tab active — which reads as "you are nowhere".
   const tab = view.name === "campaign" ? "queue" : view.name;
-
-  // Closed only when sign-in is actually configured and the visitor is not signed in. If the
-  // deployment has no sign-in at all, showing a gate nobody can pass would strand them.
-  const gateClosed = Boolean(auth?.enabled && !auth.signed_in);
-
-  // An anonymous visitor with no destination lands on Evidence, not on a login wall.
-  //
-  // Two reasons, and the second is the important one. (1) Google Safe Browsing flagged this
-  // host as "Dangerous site": a zero-reputation shared subdomain whose entire public surface
-  // is a "Continue with GitHub" prompt is a textbook phishing signature. (2) It was the wrong
-  // front door anyway — this URL exists to show the measured result to people who will never
-  // sign in, and the first thing they met was a form.
-  // Fires at most once. `landed` never changes after mount, so without this guard the
-  // effect fires again on every later transition back to "queue" — including a user
-  // deliberately clicking the Recall queue tab after being redirected — and silently
-  // bounces them back to Evidence, making the tab look broken. Found in the 2026-09-02
-  // repo review by tracing the interaction past the first render, not just checking that
-  // the initial redirect worked.
-  const autoRedirected = useRef(false);
-  useEffect(() => {
-    if (autoRedirected.current) return;
-    // Keys on "home" because that is now the default landing view. Left as "queue" this
-    // would never fire and anonymous visitors would meet a sign-in prompt instead of the
-    // measured result — a silent regression of I-057.
-    if (gateClosed && !landed && view.name === "home") {
-      autoRedirected.current = true;
-      setView({ name: "evidence" });
-    }
-  }, [gateClosed, landed, view.name]);
 
   return (
     <>
@@ -314,19 +281,7 @@ export function App() {
           <span className={auth?.user_name || me?.user_name ? "dot" : "dot off"} />
           {auth?.user_name ?? me?.user_name ?? "not signed in"}
           {auth?.signed_in && !auth.may_approve && <span className="muted">· read-only</span>}
-          {!auth?.signed_in && me && <span className="muted">· {me.token_source}</span>}
-          {auth?.signed_in && (
-            <form method="post" action="/api/auth/logout" style={{ margin: 0 }}>
-              <button className="crumb" style={{ margin: 0, fontSize: 12 }} type="submit">
-                Sign out
-              </button>
-            </form>
-          )}
-          {gateClosed && auth?.login_url && (
-            <a className="signin-link" href={auth.login_url}>
-              Sign in
-            </a>
-          )}
+          {me && !auth?.signed_in && <span className="muted">· {me.token_source}</span>}
         </span>
 
         <ThemeToggle />
@@ -347,26 +302,19 @@ export function App() {
           </div>
         )}
 
-        {/* Evidence stays reachable without a session: it is a published result about public
-            NHTSA data, and it is the reason the public URL exists. Everything else reads
-            fleet data and waits behind the gate. */}
-        {gateClosed && view.name !== "evidence" && (
-          <SignIn enabled={auth?.enabled ?? false} provider={auth?.provider ?? "github"} loginUrl={auth?.login_url ?? null} />
-        )}
-
-        {!gateClosed && view.name === "queue" && (
+        {view.name === "queue" && (
           <Queue onOpen={(id) => setView({ name: "campaign", id })} />
         )}
-        {!gateClosed && view.name === "campaign" && (
+        {view.name === "campaign" && (
           <Campaign id={view.id} onBack={() => setView({ name: "queue" })} />
         )}
-        {!gateClosed && view.name === "signals" && <Signals />}
-        {!gateClosed && view.name === "launched" && (
+        {view.name === "signals" && <Signals />}
+        {view.name === "launched" && (
           <ServiceCampaigns
             onOpen={(serviceCampaignId) => setView({ name: "work-orders", serviceCampaignId })}
           />
         )}
-        {!gateClosed && view.name === "work-orders" && (
+        {view.name === "work-orders" && (
           <WorkOrders
             serviceCampaignId={view.serviceCampaignId}
             onClearFilter={
@@ -374,9 +322,9 @@ export function App() {
             }
           />
         )}
-        {!gateClosed && view.name === "audit-log" && <AuditLog />}
-        {!gateClosed && view.name === "depot-risk" && <DepotRisk />}
-        {!gateClosed && view.name === "trends" && <Trends />}
+        {view.name === "audit-log" && <AuditLog />}
+        {view.name === "depot-risk" && <DepotRisk />}
+        {view.name === "trends" && <Trends />}
         {view.name === "home" && (
           <Home
             onNavigate={(v) =>
@@ -394,11 +342,10 @@ export function App() {
       </main>
 
       {/* Available from every tab, not just Queue — the assistant is self-contained (owns its
-          own turns/error state), so lifting it here cost nothing but the wrapper. Hidden
-          behind the same gate as the rest of the console: with no session there is no
-          identity for it to answer under, and Assistant's own 401 handling exists for the
-          case where a session exists but the serving endpoint call itself fails. */}
-      {!gateClosed && (
+          own turns/error state), so lifting it here cost nothing but the wrapper. Assistant's
+          own 401 handling covers the case where the caller is identified but the serving
+          endpoint call itself fails. */}
+      {(
         <>
           <button
             className="assistant-fab"
