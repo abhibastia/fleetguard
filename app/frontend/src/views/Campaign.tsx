@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, ApiError, type ApprovalResult, type CampaignDetail } from "../lib/api";
+import { SearchBox, useSearch } from "../lib/search";
 import { ApprovalConfirmation } from "./ApprovalConfirmation";
 
 /**
@@ -70,6 +71,25 @@ export function Campaign({ id, onBack }: { id: string; onBack: () => void }) {
     }
   }
 
+  // Computed BEFORE the early returns below, because `useSearch` is a hook: placing it after
+  // `if (!c) return <skeleton/>` means it is skipped on the loading render and called on the
+  // next one, which is React error #310. Caught in a browser on 2026-09-10 — typecheck and the
+  // unit suite were both blind to it, since neither renders the component through a state
+  // transition.
+  const depots = c ? Object.entries(c.by_depot).sort((a, b) => b[1] - a[1]) : [];
+
+  // The table shows the top 12 by exposure, so the other 48 depots were unreachable —
+  // "+ 48 further depots" told you they existed and gave you no way to look at them. A depot
+  // manager's first question is "is MY depot on this list", so a search shows every match
+  // rather than the truncated head.
+  const {
+    query,
+    setQuery,
+    filtered: matchedDepots,
+  } = useSearch(depots, ([d]) => d);
+  const searching = query.trim() !== "";
+  const shownDepots = searching ? matchedDepots : depots.slice(0, 12);
+
   if (error && !c) return <div className="error">{error}</div>;
   if (!c)
     return (
@@ -80,7 +100,6 @@ export function Campaign({ id, onBack }: { id: string; onBack: () => void }) {
       </>
     );
 
-  const depots = Object.entries(c.by_depot).sort((a, b) => b[1] - a[1]);
 
   return (
     <>
@@ -112,6 +131,14 @@ export function Campaign({ id, onBack }: { id: string; onBack: () => void }) {
           <h3>
             Exposure — {c.vehicles_exposed.toLocaleString()} vehicles across {depots.length} depots
           </h3>
+          <SearchBox
+            query={query}
+            onChange={setQuery}
+            placeholder="Find a depot…"
+            matched={matchedDepots.length}
+            total={depots.length}
+            label="Search depots for this campaign"
+          />
           <div className="wrap">
             <table>
               <thead>
@@ -121,7 +148,7 @@ export function Campaign({ id, onBack }: { id: string; onBack: () => void }) {
                 </tr>
               </thead>
               <tbody>
-                {depots.slice(0, 12).map(([d, n]) => (
+                {shownDepots.map(([d, n]) => (
                   <tr key={d}>
                     <td>{d}</td>
                     <td className="num">{n}</td>
@@ -130,7 +157,14 @@ export function Campaign({ id, onBack }: { id: string; onBack: () => void }) {
               </tbody>
             </table>
           </div>
-          {depots.length > 12 && <p className="muted">+ {depots.length - 12} further depots</p>}
+          {searching && shownDepots.length === 0 && (
+            <p className="muted">No depot matches “{query}” for this campaign.</p>
+          )}
+          {!searching && depots.length > 12 && (
+            <p className="muted">
+              + {depots.length - 12} further depots — search above to find a specific one
+            </p>
+          )}
         </div>
 
         <div className="panel" style={{ width: 350, flexShrink: 0 }}>

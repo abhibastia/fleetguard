@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, ApiError, type AuditLogEntry } from "../lib/api";
+import { SearchBox, useSearch } from "../lib/search";
 import { SortIndicator, useSort } from "../lib/sort";
 
 const ENTITY_TYPE_FILTER_ALL = "ALL" as const;
@@ -41,7 +42,10 @@ export function AuditLog() {
   useEffect(() => {
     let stale = false;
     api
-      .auditLog()
+      // 1000, not the 200 default: the log is already 724 rows and a search that can only see
+      // the most recent 200 is worse than no search — it returns "no matches" for an entry
+      // that exists. The backend caps at 2000, so this stays bounded.
+      .auditLog(1000)
       .then((d) => {
         if (!stale) setEntries(d);
       })
@@ -74,8 +78,19 @@ export function AuditLog() {
       return true;
     });
   }, [entries, entityTypeFilter, actionFilter]);
-  const { sorted, sortKey, sortDir, toggleSort } = useSort<AuditLogEntry, SortKey>(
+  // Search runs after the dropdowns and before the sort, so the three compose: narrow by
+  // category, then find within it, then order. 724 rows behind two selects was the specific
+  // thing a reviewer could not navigate on 2026-09-10.
+  const {
+    query,
+    setQuery,
+    filtered: searched,
+  } = useSearch(
     filtered,
+    (e) => `${e.entity_id} ${e.action} ${e.entity_type} ${e.actor_principal} ${e.created_at}`,
+  );
+  const { sorted, sortKey, sortDir, toggleSort } = useSort<AuditLogEntry, SortKey>(
+    searched,
     (e, key) => e[key],
   );
 
@@ -154,6 +169,14 @@ export function AuditLog() {
                 </option>
               ))}
             </select>
+            <SearchBox
+              query={query}
+              onChange={setQuery}
+              placeholder="Search entity, actor, action…"
+              matched={sorted.length}
+              total={filtered.length}
+              label="Search audit entries"
+            />
             <a
               className="filter-clear"
               style={{ marginLeft: "auto", textDecoration: "none" }}
@@ -164,7 +187,7 @@ export function AuditLog() {
           </div>
 
           {sorted.length === 0 ? (
-            <div className="panel">No audit entries match the current filters.</div>
+            <div className="panel">No audit entries match the current search or filters.</div>
           ) : (
             <div className="wrap">
               <table>

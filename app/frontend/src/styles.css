@@ -724,6 +724,30 @@ thead th.sortable:hover {
   min-width: 140px;
 }
 
+/* Search box — the same affordance on every table, so finding a row works the same way
+   wherever you are. Added 2026-09-10 after a reviewer could not navigate 724 audit rows
+   behind two dropdowns. */
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.search-input {
+  width: auto;
+  min-width: 240px;
+}
+
+/* The match count only appears while a query is active, so an unfiltered table carries no
+   extra chrome — but the moment rows are being hidden, it says how many and out of what. A
+   filter that silently shrinks a table is how someone concludes the data is missing. */
+.search-count {
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .filter-checkbox {
   display: flex;
   align-items: center;
@@ -1380,4 +1404,70 @@ thead th.sortable:hover {
 
 .signin-link:hover {
   background: var(--surface-3);
+}
+
+
+/* --- Home ------------------------------------------------------------------------------
+   Added 2026-09-10. The console previously opened on the Recall queue, which told a cold
+   visitor nothing about what they were looking at. Reuses .panel and .stats rather than
+   introducing a second visual language for the landing page. */
+.home {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.home-hero h2 {
+  font-size: 22px;
+  margin-bottom: 8px;
+}
+
+.home-paths {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+/* The two entry points are buttons, not cards with a link buried inside: the whole surface is
+   the target, and it stays keyboard-reachable and announced as actionable. */
+.home-path {
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  transition: transform 140ms ease, border-color 140ms ease;
+}
+
+.home-path h3 {
+  margin-top: 0;
+}
+
+.home-path p {
+  margin-bottom: 0;
+}
+
+.home-path:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-path {
+    transition: none;
+  }
+  .home-path:hover {
+    transform: none;
+  }
+}
+
+/* An inline button that reads as a link — used for "See the evidence →" inside a paragraph,
+   where a real <a> would need a route and a card-wide button would swallow the sentence. */
+.linklike {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline;
 }

@@ -666,6 +666,7 @@ Everything between here and there is history, kept for the record.
 | **TSB corroboration measured and rejected (E-15)** | The strongest untapped source — 5.8M bulletins already ingested, consumed by nothing, and named as Model A's corroborator in the pipeline's own comment. Tested on the full 777/606 population: raw test ran **backwards** (z −2.74) on a TSB-volume confound; controlled, the medians are **identical**. **The planned console column was not shipped** — measuring first is what stopped an unvalidated number reaching an operator. |
 | **E-03: the trace loop is closed and the join is proven** | `chat.py` now passes the endpoint's `databricks_request_id` into `fleetguard_agent_action.trace_id`, which was NULL for every row ever written. Verified live in Unity Catalog: `gold_agent_action` joins `fleetguard_agent_payload` on it, returning one row where **`authorised_by` and `called_as` are the same human** — the write-path claim made checkable rather than asserted. Inference-table ingest lags **>30 min**, so a demo-time write will not appear immediately. |
 | **E-06 / I-094: evaluation was scoring a stale model** | `16_evaluate_agent.py` defaulted to v3 while **v6** serves, so default runs passed green against a three-version-old artefact. Now resolves latest and prints which version it scored. |
+| **Reviewer feedback acted on (Raghu, 2026-09-10)** | **His sign-in worked** — first non-owner OBO session, live data, `databricks-apps` token source. Two asks, both built: **search on every table** (no view had free text; the audit log was 724 rows behind two dropdowns, and only 200 were even fetched) and a **Home page** (the console opened on a table of 50 recalls with no orientation). Verified in a browser, both themes. |
 | **E-01 closed — the last Tier 0 item** | Re-tested instead of trusting its status. The recorded "privilege gap" **does not exist** (`system.ai` visible, 93 models, version 1 listed) — and the enhancement's method does not exist either: you **cannot create a pay-per-token endpoint** wrapping `system.ai.*` (that path demands provisioned throughput / GPU). Purpose achieved for free instead: `ARCHITECTURE.md` §8 now states plainly that **no AI Gateway PII guardrail protects this agent**, and why. **I-095.** |
 | **E-08 closed** | Half honoured, half deliberately not built: Model B's golden set is real NHTSA recall text as the entry demanded, but the synthetic agent Q&A set is **not** built — 10 hand-written adversarial cases, each encoding a failure this project actually watched happen, beat generated breadth. |
 | **E-07 / E-09 closed** | Both sat marked ADOPT with no implementation and no reversal (I-051's pattern in the backlog). E-09 turned out **already satisfied** by the action-envelope pattern, which suspends across a process *and identity* boundary. |
@@ -972,10 +973,11 @@ guidance alongside rows.
   question, because scale-to-zero is on. Warm both before anyone is watching.
 - `/` on Render is cached and can serve a stale `index.html` for minutes after a deploy (I-054)
   — probe an API route to confirm a deploy, never the console page.
-- The Emerging tab now reads "**5 affecting your fleet**" of **51** — 2 batch + **3** agent-opened
-  (a third was opened 2026-09-09 verifying E-03's trace wiring; it is a truthful signal grounded in
-  the real RAM 2500 service-brake anomaly, and it is the one row carrying a `trace_id`). Was
-  "**4 of 50**" — **verified
+- The Emerging tab reads "**4 affecting your fleet**" of **50** — 2 batch + 2 agent-opened. A third
+  was opened 2026-09-09 to verify E-03's trace wiring and **removed 2026-09-10** after a reviewer's
+  screenshot showed three RAM 2500 rows reading as clutter; it duplicated the detector's own
+  subject. The trace loop stays proved — `gold_agent_action` keeps the traced action and CDF
+  history is append-only. **Verified
   live 2026-09-09, it is still 4.** B1's *code* has landed and deployed, but the stored
   `fleet_vehicles` values are pre-fix until **B3 rebuilds `gold_emerging_signal`**; only then does
   it become 6 of 50. The warehouse says 2 of 48 and Lakebase says 4 of 50 — both correct, counting

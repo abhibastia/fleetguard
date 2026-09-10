@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, ApiError, type QueueItem } from "../lib/api";
+import { SearchBox, useSearch } from "../lib/search";
 import { SortIndicator, useSort } from "../lib/sort";
 
 const SEVERITY_FILTER_ALL = "ALL" as const;
@@ -36,8 +37,16 @@ export function Queue({ onOpen }: { onOpen: (id: string) => void }) {
       return true;
     });
   }, [items, severityFilter]);
-  const { sorted, sortKey, sortDir, toggleSort } = useSort<QueueItem, SortKey>(
+    const {
+    query,
+    setQuery,
+    filtered: searched,
+  } = useSearch(
     filtered,
+    (q) => `${q.campaign_id} ${q.component ?? ""} ${q.consequence ?? ""}`,
+  );
+const { sorted, sortKey, sortDir, toggleSort } = useSort<QueueItem, SortKey>(
+    searched,
     (i, key) => i[key],
   );
 
@@ -118,6 +127,14 @@ export function Queue({ onOpen }: { onOpen: (id: string) => void }) {
       </div>
 
       <div className="filter-row">
+            <SearchBox
+              query={query}
+              onChange={setQuery}
+              placeholder="Search campaign or component…"
+              matched={sorted.length}
+              total={filtered.length}
+              label="Search recall queue"
+            />
         <select value={severityFilter} onChange={(e) => setSeverityFilter(e.target.value)}>
           <option value={SEVERITY_FILTER_ALL}>All campaigns</option>
           <option value={SEVERITY_FILTER_URGENT}>Immediate action only</option>
@@ -125,7 +142,7 @@ export function Queue({ onOpen }: { onOpen: (id: string) => void }) {
       </div>
 
       {sorted.length === 0 ? (
-        <div className="panel">No campaigns match the current filter.</div>
+        <div className="panel">No campaigns match the current search or filter.</div>
       ) : (
         <div className="wrap">
           <table className="rows">

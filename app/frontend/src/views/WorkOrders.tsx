@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, ApiError, type ServiceCampaign, type Technician, type WorkOrder } from "../lib/api";
 import { isOverdue } from "../lib/dates";
+import { SearchBox, useSearch } from "../lib/search";
 import { SortIndicator, useSort } from "../lib/sort";
 
 const STATUSES = ["OPEN", "IN_PROGRESS", "COMPLETED", "CANCELLED"] as const;
@@ -187,8 +188,16 @@ export function WorkOrders({
       return true;
     });
   }, [orders, statusFilter, depotFilter, overdueOnly]);
-  const { sorted, sortKey, sortDir, toggleSort } = useSort<WorkOrder, SortKey>(
+    const {
+    query,
+    setQuery,
+    filtered: searched,
+  } = useSearch(
     filtered,
+    (w) => `${w.wo_id} ${w.vin} ${w.depot_id} ${w.assigned_to_name ?? ""} ${w.status} ${w.service_campaign_id ?? ""}`,
+  );
+const { sorted, sortKey, sortDir, toggleSort } = useSort<WorkOrder, SortKey>(
+    searched,
     (o, key) => o[key] ?? "",
   );
 
@@ -290,6 +299,14 @@ export function WorkOrders({
       ) : (
         <>
           <div className="filter-row">
+            <SearchBox
+              query={query}
+              onChange={setQuery}
+              placeholder="Search work order, VIN, depot, technician…"
+              matched={sorted.length}
+              total={filtered.length}
+              label="Search work orders"
+            />
             <select
               value={campaignFilter}
               onChange={(e) => setCampaignFilter(e.target.value)}
@@ -328,7 +345,7 @@ export function WorkOrders({
           </div>
 
           {sorted.length === 0 ? (
-            <div className="panel">No work orders match the current filters.</div>
+            <div className="panel">No work orders match the current search or filters.</div>
           ) : (
             <div className="wrap">
               <table>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, ApiError, type SignalSummary } from "../lib/api";
+import { SearchBox, useSearch } from "../lib/search";
 
 /**
  * Emerging defect signals — the proactive half, and the half the project's argument rests on.
@@ -16,6 +17,17 @@ export function Signals() {
   const [error, setError] = useState<string | null>(null);
   const [gated, setGated] = useState(false);
   const [fleetOnly, setFleetOnly] = useState(false);
+
+  // Search over the fetched page. `fleetOnly` is a server-side query param (it refetches), so
+  // this filters what came back rather than duplicating that switch client-side.
+  const {
+    query,
+    setQuery,
+    filtered: visible,
+  } = useSearch(
+    data?.signals ?? [],
+    (s) => `${s.make ?? ""} ${s.model ?? ""} ${s.component} ${s.series_key ?? ""}`,
+  );
 
   useEffect(() => {
     // Same guard as views/Campaign.tsx's fetch, same reason: toggling the checkbox twice
@@ -96,19 +108,29 @@ export function Signals() {
         </div>
       </div>
 
-      <label className="check">
-        <input
-          type="checkbox"
-          checked={fleetOnly}
-          onChange={(e) => setFleetOnly(e.target.checked)}
+      <div className="filter-row">
+        <SearchBox
+          query={query}
+          onChange={setQuery}
+          placeholder="Search make, model or component…"
+          matched={visible.length}
+          total={data.signals.length}
+          label="Search emerging signals"
         />
-        Only signals touching fleet vehicles
-      </label>
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={fleetOnly}
+            onChange={(e) => setFleetOnly(e.target.checked)}
+          />
+          Only signals touching fleet vehicles
+        </label>
+      </div>
 
-      {data.signals.length === 0 ? (
+      {visible.length === 0 ? (
         <div className="panel">
-          No signals match this filter. That is a result, not an error — the detector ran and found
-          nothing.
+          No signals match the current search or filter. That is a result, not an error — the
+          detector ran and found nothing.
         </div>
       ) : (
         <div className="wrap">
@@ -125,7 +147,7 @@ export function Signals() {
               </tr>
             </thead>
             <tbody>
-              {data.signals.map((s) => (
+              {visible.map((s) => (
                 <tr key={s.signal_id}>
                   <td>
                     <strong>

@@ -84,7 +84,7 @@ The point: everything that follows sits on a measured, falsifiable claim with a 
 
 ### Beat 2 · Emerging signals — the proactive half
 
-"**5 affecting your fleet**" of 51. RAM 2500 service brakes: **1,256 fleet vehicles**, peak
+"**4 affecting your fleet**" of 50. RAM 2500 service brakes: **1,256 fleet vehicles**, peak
 z 5.62, 64 complaints.
 
 Say the three-state distinction explicitly, because it is the honest core: **a signal is not an
@@ -190,13 +190,13 @@ existed, but nothing supplied the id until E-03 was wired (`ISSUES.md`).
 | `17V629000` | **25** vehicles / **22** depots, EXACT | verified 2026-09-09 |
 | Ford F-250 in fleet | **2,116** | verified 2026-09-09 |
 | Signals | **48** detected / 9 live / **2** fleet-relevant | `gold_emerging_signal` |
-| Signals in console | **51** / 9 live / **5** fleet-relevant | Lakebase = 48 detector + **3** agent-opened |
+| Signals in console | **50** / 9 live / **4** fleet-relevant | Lakebase = 48 detector + 2 agent-opened |
 | RAM 2500 signal | **1,256** vehicles, z 5.62, 64 complaints | verified 2026-09-09 |
 | Model B | precision **83.7%**, recall **96.3%**, AUC 0.925 | 765-pair golden set |
 | Work orders / audit / cost | **331** / **723** / **$84,409.68** | verified 2026-09-09 |
 
 **Why the console says 4 and the warehouse says 2.** `gold_emerging_signal` holds 48 detector
-rows, 2 of them fleet-relevant. Lakebase adds the **3** agent-opened signals, giving 51 and 5. Both
+rows, 2 of them fleet-relevant. Lakebase adds the 2 agent-opened signals, giving 50 and 4. Both
 are right; they count different things. This becomes 6 only after B3 rebuilds the gold table with
 B1's tiered match.
 

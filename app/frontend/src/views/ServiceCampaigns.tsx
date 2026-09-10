@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, ApiError, type CostBreakdown, type Evidence, type ServiceCampaign } from "../lib/api";
+import { SearchBox, useSearch } from "../lib/search";
 import { SortIndicator, useSort } from "../lib/sort";
 
 const PROGRESS_FILTER_ALL = "ALL" as const;
@@ -69,8 +70,16 @@ export function ServiceCampaigns({ onOpen }: { onOpen: (serviceCampaignId: strin
       return true;
     });
   }, [campaigns, progressFilter]);
-  const { sorted, sortKey, sortDir, toggleSort } = useSort<ServiceCampaign, SortKey>(
+    const {
+    query,
+    setQuery,
+    filtered: searched,
+  } = useSearch(
     filtered,
+    (c) => `${c.service_campaign_id} ${c.campaign_id} ${c.title} ${c.approved_by ?? ""}`,
+  );
+const { sorted, sortKey, sortDir, toggleSort } = useSort<ServiceCampaign, SortKey>(
+    searched,
     (c, key) => c[key] ?? 0,
   );
 
@@ -234,6 +243,14 @@ export function ServiceCampaigns({ onOpen }: { onOpen: (serviceCampaignId: strin
       ) : (
         <>
           <div className="filter-row">
+            <SearchBox
+              query={query}
+              onChange={setQuery}
+              placeholder="Search campaign, title or approver…"
+              matched={sorted.length}
+              total={filtered.length}
+              label="Search launched campaigns"
+            />
             <select value={progressFilter} onChange={(e) => setProgressFilter(e.target.value)}>
               <option value={PROGRESS_FILTER_ALL}>All campaigns</option>
               <option value={PROGRESS_FILTER_OUTSTANDING}>Outstanding work only</option>
@@ -242,7 +259,7 @@ export function ServiceCampaigns({ onOpen }: { onOpen: (serviceCampaignId: strin
           </div>
 
           {sorted.length === 0 ? (
-            <div className="panel">No launched campaigns match the current filter.</div>
+            <div className="panel">No launched campaigns match the current search or filter.</div>
           ) : (
             <div className="wrap">
               <table className="rows">

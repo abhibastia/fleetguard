@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, ApiError, type DepotRisk as DepotRiskRow } from "../lib/api";
+import { SearchBox, useSearch } from "../lib/search";
 import { SortIndicator, useSort } from "../lib/sort";
 
 const REGION_FILTER_ALL = "ALL" as const;
@@ -69,8 +70,16 @@ export function DepotRisk() {
       return true;
     });
   }, [depots, regionFilter, overdueOnly]);
-  const { sorted, sortKey, sortDir, toggleSort } = useSort<DepotRiskRow, SortKey>(
+    const {
+    query,
+    setQuery,
+    filtered: searched,
+  } = useSearch(
     filtered,
+    (d) => `${d.depot_id} ${d.depot_name} ${d.region} ${d.city} ${d.state}`,
+  );
+const { sorted, sortKey, sortDir, toggleSort } = useSort<DepotRiskRow, SortKey>(
+    searched,
     (d, key) => d[key],
   );
 
@@ -151,6 +160,14 @@ export function DepotRisk() {
       ) : (
         <>
           <div className="filter-row">
+            <SearchBox
+              query={query}
+              onChange={setQuery}
+              placeholder="Search depot, city or region…"
+              matched={sorted.length}
+              total={filtered.length}
+              label="Search depots"
+            />
             <select value={regionFilter} onChange={(e) => setRegionFilter(e.target.value)}>
               <option value={REGION_FILTER_ALL}>All regions</option>
               {regionOptions.map((r) => (
@@ -170,7 +187,7 @@ export function DepotRisk() {
           </div>
 
           {sorted.length === 0 ? (
-            <div className="panel">No depots match the current filters.</div>
+            <div className="panel">No depots match the current search or filters.</div>
           ) : (
             <div className="wrap">
               <table>

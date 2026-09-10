@@ -6,6 +6,7 @@ import { Assistant } from "./views/Assistant";
 import { Campaign } from "./views/Campaign";
 import { DepotRisk } from "./views/DepotRisk";
 import { Evidence } from "./views/Evidence";
+import { Home } from "./views/Home";
 import { Queue } from "./views/Queue";
 import { ServiceCampaigns } from "./views/ServiceCampaigns";
 import { SignIn } from "./views/SignIn";
@@ -14,6 +15,7 @@ import { Trends } from "./views/Trends";
 import { WorkOrders } from "./views/WorkOrders";
 
 type View =
+  | { name: "home" }
   | { name: "queue" }
   | { name: "signals" }
   | { name: "campaign"; id: string }
@@ -34,6 +36,7 @@ type View =
 function viewFromHash(): View {
   const h = window.location.hash.replace(/^#\/?/, "");
   if (h.startsWith("campaign/")) return { name: "campaign", id: decodeURIComponent(h.slice(9)) };
+  if (h === "queue") return { name: "queue" };
   if (h === "emerging") return { name: "signals" };
   if (h === "evidence") return { name: "evidence" };
   if (h.startsWith("work-orders/")) {
@@ -44,7 +47,7 @@ function viewFromHash(): View {
   if (h === "audit-log") return { name: "audit-log" };
   if (h === "depot-risk") return { name: "depot-risk" };
   if (h === "trends") return { name: "trends" };
-  return { name: "queue" };
+  return { name: "home" };
 }
 
 function hashForView(v: View): string {
@@ -60,7 +63,8 @@ function hashForView(v: View): string {
   if (v.name === "audit-log") return "#/audit-log";
   if (v.name === "depot-risk") return "#/depot-risk";
   if (v.name === "trends") return "#/trends";
-  return "#/queue";
+  if (v.name === "queue") return "#/queue";
+  return "#/";
 }
 
 /** A shield over a fleet, in one glyph. Inline rather than a file so it inherits the
@@ -227,7 +231,10 @@ export function App() {
   const autoRedirected = useRef(false);
   useEffect(() => {
     if (autoRedirected.current) return;
-    if (gateClosed && !landed && view.name === "queue") {
+    // Keys on "home" because that is now the default landing view. Left as "queue" this
+    // would never fire and anonymous visitors would meet a sign-in prompt instead of the
+    // measured result — a silent regression of I-057.
+    if (gateClosed && !landed && view.name === "home") {
       autoRedirected.current = true;
       setView({ name: "evidence" });
     }
@@ -244,6 +251,12 @@ export function App() {
         </h1>
 
         <nav className="tabs">
+          <button
+            onClick={() => setView({ name: "home" })}
+            aria-current={tab === "home" ? "page" : undefined}
+          >
+            Home
+          </button>
           <button
             onClick={() => setView({ name: "queue" })}
             aria-current={tab === "queue" ? "page" : undefined}
@@ -364,6 +377,19 @@ export function App() {
         {!gateClosed && view.name === "audit-log" && <AuditLog />}
         {!gateClosed && view.name === "depot-risk" && <DepotRisk />}
         {!gateClosed && view.name === "trends" && <Trends />}
+        {view.name === "home" && (
+          <Home
+            onNavigate={(v) =>
+              setView(
+                v === "queue"
+                  ? { name: "queue" }
+                  : v === "signals"
+                    ? { name: "signals" }
+                    : { name: "evidence" },
+              )
+            }
+          />
+        )}
         {view.name === "evidence" && <Evidence />}
       </main>
 
