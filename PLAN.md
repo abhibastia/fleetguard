@@ -187,10 +187,13 @@ driver, so the 40k rows/s reference figure may not hold.
 ### Phase 6 — OAuth wiring
 *See `docs/ENHANCEMENTS.md` E-01 — the AI Gateway must sit on our own pay-per-token LLM
 endpoint, not the agent endpoint, which supports inference tables only. Verify live first.*
-- App resource bindings + OBO scopes for the primary surface; external service
-  principal + `generate_database_credential()` pool for Render.
-- **Done when:** a signed-in test user sees ABAC-scoped rows/columns in the App; the
-  external surface reads only `public_summary`.
+- App resource bindings + OBO scopes for the primary surface.
+- **Done when:** a signed-in test user sees ABAC-scoped rows/columns in the App.
+
+*Amended 2026-09-10: the second half of this phase — an external service principal and a
+`generate_database_credential()` pool for a public Render surface — was dropped with Render.
+Both surviving surfaces mint the Lakebase credential from the **caller's** token, so there is
+no app-owned pool to build. See `deploy/render` for what it looked like.*
 
 ### Phase 7 — Agent tools + write path
 *Build per `docs/ENHANCEMENTS.md` E-02 (`ResponsesAgent`, models-from-code,
@@ -211,10 +214,12 @@ kept `STOPPED` between sessions, live demo on the App. Free-edition Apps rejecte
 workspace/account, resource bindings are workspace-local, and §5.1's ABAC guarantee needs the
 user to be an `abhi` identity. **The auth seam (E-13) is MVP scope**: one swappable token
 provider, no handler reading headers directly.*
+
+*Superseded 2026-09-10 — the Render half is gone. The two surfaces are now **Databricks Apps**
+and a **local server**; the auth seam narrowed to `databricks-apps` and `static-dev`. The seam
+itself was the right call and is what made this a config-sized change rather than a rewrite.*
 - `app.yaml`, resource bindings, OBO console (signal queue, approval, work orders).
-- Render: read-only `public_summary` page, `/health`, `/api/stats`.
-- **Done when:** both surfaces are deployed and the App is the primary demoable
-  workflow.
+- **Done when:** the App is deployed and is the primary demoable workflow.
 
 ### Phase 9 — Model A + lead-time backtest  🟡 BASELINE DONE (2026-08-31)
 *(The differentiating capability — protect this phase's time budget.)*
@@ -291,8 +296,9 @@ mechanism exists and is proved; nobody has been assigned through it yet. That is
 plainly in `scoping.py`'s own docstring, not left implicit.
 
 ### Phase 11 — Deployment hardening
-- `table_update` trigger wired to `lb_<table>_history` (per §8.3's YAML), Render
-  always-on + pinger, seeded demo state.
+- `table_update` trigger wired to `lb_<table>_history` (per §8.3's YAML), seeded demo state.
+  *(The "Render always-on + pinger" item was dropped when Render stopped being the demo
+  surface, and removed here with Render itself on 2026-09-10.)*
 - **Done when:** the full pipeline survives an idle-then-cold-start cycle without
   manual intervention.
 

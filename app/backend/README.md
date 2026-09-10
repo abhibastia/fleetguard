@@ -1,8 +1,8 @@
 # FleetGuard API
 
-FastAPI backend. Runs unchanged on Render and Databricks Apps — the only difference is how
-the caller's Databricks token arrives, and that is confined to `fleetguard_api/auth/tokens.py`
-(see `docs/ENHANCEMENTS.md` E-13).
+FastAPI backend. Runs unchanged on Databricks Apps and on a local server — the only
+difference is how the caller's Databricks token arrives, and that is confined to
+`fleetguard_api/auth/tokens.py` (see `docs/ENHANCEMENTS.md` E-13).
 
 ## Auth modes
 
@@ -12,12 +12,18 @@ would silently select the wrong trust model.
 | Mode | Surface | Token source |
 |---|---|---|
 | `databricks-apps` | Databricks Apps | `X-Forwarded-Access-Token` header, injected by the ingress |
-| `render-u2m` | Render | U2M OAuth session (Path D, §8.7) |
 | `static-dev` | Local only | `FLEETGUARD_DEV_TOKEN` |
 
+These are the only two accepted values; anything else — including the retired `render-u2m`
+and `app-login` — raises at startup rather than falling through to some other trust model.
+
 > `databricks-apps` trusts a request header. That is safe **only** behind Databricks Apps
-> ingress, where the platform sets it. Selecting it on Render would let any client forge an
-> identity.
+> ingress, where the platform sets it. Selecting it anywhere a client can reach the app
+> directly would let that client forge an identity.
+
+Neither mode uses a session or a cookie: both surfaces authenticate outside this application.
+The session machinery that once backed a browser login flow was removed with Render on
+2026-09-10 (`deploy/render`).
 
 ## Run locally
 
