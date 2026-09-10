@@ -1,6 +1,6 @@
 # CI — run the checks that already exist, on every push, without being asked.
 #
-# WHY THIS EXISTS. This repo carries 341 backend and 21 frontend tests, and a large share of
+# WHY THIS EXISTS. This repo carries 301 backend and 37 frontend tests, and a large share of
 # them exist because something failed *silently* during the build (see docs/ISSUES.md: I-012's
 # mis-parsed rows with a clean `_rescued_data`, I-034's single-character chunks, I-030's
 # make/model vocabulary mismatch that has now reappeared three times). A suite that only runs
@@ -18,6 +18,15 @@
 #     what makes this workflow safe to run on every push.
 #   - It does not deploy. Deployment stays a deliberate manual act
 #     (`databricks apps deploy`), because deploying restarts the app under whoever is using it.
+#   - **It does not run `databricks bundle validate`.** Measured 2026-09-10: with an empty
+#     config file and no environment credentials, `bundle validate --strict -t prod` fails on
+#     `default auth: cannot configure default credentials` before checking anything — pinning
+#     `run_as` and writing `root_path` out literally is not enough to make it offline. Adding
+#     it would mean putting a token for a shared bootcamp metastore into GitHub secrets, which
+#     is the decision above, reversed. Instead `tests/test_bundle_resources.py` asserts offline
+#     what actually goes wrong in that YAML: notebook paths that do not exist, job names that
+#     lose the `fleetguard-` prefix, an App that stops declaring its OBO scopes. It runs in
+#     `pytest` below, with no credentials.
 #   - It does not run `ruff format --check`. Three notebook-style files under src/ are not
 #     format-clean today, and ruff also rewrites fenced code samples inside docs/ISSUES.md,
 #     where wrong-then-corrected snippets are preserved on purpose. Enforcing format would mean
@@ -26,6 +35,17 @@
 # Versions mirror the local environment these checks were verified green on, so a first run is
 # green for real reasons rather than by luck. Worth adding later: a second Python version
 # approximating the Databricks Apps runtime, which is older than the 3.14 used for development.
+#
+# ACTION VERSIONS ARE ABOUT THE RUNNER'S NODE, NOT THE FEATURES USED. GitHub runs each
+# JavaScript action on the Node version its `action.yml` declares, and Node 20 is deprecated —
+# `checkout@v4`, `setup-python@v5` and `setup-node@v4` all declared `using: node20` and were
+# being force-run on Node 24 with a warning on every job. Bumped 2026-09-10 to the majors that
+# declare `node24` natively. Checked before bumping rather than assuming, because a major bump
+# is exactly where a silent behaviour change hides: `setup-python@v7` removed the `pip-install`
+# input, `setup-node@v7` removed a dummy `NODE_AUTH_TOKEN` export, and `checkout@v7` blocks
+# checking out fork PRs — none of which this workflow touches (it uses `pull_request`, not
+# `pull_request_target`). The inputs used here — `python-version`, `node-version`, `cache`,
+# `cache-dependency-path` — are unchanged across all three.
 
 name: CI
 
@@ -47,9 +67,9 @@ jobs:
     name: backend — ruff + pytest
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
           cache: pip
@@ -65,7 +85,7 @@ jobs:
       - name: Lint
         run: ruff check src tests app/backend scripts
 
-      # Integration tests self-skip without --run-integration; expect "N passed, 21 skipped".
+      # Integration tests self-skip without --run-integration; expect "N passed, 24 skipped".
       - name: Test
         run: pytest
 
@@ -76,9 +96,9 @@ jobs:
       run:
         working-directory: app/frontend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "26"
           cache: npm

@@ -1,0 +1,19 @@
+resources:
+  jobs:
+    train_model_b:
+      name: fleetguard-train-model-b
+      tasks:
+        - task_key: train
+          disabled: false
+          email_notifications: {}
+          notebook_task:
+            notebook_path: ../src/fleet/06_train_model_b.py
+            source: WORKSPACE
+          run_if: ALL_SUCCESS
+          timeout_seconds: 3600
+      email_notifications: {}
+      max_concurrent_runs: 1
+      queue:
+        enabled: true
+      timeout_seconds: 0
+      webhook_notifications: {}

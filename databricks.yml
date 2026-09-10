@@ -1,0 +1,101 @@
+# FleetGuard — Declarative Automation Bundle root.
+#
+# WHY THIS EXISTS. Until this file, every workspace object in the project was created by hand:
+# `jobs create` / `jobs reset` / `jobs update --json` for 24 jobs, the UI for the pipeline,
+# `databricks sync` + `apps deploy` for the App, a raw `POST /api/2.0/sql/statements` for the
+# metric view. §8.5 and §9 of the proposal both claimed a bundle was the deployment path; it
+# had never existed on any branch. Three things that cost real time were direct consequences:
+#
+#   1. The workspace notebooks the jobs run were kept in sync by hand, and drifted. Measured
+#      2026-09-10: `src/agent/14_fleetguard_agent.py` was 8 lines behind `main` *inside the
+#      agent's own system prompt*, and `src/ingest/01_download_flat_files.py` 4 lines behind.
+#      Nothing detected it. With the jobs pointing at bundle-uploaded source, that class of
+#      drift is structurally impossible for every job the bundle owns. It is NOT eliminated
+#      globally: the seven excluded jobs still run hand-synced workspace copies, and
+#      `create-remaining-tables` was found 16 lines behind `main` for exactly that reason
+#      and pulled into the bundle on 2026-09-11 (I-098). If a job matters, bundle it.
+#   2. The App's OBO scopes existed only as a CLI invocation quoted in a comment (I-083).
+#      A rebuild from source produced an app that 403'd on every Lakebase route. They are now
+#      declared in `resources/fleetguard_console.app.yml`.
+#   3. `fleetguard-cdf-to-gold`'s `table_update` trigger and `fleetguard-load-signals`'
+#      serverless `environments` block lived only in the live workspace (I-081, I-045).
+#
+# WHAT THE BUNDLE DOES NOT COVER — four documented exceptions, so nobody reads a green
+# `bundle deploy` as "the environment is complete":
+#   - **Lakebase CDF** is UI-only and is not a bundle resource (I-017). Manual runbook step.
+#   - **The AI Search endpoint and index** are built by `src/setup/00_create_all_objects.py`.
+#   - **The agent serving endpoint** is built by `agents.deploy()` in `src/agent/15_deploy_agent.py`.
+#   - **The `evidence_metrics` metric view** went in via the SQL Statement REST API (I-065).
+#
+# SAFETY RULE FOR THIS BUNDLE. Never run `databricks bundle generate` with its default
+# `--source-dir`: it downloads the *workspace* copy of every notebook alongside the YAML and
+# would overwrite `src/` with exactly the stale content this bundle exists to eliminate.
+# Always redirect `--source-dir` to a scratch path and keep only the generated YAML.
+
+bundle:
+  name: fleetguard
+
+include:
+  - resources/*.yml
+
+# `bundle deploy` uploads the whole bundle root (minus .gitignore) to the target's
+# `root_path`. Only three trees are actually needed there: `src/` (the job notebooks and the
+# pipeline's SQL), `app/backend/` (the App's `source_code_path`) and `dashboards/` (the
+# dashboard's `file_path`). Everything below is repo furniture that would otherwise be copied
+# into the workspace on every deploy for no reason — `app/frontend/` in particular, whose only
+# deployable output is the already-committed bundle under `app/backend/fleetguard_api/console/`.
+sync:
+  exclude:
+    - docs/
+    - tests/
+    - scripts/
+    - app/frontend/
+    - .github/
+    - .claude/
+    - .idea/
+
+variables:
+  catalog:
+    description: Unity Catalog catalog holding every FleetGuard object.
+    default: bootcamp_students
+  schema:
+    description: >-
+      The project's one schema. Catalog creation is not available on this workspace, so
+      medallion layers are table-name prefixes (bronze_/silver_/gold_), not sibling schemas.
+    default: fleetguard
+  warehouse_id:
+    description: Serverless Starter Warehouse — the dashboard's warehouse.
+    default: b15d3d6f837ba428
+
+# NO `lookup:` VARIABLES, AND `run_as` IS PINNED RATHER THAN DERIVED FROM
+# ${workspace.current_user}. Both are still worth keeping — fewer moving parts, one obvious
+# owner — but the reason first written here was wrong and is corrected rather than deleted:
+# it claimed they would let `bundle validate` run without contacting the workspace. **They do
+# not.** Measured with an empty config file, validate fails on `default auth: cannot configure
+# default credentials` before checking anything. CI therefore keeps no credentials and the
+# offline assertions live in `tests/test_bundle_resources.py` instead.
+
+targets:
+  # ONE TARGET, AND IT IS `production`. There is deliberately no `dev` target.
+  #
+  # `mode: development` prefixes every resource name with `[dev <user>]`. This is a SHARED
+  # bootcamp metastore: `jobs list` returns ~300 jobs belonging to ~296 other students, and
+  # several of theirs already read like ours (`Lakebase-CDF`, `AgentTraceOps_Pipeline`).
+  # Adding a parallel set of `[dev abhisek] fleetguard-*` jobs to that namespace would make
+  # the one thing that keeps this safe — "scope every destructive operation to the
+  # `fleetguard-` prefix" — ambiguous about which of two jobs it means.
+  #
+  # `mode: production` also leaves schedules and triggers exactly as declared.
+  # `mode: development` PAUSES them, which would silently stop `fleetguard-cdf-to-gold`'s
+  # `table_update` trigger — the thing the sub-5-minute Postgres→gold path depends on.
+  prod:
+    default: true
+    mode: production
+    workspace:
+      host: https://dbc-7b106152-caf3.cloud.databricks.com
+      # Written out literally rather than as ${workspace.current_user.userName}. Production
+      # mode requires an explicit root_path so two people cannot deploy competing copies, and
+      # a literal removes one more reason for `bundle validate` to have to call the workspace.
+      root_path: /Workspace/Users/abhisek.bastia17@gmail.com/.bundle/${bundle.name}/${bundle.target}
+    run_as:
+      user_name: abhisek.bastia17@gmail.com

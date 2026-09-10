@@ -1,0 +1,48 @@
+# Postgres -> gold facts, on a `table_update` trigger. This is the tail of §8.3's velocity
+# claim, and its two intervals are NOT tuning choices: `min_time_between_triggers_seconds` and
+# `wait_after_last_change_seconds` both sit on a hard **60 s platform floor** — `jobs create`
+# rejects smaller values outright ("must be greater than 60 seconds"). The 15 s / 5 s pair that
+# sat in CLAUDE.md as project spec for a week could never have been created (I-081).
+#
+# Consequences worth keeping straight, because they were conflated once already:
+#   - A `table_update` trigger therefore CANNOT deliver a sub-minute Postgres->gold path.
+#     Measured end to end, twice: **155 s and 269 s** — state it as roughly 2.5-4.5 minutes,
+#     never as one averaged number.
+#   - The sub-minute figure (7.1-15.6 s, I-046) belongs to **CDF replication only**,
+#     Postgres -> `bootcamp_cdc`. Never quote it for the whole chain.
+#
+# `ANY_UPDATED`, not `ALL_UPDATED`: `fleetguard_defect_signal` is also written by the batch
+# signals loader with no matching `fleetguard_agent_action` write, so `ALL_UPDATED` would wait
+# for a change that never comes.
+#
+# UNPAUSED on purpose. `mode: development` would pause it silently — one of the reasons this
+# bundle has no dev target.
+
+resources:
+  jobs:
+    cdf_to_gold:
+      name: fleetguard-cdf-to-gold
+      tasks:
+        - task_key: derive_facts
+          disabled: false
+          email_notifications: {}
+          notebook_task:
+            notebook_path: ../src/lakebase/21_cdf_to_gold_facts.py
+            source: WORKSPACE
+          run_if: ALL_SUCCESS
+          timeout_seconds: 3600
+      email_notifications: {}
+      max_concurrent_runs: 1
+      queue:
+        enabled: true
+      timeout_seconds: 0
+      trigger:
+        pause_status: UNPAUSED
+        table_update:
+          condition: ANY_UPDATED
+          min_time_between_triggers_seconds: 60
+          table_names:
+            - bootcamp_students.bootcamp_cdc.lb_fleetguard_agent_action_history
+            - bootcamp_students.bootcamp_cdc.lb_fleetguard_defect_signal_history
+          wait_after_last_change_seconds: 61
+      webhook_notifications: {}

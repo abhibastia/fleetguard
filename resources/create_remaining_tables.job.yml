@@ -1,0 +1,41 @@
+# Creates the other ten Lakebase tables (fleetguard_depot was proved first, I-038).
+#
+# ADDED TO THE BUNDLE 2026-09-11, correcting a scope error. The original migration excluded
+# this job as "a patch for create-all-objects". It is not — it is squarely on the
+# rebuild-from-empty path the bundle's own rule says to cover, and the exclusion left it as the
+# single job still running the hand-synced workspace copy. That copy was **16 lines behind
+# `main`** and missing `os.environ.setdefault("PSYCOPG_IMPL", "python")`, whose own comment
+# reads: "This job's environment is still cached from before that release, so it works today —
+# but a rebuild would break it silently" (I-045). Exactly the drift the bundle exists to end,
+# surviving inside the change that claimed to end it. Found by review (I-098).
+#
+# The `environments` block is load-bearing: for serverless jobs the dependency list lives in
+# the job, not the notebook.
+
+resources:
+  jobs:
+    create_remaining_tables:
+      name: fleetguard-create-remaining-tables
+      tasks:
+        - task_key: create_tables
+          disabled: false
+          email_notifications: {}
+          environment_key: fgenv
+          notebook_task:
+            notebook_path: ../src/lakebase/08_create_remaining_tables.py
+            source: WORKSPACE
+          run_if: ALL_SUCCESS
+          timeout_seconds: 0
+      email_notifications: {}
+      environments:
+        - environment_key: fgenv
+          spec:
+            client: "3"
+            dependencies:
+              - psycopg[binary]
+              - databricks-sdk>=0.89.0
+      max_concurrent_runs: 1
+      queue:
+        enabled: true
+      timeout_seconds: 0
+      webhook_notifications: {}

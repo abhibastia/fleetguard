@@ -168,7 +168,12 @@ post-routing invariants — if one fires, the split logic is broken, not the sou
   `genie` and `files` are the real names.
 - **Scopes are NOT declared in `app.yaml` — that was wrong (I-083, deployed 2026-09-08).**
   A `user_authorization: scopes:` block in `app.yaml` is silently ignored; the app keeps
-  default scopes only. They live on the **app resource**:
+  default scopes only. They live on the **app resource**, and since 2026-09-10 this project
+  declares them **as code** in `resources/fleetguard_console.app.yml` (`user_api_scopes:` is a
+  real settable property of the DAB `apps` resource on CLI v1.12.1 — confirmed against
+  `databricks bundle schema`, which also exposes `permissions`, `resources`, `config`,
+  `lifecycle`, `compute_size`). Every `bundle deploy` re-asserts them. The one-off CLI form
+  still works and is what the bundle replaced:
   `databricks apps update <name> --json '{"name":"<name>","user_api_scopes":["postgres","sql","model-serving"]}'`
   (or the UI). Verify with `apps get` → `user_api_scopes` / `effective_user_api_scopes`.
 - **`iam.access-control:read` and `iam.current-user:read` exist but are NOT assignable.**
@@ -371,6 +376,54 @@ need this, platform handles it):**
 - `POST /api/2.0/database/credentials` — legacy/retired Provisioned-tier path, do
   not use.
 
+**Declarative Automation Bundle — built and deployed 2026-09-10. `databricks.yml` +
+`resources/` are now the deployment mechanism.** What it owns: the App
+(`fleetguard-console`), the pipeline (`fleetguard-bronze-silver`), the AI/BI dashboard, and
+**17 of the 24 `fleetguard-*` jobs** — every job that is live or needed to rebuild from empty.
+The other 8 are deliberately excluded as dead experiments (`lead-time-backtest-v2`,
+`semantic-subdivision` and `embed-backtest-complaints` — the arm I-049 rejected —
+`hybrid-query-test`, `measure-cdf-latency`, `inspect-eval`, `build-backtest-scope`).
+**`create-remaining-tables` was wrongly excluded and was added 2026-09-11** — it creates the
+other ten Lakebase tables, so it is on the rebuild path, and the exclusion left it as the one
+job still running a hand-synced copy, 16 lines behind `main` and missing the `PSYCOPG_IMPL`
+guard (I-098). Bundle YAML is a claim you then have to keep true; rejected
+experiments belong in `src/` and `docs/ISSUES.md`.
+- **All 17 jobs + the pipeline now run bundle-uploaded source** under
+  `/Workspace/Users/abhisek.bastia17@gmail.com/.bundle/fleetguard/prod/files/`. The old
+  hand-synced `/Workspace/Users/…/fleetguard/` tree is **dead** — do not import into it, and
+  do not read it as current. It is what drifted (I-096).
+- **One `prod` target, `mode: production`, and no `dev` target — on purpose.**
+  `mode: development` name-prefixes every resource (`[dev abhisek] fleetguard-…`) into a
+  namespace already holding ~300 jobs from ~296 other students, which breaks the
+  "scope every destructive operation to the `fleetguard-` prefix" rule. It also **pauses
+  schedules and triggers**, which would silently stop `fleetguard-cdf-to-gold`.
+- **`bundle destroy` would delete the demo.** `lifecycle.prevent_destroy: true` is set on the
+  App. Never run it against `prod`.
+- **`bundle deploy` does NOT deploy the App** (I-097). It uploads source and updates the app
+  resource, then reports `Deployment complete!` — but creates no app deployment, and does not
+  update `default_source_code_path`, so a plain `apps start` re-deploys the *old* path.
+  `databricks bundle run fleetguard_console` is the step that ships the code.
+- **Dashboards: always pin `parent_path`.** Moving a dashboard is a **recreate** — new
+  `dashboard_id`, new permanent URL, old one dead. The first deploy refused to proceed for
+  exactly this reason; the guard worked, do not `--auto-approve` past it.
+- **`mode: production` sets `development: false` on pipelines.** The live pipeline had been
+  `development: true`; after the first bundle deploy it is unset. Serverless + triggered, so
+  this changes cluster reuse and retries, not results.
+- **`bundle validate` cannot run without credentials** (measured with an empty config file:
+  `default auth: cannot configure default credentials`). Pinning `run_as` and writing
+  `root_path` literally is not enough. CI therefore still has no credentials; the offline
+  checks live in `tests/test_bundle_resources.py` instead. `bundle schema` *does* run offline.
+- **`bundle generate` writes source files, not just YAML.** `generate job` and `generate app`
+  download the **workspace** copy of every notebook into `--source-dir` (default `src`), which
+  on this repo would overwrite `src/` with exactly the stale content the bundle exists to
+  eliminate. Always redirect `--source-dir` to a scratch path *inside the repo* (it must be
+  relative to the bundle root — an absolute path outside errors with
+  `Rel: can't make … relative to resources`), keep only the YAML, then delete the scratch.
+- Lakebase CDF is still **not** a bundle resource (I-017) — nor are the AI Search
+  endpoint/index, the agent serving endpoint, or the `evidence_metrics` metric view. §8.5's
+  "a single `bundle deploy` produces a consistent environment" has **four** documented
+  exceptions, not one.
+
 ## Environment quirks
 
 - **Free-edition workspace catalog creation via CLI is blocked** for managed/default
@@ -409,6 +462,21 @@ need this, platform handles it):**
 
 ## Working conventions for this project
 
+- **Deployment goes through the bundle. Do not create or edit workspace objects by hand.**
+  Since 2026-09-10 the App, the pipeline, the dashboard and 17 jobs are bound DAB resources
+  (see the Declarative Automation Bundle block above). A change made with `jobs reset`,
+  `jobs update --json`, `apps update` or the UI is **silently reverted by the next
+  `bundle deploy`**, which re-asserts every bound resource from YAML on every run. Change
+  `resources/*.yml` and deploy:
+  ```bash
+  databricks bundle validate --strict -t prod --profile abhi
+  databricks bundle summary -t prod --profile abhi   # nothing should be "to be created"
+  databricks bundle deploy -t prod --profile abhi
+  ```
+  Adding a *new* workspace object that should be managed: create the resource file, then
+  `databricks bundle deployment bind <key> <id>` — and run `jobs get <id>` first to confirm
+  `creator_user_name` is ours. The jobs namespace is flat across ~296 students; a mis-typed
+  ID adopts someone else's job and the next deploy overwrites it.
 - **Record every Databricks platform change as a runbook — both the CLI/code path AND the
   UI path.** This project is a learning exercise as much as a build. Whenever something is
   created, configured, or changed in the workspace (a job, an endpoint, a serving

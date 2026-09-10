@@ -1,0 +1,40 @@
+# AI/BI (Lakeview) dashboard — the read-only evidence surface, 5 pages / 12 datasets.
+#
+# `file_path` points at `dashboards/fleetguard_overview.lvdash.json`, which was **replaced
+# with a fresh export of the live dashboard** when this resource was created (2026-09-10) and
+# renamed from `.json` to `.lvdash.json` so the CLI recognises it. The previous committed copy
+# and the live dashboard were semantically identical — 5 pages, 12 datasets, 15 widgets on the
+# operations page, same positions, same SQL. The only differences were serialisation: the live
+# form splits long text into per-line arrays and carries `catalog`/`schema` on each dataset.
+# Using the exported form means a round-trip through `bundle generate dashboard` is a no-op
+# instead of a spurious diff.
+#
+# TO EDIT: change it in the UI, then re-export with
+#   databricks bundle generate dashboard --resource fleetguard_overview --force --profile abhi
+# (add `--watch` to keep the local file in sync while editing). Editing the JSON by hand works
+# but the UI is the tool this file is generated from.
+#
+# `dataset_catalog` / `dataset_schema` are set from the bundle variables rather than left to
+# the values baked into each of the 12 datasets, so the catalog/schema is stated in exactly one
+# place. Both parameters need CLI 0.281.0+; this bundle was built on 1.12.1.
+
+resources:
+  dashboards:
+    fleetguard_overview:
+      display_name: "FleetGuard — Fleet & Recall Overview"
+      # `parent_path` IS LOAD-BEARING — do not delete it as redundant. Without it the bundle
+      # places the dashboard under its own root_path, and moving a dashboard is a **recreate**,
+      # not an update: a new `dashboard_id` and a new permanent URL, with the old one dead.
+      # The first `bundle deploy` refused to proceed for exactly this reason. The published URL
+      # (`/dashboardsv3/01f1a7257e801a2ebb71bdc18fc2113a/published`) appears in STATUS and is
+      # part of the evidence surface, so the dashboard stays where it already lives.
+      parent_path: /Users/abhisek.bastia17@gmail.com/dashboards
+      file_path: ../dashboards/fleetguard_overview.lvdash.json
+      warehouse_id: ${var.warehouse_id}
+      dataset_catalog: ${var.catalog}
+      dataset_schema: ${var.schema}
+      lifecycle:
+        # `parent_path` above stops a *move* from recreating it. This stops a delete. The
+        # published URL is quoted in README and STATUS; a recreated dashboard gets a new
+        # dashboard_id and the old link dies.
+        prevent_destroy: true

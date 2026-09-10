@@ -1,0 +1,19 @@
+resources:
+  jobs:
+    build_fleet_registry:
+      name: fleetguard-build-fleet-registry
+      tasks:
+        - task_key: fleet
+          disabled: false
+          email_notifications: {}
+          notebook_task:
+            notebook_path: ../src/fleet/04_build_fleet_registry.py
+            source: WORKSPACE
+          run_if: ALL_SUCCESS
+          timeout_seconds: 0
+      email_notifications: {}
+      max_concurrent_runs: 1
+      queue:
+        enabled: true
+      timeout_seconds: 0
+      webhook_notifications: {}

@@ -792,6 +792,79 @@ database.
 
 ## 9. Operations
 
+### 9.1 Deployment — the bundle, and the four things it does not cover
+
+Since **2026-09-10** the deployable surface is a **Declarative Automation Bundle**:
+`databricks.yml` plus `resources/`. Before that, every workspace object had been created by
+hand (`jobs create`/`reset`/`update --json`, the UI, `databricks sync` + `apps deploy`, a raw
+SQL-statement REST call), and the proposal's §8.5/§9 claim that a bundle was the deployment
+path had never been true.
+
+**What the bundle owns**, all *bound* to the objects that already existed, so deploying
+updates them in place and creates nothing:
+
+| Resource | Key | Bound to |
+|---|---|---|
+| Databricks App | `fleetguard_console` | `fleetguard-console` |
+| Pipeline | `bronze_silver` | `937b9ce4-4fbe-4493-96ad-b76317bf58db` |
+| AI/BI dashboard | `fleetguard_overview` | `01f1a7257e801a2ebb71bdc18fc2113a` |
+| Jobs | 17 keys | the 17 live / rebuild-from-empty `fleetguard-*` jobs |
+
+The other **7** `fleetguard-*` jobs are excluded on purpose — `lead-time-backtest-v2`,
+`semantic-subdivision` and `embed-backtest-complaints` (the semantic arm §6 measured and
+rejected), `hybrid-query-test`, `measure-cdf-latency`,
+`inspect-eval`, `build-backtest-scope`. They are the record of what was tried, not part of the
+deployable, and YAML for them would be a claim to keep true forever.
+
+**What changed operationally.** Jobs used to run notebooks in a hand-synced workspace tree;
+they now run bundle-uploaded source under
+`/Workspace/Users/…/.bundle/fleetguard/prod/files/src/`. The manual
+`databricks workspace import --overwrite` step is gone, and with it the drift that had left
+**8 of 16 job notebooks behind `main`** — including the pre-I-079 fleet match in
+`10_emerging_signals.py` and I-094's stale-model default in `16_evaluate_agent.py` (I-096).
+**That second one was only half fixed by the migration** — the job's own
+`base_parameters` re-pinned `model_version: "3"`, reproducing I-094 one layer up, and the
+deploy job was pinned to v1 while v6 served. Both found by review and removed 2026-09-11
+(I-098); `tests/test_bundle_resources.py` now fails on any such pin.
+The App's OBO scopes, previously a CLI invocation quoted only in a comment, are declared in
+`resources/fleetguard_console.app.yml` and re-asserted on every deploy (I-083).
+
+**Release:**
+
+```bash
+databricks bundle deploy -t prod --profile abhi
+databricks bundle run fleetguard_console -t prod --profile abhi   # the App only
+```
+
+`bundle deploy` alone does **not** deploy the App — it uploads source, updates the app
+resource, prints `Deployment complete!`, and creates no app deployment; a plain `apps start`
+then re-deploys the *old* source path. `bundle run <app_key>` is the step that ships the code
+and repoints `default_source_code_path` (I-097).
+
+**Two guardrails, both load-bearing.** `lifecycle.prevent_destroy: true` on the App, because
+`bundle destroy` would take the demo with it. `parent_path` pinned on the dashboard, because
+moving a dashboard is a *recreate* — new id, new permanent URL — and the first deploy refused
+to proceed until it was set.
+
+**Editing a bound object by hand is silently undone** by the next deploy, which re-asserts
+every bound resource from YAML.
+
+**§8.5's "a single `bundle deploy` produces a consistent environment" has four exceptions**,
+and they should be stated rather than the claim repeated: **Lakebase CDF** (UI-only, not a
+bundle resource — I-017), the **AI Search endpoint and index** (created by
+`00_create_all_objects.py`, kept manual because they are the only recurring cost), the
+**agent serving endpoint** (`agents.deploy()` in `src/agent/15_deploy_agent.py`), and the
+**`evidence_metrics` metric view** (SQL Statement REST API, I-065).
+
+**CI does not deploy and holds no credentials.** `bundle validate` cannot run offline —
+measured with an empty config file, it fails on `default auth: cannot configure default
+credentials` before checking anything, even with `run_as` pinned and `root_path` literal. The
+offline checks that would otherwise be missing live in `tests/test_bundle_resources.py`:
+notebook paths that resolve, job names that keep the `fleetguard-` prefix, an App that still
+declares `postgres`.
+
+### 9.2 Cost, rebuild, verification
+
 **Cost.** `fleetguard-vs` (AI Search, STANDARD, 1 unit) at **~$6.72/day** is the only
 recurring charge. Everything else is manual-trigger. Billing stops 24 h after the last index
 is deleted. Embedding was ~$5 one-off.
@@ -805,6 +878,7 @@ rebuild that looks successful and isn't.
 **Manual steps no script covers:** Lakebase CDF enablement (UI-only), and AI Search
 endpoint/index creation (kept manual because it is the only recurring cost — it should never
 be resurrected by accident). An index rebuild is ~7 h; never attempt one inside a demo window.
+These are two of the four exceptions in §9.1; the bundle does not close them.
 
 **Verification discipline.** Never infer success from a CLI exit code. Three variants have
 been observed in one day: a watcher exiting `0` at 51% complete, `jobs run-now` returning `0`
@@ -819,9 +893,9 @@ Three layers, deliberately separate:
 
 | Layer | Coverage | Run |
 |---|---|---|
-| Unit | 276 tests, no Databricks | `pytest` |
+| Unit | 301 tests, no Databricks — includes 12 that assert the **bundle** YAML offline | `pytest` |
 | Pipeline expectations | In-pipeline, `_dq_failures` quarantine split | With the pipeline |
-| Data quality + live scoping | 21 tests against the live workspace | `pytest -m integration --run-integration` |
+| Data quality + live scoping | 24 tests against the live workspace | `pytest -m integration --run-integration` |
 
 Logic that has been wrong once lives in `src/fleetguard/` (`vin.py`, `chunking.py`,
 `naming.py`) so it is testable off-platform, with each past bug encoded as a named

@@ -27,9 +27,33 @@
 CATALOG, SCHEMA = "bootcamp_students", "fleetguard"
 MODEL_NAME = f"{CATALOG}.{SCHEMA}.fleetguard_agent"
 
-dbutils.widgets.text("model_version", "1", "Registered model version")
-MODEL_VERSION = dbutils.widgets.get("model_version")
-print(f"deploying {MODEL_NAME} version {MODEL_VERSION}")
+# Empty default means "latest", resolved below — the same treatment I-094 gave the evaluation
+# notebook, and for a worse failure. This defaulted to the literal "1" while **v6** was serving,
+# so the obvious response to a stopped endpoint (run the deploy job) would have silently rolled
+# the live agent back five versions: no declared table resource (I-050), no match tiers (I-075),
+# no fleet-vocabulary tool (I-076), no prompt split (I-077). The endpoint comes up green and
+# answers plausibly with wrong numbers, which is the failure mode this project keeps meeting.
+# Found 2026-09-11 by review (I-098), after the same pin turned up in the bundle's job config.
+dbutils.widgets.text("model_version", "", "Registered model version (blank = latest)")
+_requested = dbutils.widgets.get("model_version").strip()
+
+if _requested:
+    MODEL_VERSION = _requested
+    _source = "pinned via widget"
+else:
+    from mlflow.tracking import MlflowClient
+
+    _versions = MlflowClient(registry_uri="databricks-uc").search_model_versions(
+        f"name='{MODEL_NAME}'"
+    )
+    if not _versions:
+        raise RuntimeError(f"no registered versions for {MODEL_NAME} — nothing to deploy")
+    MODEL_VERSION = str(max(int(v.version) for v in _versions))
+    _source = f"latest of {len(_versions)} registered"
+
+# Printed loudly and unconditionally: a deploy that does not say which version it shipped is
+# exactly how a five-version rollback goes unnoticed.
+print(f"deploying {MODEL_NAME} version {MODEL_VERSION}  ({_source})")
 
 # COMMAND ----------
 

@@ -1,0 +1,19 @@
+resources:
+  jobs:
+    poll_recalls_api:
+      name: fleetguard-poll-recalls-api
+      tasks:
+        - task_key: poll
+          disabled: false
+          email_notifications: {}
+          notebook_task:
+            notebook_path: ../src/ingest/05_poll_recalls_api.py
+            source: WORKSPACE
+          run_if: ALL_SUCCESS
+          timeout_seconds: 0
+      email_notifications: {}
+      max_concurrent_runs: 1
+      queue:
+        enabled: true
+      timeout_seconds: 0
+      webhook_notifications: {}

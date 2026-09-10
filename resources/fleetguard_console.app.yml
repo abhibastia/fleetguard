@@ -1,0 +1,72 @@
+# Databricks App: the FleetGuard operations console.
+#
+# THIS FILE EXISTS TO KILL I-083. The App's OBO scopes are the single most expensive piece of
+# configuration in the project — a `user_authorization: scopes:` block in `app/backend/app.yaml`
+# is **silently ignored**, the app deploys clean, and every Lakebase route returns
+# `403 Invalid scope, required scopes: postgres`. The working fix was a CLI invocation
+# (`databricks apps update --json '{"user_api_scopes":[...]}'`) that existed nowhere in the
+# repo, only quoted inside a comment. A rebuild from source produced a broken app. It is now
+# declared, version-controlled, and re-asserted on every `bundle deploy`.
+#
+#   postgres       -> generate_database_credential + get_endpoint (every Lakebase read/write)
+#   sql            -> SQL warehouse, for the routes that query UC rather than Postgres
+#   model-serving  -> POST /serving-endpoints/.../invocations, from the chat panel
+#
+# TWO THINGS THIS FILE STILL CANNOT DO, both from I-086 — declaring the scopes is necessary
+# and not sufficient:
+#   1. **The app must be restarted after a scope change.** Granted-but-not-restarted returns
+#      the identical 403 as never-granted. There is no signal distinguishing them.
+#   2. **Each user must consent, and consent is sticky.** It is stored per (user, app) and does
+#      NOT widen when this list widens. Anyone who opened the app before a scope was added
+#      keeps a defaults-only grant forever, through restarts and re-logins. Fix is
+#      self-service: `DELETE /api/2.0/oauth-app-integrations/<oauth2_app_client_id>/user-consent/me`
+#      then reopen in an INCOGNITO window (revocation does not invalidate tokens already
+#      issued, ~1 h). This app's client id is ed81b232-1eff-44ee-a422-ac522cf38de9.
+#
+# NO `config:` BLOCK, DELIBERATELY. The bundle *can* carry `command` and `env`, and doing so
+# overrides `app/backend/app.yaml` — which holds ~90 lines of prose explaining why each value
+# is what it is (the auth-mode trust model, what the approver list costs per approval, the
+# consent trap above). Duplicating those five env vars here would create two sources of truth
+# for runtime config with no warning when they disagree. **The bundle owns identity, scopes and
+# permissions; `app.yaml` owns runtime configuration.** Do not "helpfully" merge them.
+#
+# NO `resources:` BLOCK EITHER, and that is a design claim, not an omission. The App holds no
+# privileges of its own: `db.py` mints its Lakebase credential from the *caller's* forwarded
+# token and `chat.py` calls the serving endpoint with the caller's token, so the app's service
+# principal needs no `database` or `serving-endpoint` resource. Every read and write runs as
+# the signed-in human and Postgres RLS applies to them exactly as it does locally.
+
+resources:
+  apps:
+    fleetguard_console:
+      name: fleetguard-console
+      description: FleetGuard operations console — FastAPI serving /api/* and the built React SPA from one process.
+      # `app/backend/` is the deploy root so `fleetguard_api` is importable without `--app-dir`.
+      # The React console under `fleetguard_api/console/` is COMMITTED, not built here: the Apps
+      # runtime has no Node. Re-run `./scripts/build_console.sh` after any change under
+      # `app/frontend/`, or this ships stale UI while every test still passes.
+      source_code_path: ../app/backend
+
+      user_api_scopes:
+        - postgres
+        - sql
+        - model-serving
+
+      lifecycle:
+        # `bundle destroy` would take the demo with it. The App is the primary demoable
+        # workflow and its URL is published in README and DEMO.
+        prevent_destroy: true
+
+      # WHO MAY OPEN AND START THE APP. Distinct from who may APPROVE — that is
+      # `FLEETGUARD_APPROVERS` in app.yaml, enforced in application logic, and a workspace
+      # admin does not bypass it. These four grants are the live ACL; all three judges were
+      # raised to CAN_MANAGE on 2026-09-09 so none of them waits on the owner to start the app.
+      permissions:
+        - level: CAN_MANAGE
+          user_name: abhisek.bastia17@gmail.com
+        - level: CAN_MANAGE
+          user_name: raghavendra.yama@gmail.com
+        - level: CAN_MANAGE
+          user_name: sangwanrahul@icloud.com
+        - level: CAN_MANAGE
+          user_name: zach@zachwilson.tech

@@ -1,0 +1,19 @@
+resources:
+  jobs:
+    ingest_flat_files:
+      name: fleetguard-ingest-flat-files
+      tasks:
+        - task_key: download_flat_files
+          disabled: false
+          email_notifications: {}
+          notebook_task:
+            notebook_path: ../src/ingest/01_download_flat_files.py
+            source: WORKSPACE
+          run_if: ALL_SUCCESS
+          timeout_seconds: 0
+      email_notifications: {}
+      max_concurrent_runs: 1
+      queue:
+        enabled: true
+      timeout_seconds: 0
+      webhook_notifications: {}
