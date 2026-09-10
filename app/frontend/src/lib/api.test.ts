@@ -54,18 +54,18 @@ describe("request() error handling — every call goes through this, so a bug he
     mockFetchOnce({
       ok: true,
       status: 200,
-      json: () => Promise.resolve({ user_name: "octocat", token_source: "app-login" }),
+      json: () => Promise.resolve({ user_name: "ops@example.com", token_source: "databricks-apps" }),
     });
     await expect(api.me()).resolves.toEqual({
-      user_name: "octocat",
-      token_source: "app-login",
+      user_name: "ops@example.com",
+      token_source: "databricks-apps",
     });
   });
 
   it("always sends credentials — identity travels as a cookie, dropping this silently breaks every authenticated call", async () => {
     const fetchMock = mockFetchOnce({
       ok: true,
-      json: () => Promise.resolve({ user_name: null, token_source: "app-login" }),
+      json: () => Promise.resolve({ user_name: null, token_source: "databricks-apps" }),
     });
     await api.me();
     const [, init] = fetchMock.mock.calls[0];
