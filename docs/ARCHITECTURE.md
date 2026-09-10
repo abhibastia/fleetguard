@@ -818,8 +818,10 @@ deployable, and YAML for them would be a claim to keep true forever.
 
 **What changed operationally.** Jobs used to run notebooks in a hand-synced workspace tree;
 they now run bundle-uploaded source under
-`/Workspace/Users/…/.bundle/fleetguard/prod/files/src/`. The manual
-`databricks workspace import --overwrite` step is gone, and with it the drift that had left
+`/Workspace/Users/…/.bundle/fleetguard/prod/files/src/`. **That old tree was deleted on
+2026-09-11**, after verifying all 40 of its files existed in `git` with nothing unique to the
+workspace; the 7 excluded jobs were its only remaining readers and are now non-runnable by
+design. The manual `databricks workspace import --overwrite` step is gone, and with it the drift that had left
 **8 of 16 job notebooks behind `main`** — including the pre-I-079 fleet match in
 `10_emerging_signals.py` and I-094's stale-model default in `16_evaluate_agent.py` (I-096).
 **That second one was only half fixed by the migration** — the job's own

@@ -390,8 +390,15 @@ guard (I-098). Bundle YAML is a claim you then have to keep true; rejected
 experiments belong in `src/` and `docs/ISSUES.md`.
 - **All 17 jobs + the pipeline now run bundle-uploaded source** under
   `/Workspace/Users/abhisek.bastia17@gmail.com/.bundle/fleetguard/prod/files/`. The old
-  hand-synced `/Workspace/Users/…/fleetguard/` tree is **dead** — do not import into it, and
-  do not read it as current. It is what drifted (I-096).
+  hand-synced `/Workspace/Users/…/fleetguard/` tree was what drifted (I-096) and is now
+  **DELETED** (2026-09-11). Checked before deleting: all 40 files existed in `git`, 26
+  byte-identical and 14 repo-ahead — **nothing was unique to the workspace**. Do not recreate
+  it; `bundle deploy` owns the workspace copy of `src/` now.
+  **Consequence, accepted deliberately: the 7 excluded jobs can no longer run** —
+  `build-backtest-scope`, `embed-backtest-complaints`, `hybrid-query-test`, `inspect-eval`,
+  `lead-time-backtest-v2`, `measure-cdf-latency`, `semantic-subdivision`. They were the only
+  things still reading that tree. Their code is in `src/` and unaffected; to run one again,
+  add it to the bundle rather than re-importing by hand.
 - **One `prod` target, `mode: production`, and no `dev` target — on purpose.**
   `mode: development` name-prefixes every resource (`[dev abhisek] fleetguard-…`) into a
   namespace already holding ~300 jobs from ~296 other students, which breaks the
