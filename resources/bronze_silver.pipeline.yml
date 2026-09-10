@@ -29,6 +29,12 @@ resources:
       schema: ${var.schema}
       serverless: true
       continuous: false
+      lifecycle:
+        # Deleting a UC pipeline drops the streaming tables it owns — bronze (2.24M complaints,
+        # 5.8M TSBs) and silver. A full reload is hours. This guards `bundle destroy` and the
+        # quieter vector: deleting or renaming this file and deploying, which destroys an object
+        # that is still in bundle state but no longer referenced.
+        prevent_destroy: true
       libraries:
         - glob:
             include: ../src/pipelines/**

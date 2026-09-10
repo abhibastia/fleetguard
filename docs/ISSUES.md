@@ -26,6 +26,71 @@ no error and passed the obvious check.
 
 ## Tooling / process
 
+### I-098 — the bundle carried two model-version pins into config, re-creating I-094 one layer up — **SILENT**
+*Date:* 2026-09-11 · *Status:* ✅ resolved
+
+**Found by** a code review of the I-096 migration — the first run of the project's own
+`code-security-reviewer` subagent. Not by a test, and not by the person who wrote the change,
+who had spot-checked 2 of 16 generated job files and assumed the rest were the same shape.
+
+`databricks bundle generate job` copies a job's `base_parameters` verbatim out of the live
+job. Two of the sixteen had one:
+
+| job | pinned | live reality |
+|---|---|---|
+| `fleetguard-evaluate-agent` | `model_version: "3"` | endpoint serves **v6** |
+| `fleetguard-deploy-agent` | `model_version: "1"` | endpoint serves **v6** |
+
+**Why the evaluation pin is worse than the bug it re-created.** I-094's fix works by treating
+a blank widget as "latest". A job `base_parameters` value *sets* that widget — so
+`_requested = "3"`, and the notebook prints `evaluating models:/…/fleetguard_agent/3 (pinned
+via widget)`. The stale-model bug, wearing the fix's own clothing, and now reading as a
+deliberate choice rather than a stale default. Worse still, `docs/ISSUES.md` I-096,
+`docs/ARCHITECTURE.md` §9.1 and `docs/STATUS.md` all *claimed the migration had fixed it*, and
+the job is now `deployment.kind: BUNDLE` / `edit_mode: UI_LOCKED`, so a UI fix is blocked and a
+hand fix is re-asserted away on the next deploy.
+
+**Why the deploy pin is worse again.** `agents.deploy(model_name, model_version="1")` replaces
+the live endpoint. The obvious response to a stopped agent endpoint — which STATUS records
+happening three times — would have rolled the agent back five versions: no declared table
+resource (I-050), no match tiers (I-075), no fleet-vocabulary tool (I-076), no prompt split
+(I-077). It comes up green and answers plausibly with wrong numbers.
+
+**Fix.** Both `base_parameters` blocks removed. `15_deploy_agent.py` got I-094's treatment —
+blank widget resolves the latest registered version, and it prints which version it shipped
+(its own default was also `"1"`, so removing the parameter alone would not have been enough).
+`tests/test_bundle_resources.py::test_no_job_pins_a_model_version_in_base_parameters` fails on
+any future pin.
+
+**Three further findings from the same review, all fixed here:**
+
+1. **The test suite did not guard the invariant it advertised.** A mutation adding an
+   app-owned Lakebase `resources:` block (`CAN_CONNECT_AND_CREATE`), deleting the `sql` and
+   `model-serving` scopes, and removing `prevent_destroy` left **12/12 passing**. That is
+   precisely the change that converts per-user OBO into a service-account model and falsifies
+   ARCHITECTURE §5.1. Now covered by `test_app_holds_no_privileges_of_its_own` and an exact
+   scope-set assertion; re-run after the fix, 4 mutations → 4 failures.
+2. **`create-remaining-tables` was misclassified and excluded.** It creates the other ten
+   Lakebase tables — the rebuild path, not "a patch for create-all-objects". The exclusion
+   left it the one job still running a hand-synced copy: **16 lines behind `main`**, missing
+   `os.environ.setdefault("PSYCOPG_IMPL", "python")`, whose own comment says a rebuild would
+   break silently (I-045). Now bundled and bound. The bundle count is 17, not 16.
+3. **Only the App had `prevent_destroy`.** The pipeline and dashboard did not — and deleting a
+   UC pipeline drops the streaming tables it owns (2.24M complaints, 5.8M TSBs). Both now
+   guarded.
+
+**One claim retired rather than deleted:** `databricks.yml` said pinning `run_as` and avoiding
+`lookup:` variables would let `bundle validate` run credential-free. It does not — the comment
+now records the measurement instead of the hope.
+
+**Still open (recorded, not fixed):** the deployed `state/metadata.json` names commit
+`f2c2c43`, which is `main`'s tip and contains no bundle at all — the deploy ran from an
+uncommitted tree. Drift has moved from "workspace vs repo" to "last deploy vs HEAD", with the
+same absence of any check. And `docs/STATUS.md`'s documented emergency pause for
+`fleetguard-cdf-to-gold` is now silently reverted by the next `bundle deploy`.
+
+---
+
 ### I-097 — `bundle deploy` uploads the App's source and deploys nothing — **SILENT**
 *Date:* 2026-09-10 · *Status:* ✅ resolved
 
@@ -108,11 +173,20 @@ credentials and cannot see the workspace. The `src/` notebooks are lint-exempt b
 identical to a job that runs green — I-091 is the same failure seen from the other end: a read
 shipped ahead of a migration that lived in a notebook nobody had run.
 
-**Fix.** The 16 jobs now run bundle-uploaded source
+**Fix.** The 17 jobs now run bundle-uploaded source
 (`…/.bundle/fleetguard/prod/files/src/…`), so `bundle deploy` and `git push` carry the same
 bytes and the hand-sync step is gone. `tests/test_bundle_resources.py` covers the failure this
 creates in exchange — a `notebook_path` pointing at a file that no longer exists — offline, in
 the existing suite.
+
+> **CORRECTED 2026-09-11 (I-098) — two claims above were wrong when written.**
+> **(a) `16_evaluate_agent.py` was only half fixed by this migration.** Repointing removed the
+> stale notebook, but the job's own `base_parameters` re-pinned `model_version: "3"`, which
+> defeats I-094's blank-means-latest fix from one layer up. Listing it here as fixed was
+> wrong. **(b) It was 16 jobs, not 17, and the shortfall was `create-remaining-tables`** —
+> excluded as "a patch", actually the creator of the other ten Lakebase tables and squarely on
+> the rebuild path. It was left as the one job still on a hand-synced copy, 16 lines behind
+> `main`. Both are now fixed; the counts above are updated.
 
 **Not yet done, and deliberately out of scope for the migration:** the two jobs whose stale
 code was a real bug (`fleetguard-emerging-signals`, `fleetguard-load-signals`) have **not been

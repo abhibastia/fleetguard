@@ -33,3 +33,8 @@ resources:
       warehouse_id: ${var.warehouse_id}
       dataset_catalog: ${var.catalog}
       dataset_schema: ${var.schema}
+      lifecycle:
+        # `parent_path` above stops a *move* from recreating it. This stops a delete. The
+        # published URL is quoted in README and STATUS; a recreated dashboard gets a new
+        # dashboard_id and the old link dies.
+        prevent_destroy: true

@@ -1,3 +1,15 @@
+# Agent evaluation.
+#
+# NO `base_parameters`, AND THAT IS THE POINT. `bundle generate` copied
+# `model_version: "3"` out of the live job, which re-created I-094 one layer up: the notebook
+# fix works by treating a blank widget as "latest", and a base parameter *sets* that widget.
+# So the job scored v3 while **v6** served, printed "pinned via widget", and ran green — the
+# stale-model bug wearing the fix's own clothing. Found by review 2026-09-11 (I-098).
+#
+# Leave this task parameterless so `16_evaluate_agent.py` resolves the latest registered
+# version itself. Pin a version here only to evaluate a specific old artefact deliberately,
+# and remove it again afterwards.
+
 resources:
   jobs:
     evaluate_agent:
@@ -7,8 +19,6 @@ resources:
           disabled: false
           email_notifications: {}
           notebook_task:
-            base_parameters:
-              model_version: "3"
             notebook_path: ../src/agent/16_evaluate_agent.py
             source: WORKSPACE
           run_if: ALL_SUCCESS

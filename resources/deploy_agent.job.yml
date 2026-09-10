@@ -1,3 +1,14 @@
+# Deploy the agent to its serving endpoint.
+#
+# NO `base_parameters` — see `evaluate_agent.job.yml` for the twin of this bug (I-098). This
+# one was worse: the generated config pinned `model_version: "1"` while **v6** was serving, so
+# running the job — the obvious response to a stopped endpoint, which has happened three times —
+# would have rolled the live agent back five versions and come up green.
+#
+# `15_deploy_agent.py` now resolves the latest registered version when the widget is blank and
+# prints which version it shipped. Its old default was also "1", so removing the parameter
+# alone would not have been enough.
+
 resources:
   jobs:
     deploy_agent:
@@ -7,8 +18,6 @@ resources:
           disabled: false
           email_notifications: {}
           notebook_task:
-            base_parameters:
-              model_version: "1"
             notebook_path: ../src/agent/15_deploy_agent.py
             source: WORKSPACE
           run_if: ALL_SUCCESS

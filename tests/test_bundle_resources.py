@@ -84,16 +84,21 @@ def test_some_resource_of_each_kind_is_declared(kind):
 
 def test_every_notebook_path_exists():
     missing = []
+    checked = 0
     for f, key, job in _resources_of("jobs"):
         for task in job.get("tasks", []):
             path = (task.get("notebook_task") or {}).get("notebook_path")
             if path is None:
                 continue
+            checked += 1
             # Paths are relative to the resource file, per DABs path resolution.
             resolved = (f.parent / path).resolve()
             if not resolved.is_file():
                 missing.append(f"{key}/{task['task_key']} -> {path}")
     assert not missing, "job notebooks that do not exist in the repo:\n  " + "\n  ".join(missing)
+    # Without this the test passes when it checked nothing — a glob that stops matching, or a
+    # resource file saved as `.yaml`, would read as success.
+    assert checked >= 17, f"only {checked} notebook paths checked; expected every bundled job"
 
 
 def test_every_job_name_carries_the_fleetguard_prefix():
@@ -131,11 +136,75 @@ def test_app_source_and_scopes():
         console = src / "fleetguard_api" / "console"
         assert (console / "index.html").is_file(), f"app {key} has no built console at {console}"
 
-        scopes = app.get("user_api_scopes") or []
-        assert "postgres" in scopes, (
-            f"app {key} must declare the `postgres` OBO scope — without it every Lakebase "
-            "route returns 403 with no error distinguishing it from a stale consent grant"
+        # The EXACT set, not a membership check. The first version of this test asserted only
+        # `"postgres" in scopes`, which a review mutation walked straight through: deleting
+        # `sql` and `model-serving` left 12/12 passing. Losing `sql` breaks the UC-backed
+        # routes and losing `model-serving` breaks the chat panel — both with the same
+        # undifferentiated 403 that also means "stale consent grant" (I-086), which is the
+        # single most expensive error message in this project.
+        assert set(app.get("user_api_scopes") or []) == {"postgres", "sql", "model-serving"}, (
+            f"app {key} OBO scopes changed: {app.get('user_api_scopes')!r}. "
+            "Change this assertion deliberately, with a reason — do not widen it to a subset."
         )
+
+
+def test_app_holds_no_privileges_of_its_own():
+    """The load-bearing security invariant, and the one a mutation test proved was unguarded.
+
+    `db.py` mints its Lakebase credential from the *caller's* forwarded token and `chat.py`
+    calls the serving endpoint with the caller's token, so the app's service principal needs
+    no `database` or `serving-endpoint` resource. Every read and write runs as the signed-in
+    human, and Postgres RLS applies to them exactly as it does locally — that is what
+    `docs/ARCHITECTURE.md` §5.1 claims.
+
+    An `app.resources:` block attaches a credential to the *app*. The moment one exists, the
+    app can reach Lakebase as itself, every caller collapses into one service principal, and
+    the RLS and ABAC guarantees become false — silently, because the routes keep returning
+    200. A review mutation added exactly this (a `database` resource with
+    `CAN_CONNECT_AND_CREATE`) and the whole suite stayed green.
+    """
+    for _f, key, app in _resources_of("apps"):
+        assert "resources" not in app, (
+            f"app {key} declares an `app.resources:` block, giving the App a credential of its "
+            "own. That converts per-user OBO into a service-account model and falsifies "
+            "ARCHITECTURE §5.1. If this is intentional, §5.1 has to change first."
+        )
+
+
+def test_stateful_resources_are_protected_from_destruction():
+    """`bundle destroy` — and the quieter path of deleting a resource file and deploying —
+    removes bound objects. Deleting the UC pipeline drops the streaming tables it owns
+    (2.24M complaints, 5.8M TSBs); the dashboard comes back with a new id and a dead URL;
+    the App is the primary demoable workflow.
+    """
+    for kind in ("apps", "pipelines", "dashboards"):
+        found = _resources_of(kind)
+        assert found, f"no {kind} declared — this test would otherwise pass vacuously"
+        for _f, key, body in found:
+            assert (body.get("lifecycle") or {}).get("prevent_destroy") is True, (
+                f"{kind}/{key} has no `lifecycle.prevent_destroy: true`"
+            )
+
+
+def test_no_job_pins_a_model_version_in_base_parameters():
+    """Regression guard for I-098.
+
+    `bundle generate` copied `model_version: "3"` into the evaluation job and `"1"` into the
+    deploy job, straight out of the live jobs. A `base_parameters` value *sets* the notebook
+    widget, so it defeats I-094's blank-means-latest fix from one layer up — the evaluation
+    scored a three-version-stale model while v6 served, and running the deploy job would have
+    rolled the live agent back five versions. Both come up green.
+
+    Pinning is legitimate for deliberately re-running an old artefact; it is not something to
+    leave in version-controlled config that is re-asserted on every deploy.
+    """
+    for _f, key, job in _resources_of("jobs"):
+        for task in job.get("tasks", []):
+            params = (task.get("notebook_task") or {}).get("base_parameters") or {}
+            assert "model_version" not in params, (
+                f"job {key} pins model_version={params['model_version']!r} in base_parameters; "
+                "let the notebook resolve the latest registered version instead"
+            )
 
 
 def test_app_does_not_duplicate_app_yaml_runtime_config():

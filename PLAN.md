@@ -302,7 +302,7 @@ plainly in `scoping.py`'s own docstring, not left implicit.
   *(The "Render always-on + pinger" item was dropped when Render stopped being the demo
   surface, and removed here with Render itself on 2026-09-10.)*
 - ✅ **Declarative Automation Bundle, 2026-09-10.** `databricks.yml` + `resources/` now
-  describe the App, the bronze/silver pipeline, the dashboard and 16 of the 24 jobs, all bound
+  describe the App, the bronze/silver pipeline, the dashboard and 17 of the 24 jobs, all bound
   to the existing objects. This closes the §8.5/§9 promise that had been in the proposal since
   the start and was never built — and it found what the gap had cost: **8 of 16 job notebooks
   were running code behind `main`** (I-096), two of them with bugs that had already been fixed

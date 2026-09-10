@@ -10,7 +10,10 @@
 #      2026-09-10: `src/agent/14_fleetguard_agent.py` was 8 lines behind `main` *inside the
 #      agent's own system prompt*, and `src/ingest/01_download_flat_files.py` 4 lines behind.
 #      Nothing detected it. With the jobs pointing at bundle-uploaded source, that class of
-#      drift is structurally impossible rather than merely watched for.
+#      drift is structurally impossible for every job the bundle owns. It is NOT eliminated
+#      globally: the seven excluded jobs still run hand-synced workspace copies, and
+#      `create-remaining-tables` was found 16 lines behind `main` for exactly that reason
+#      and pulled into the bundle on 2026-09-11 (I-098). If a job matters, bundle it.
 #   2. The App's OBO scopes existed only as a CLI invocation quoted in a comment (I-083).
 #      A rebuild from source produced an app that 403'd on every Lakebase route. They are now
 #      declared in `resources/fleetguard_console.app.yml`.
@@ -65,10 +68,12 @@ variables:
     default: b15d3d6f837ba428
 
 # NO `lookup:` VARIABLES, AND `run_as` IS PINNED RATHER THAN DERIVED FROM
-# ${workspace.current_user}. Both are deliberate: they are what let `bundle validate` run
-# without contacting the workspace, which is what makes a credential-free CI check possible.
-# `.github/workflows/ci.yml` states that no Databricks credentials belong in CI; adding a
-# `lookup:` here would quietly force that decision to be reversed.
+# ${workspace.current_user}. Both are still worth keeping — fewer moving parts, one obvious
+# owner — but the reason first written here was wrong and is corrected rather than deleted:
+# it claimed they would let `bundle validate` run without contacting the workspace. **They do
+# not.** Measured with an empty config file, validate fails on `default auth: cannot configure
+# default credentials` before checking anything. CI therefore keeps no credentials and the
+# offline assertions live in `tests/test_bundle_resources.py` instead.
 
 targets:
   # ONE TARGET, AND IT IS `production`. There is deliberately no `dev` target.

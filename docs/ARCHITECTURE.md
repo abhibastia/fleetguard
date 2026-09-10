@@ -808,11 +808,11 @@ updates them in place and creates nothing:
 | Databricks App | `fleetguard_console` | `fleetguard-console` |
 | Pipeline | `bronze_silver` | `937b9ce4-4fbe-4493-96ad-b76317bf58db` |
 | AI/BI dashboard | `fleetguard_overview` | `01f1a7257e801a2ebb71bdc18fc2113a` |
-| Jobs | 16 keys | the 16 live / rebuild-from-empty `fleetguard-*` jobs |
+| Jobs | 17 keys | the 17 live / rebuild-from-empty `fleetguard-*` jobs |
 
-The other **8** `fleetguard-*` jobs are excluded on purpose — `lead-time-backtest-v2`,
+The other **7** `fleetguard-*` jobs are excluded on purpose — `lead-time-backtest-v2`,
 `semantic-subdivision` and `embed-backtest-complaints` (the semantic arm §6 measured and
-rejected), `hybrid-query-test`, `create-remaining-tables`, `measure-cdf-latency`,
+rejected), `hybrid-query-test`, `measure-cdf-latency`,
 `inspect-eval`, `build-backtest-scope`. They are the record of what was tried, not part of the
 deployable, and YAML for them would be a claim to keep true forever.
 
@@ -822,6 +822,10 @@ they now run bundle-uploaded source under
 `databricks workspace import --overwrite` step is gone, and with it the drift that had left
 **8 of 16 job notebooks behind `main`** — including the pre-I-079 fleet match in
 `10_emerging_signals.py` and I-094's stale-model default in `16_evaluate_agent.py` (I-096).
+**That second one was only half fixed by the migration** — the job's own
+`base_parameters` re-pinned `model_version: "3"`, reproducing I-094 one layer up, and the
+deploy job was pinned to v1 while v6 served. Both found by review and removed 2026-09-11
+(I-098); `tests/test_bundle_resources.py` now fails on any such pin.
 The App's OBO scopes, previously a CLI invocation quoted only in a comment, are declared in
 `resources/fleetguard_console.app.yml` and re-asserted on every deploy (I-083).
 

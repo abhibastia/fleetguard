@@ -109,7 +109,7 @@ the console the backend serves with `scripts/build_console.sh`.
 ## Deploying
 
 Everything deployable is a **Declarative Automation Bundle** — `databricks.yml` plus
-`resources/` describe the App, the bronze/silver pipeline, the AI/BI dashboard and 16 jobs.
+`resources/` describe the App, the bronze/silver pipeline, the AI/BI dashboard and 17 jobs.
 They are *bound* to the existing workspace objects, so deploying updates them in place rather
 than creating copies.
 
@@ -148,7 +148,7 @@ the next deploy.
 | `scripts/` | Runnable setup/build scripts — local dev server, console build, evidence/snapshot export, demo-state seeding |
 | `tests/` | Unit tests (run everywhere) and integration tests (opt-in, hit the live workspace) |
 | `dashboards/` | AI/BI dashboard definitions |
-| `resources/` | Bundle resource files — the App, the pipeline, the dashboard, 16 jobs, as code |
+| `resources/` | Bundle resource files — the App, the pipeline, the dashboard, 17 jobs, as code |
 
 ## Documentation map
 

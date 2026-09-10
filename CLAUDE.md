@@ -379,13 +379,16 @@ need this, platform handles it):**
 **Declarative Automation Bundle — built and deployed 2026-09-10. `databricks.yml` +
 `resources/` are now the deployment mechanism.** What it owns: the App
 (`fleetguard-console`), the pipeline (`fleetguard-bronze-silver`), the AI/BI dashboard, and
-**16 of the 24 `fleetguard-*` jobs** — every job that is live or needed to rebuild from empty.
+**17 of the 24 `fleetguard-*` jobs** — every job that is live or needed to rebuild from empty.
 The other 8 are deliberately excluded as dead experiments (`lead-time-backtest-v2`,
 `semantic-subdivision` and `embed-backtest-complaints` — the arm I-049 rejected —
-`hybrid-query-test`, `create-remaining-tables`, `measure-cdf-latency`, `inspect-eval`,
-`build-backtest-scope`). Bundle YAML is a claim you then have to keep true; rejected
+`hybrid-query-test`, `measure-cdf-latency`, `inspect-eval`, `build-backtest-scope`).
+**`create-remaining-tables` was wrongly excluded and was added 2026-09-11** — it creates the
+other ten Lakebase tables, so it is on the rebuild path, and the exclusion left it as the one
+job still running a hand-synced copy, 16 lines behind `main` and missing the `PSYCOPG_IMPL`
+guard (I-098). Bundle YAML is a claim you then have to keep true; rejected
 experiments belong in `src/` and `docs/ISSUES.md`.
-- **All 16 jobs + the pipeline now run bundle-uploaded source** under
+- **All 17 jobs + the pipeline now run bundle-uploaded source** under
   `/Workspace/Users/abhisek.bastia17@gmail.com/.bundle/fleetguard/prod/files/`. The old
   hand-synced `/Workspace/Users/…/fleetguard/` tree is **dead** — do not import into it, and
   do not read it as current. It is what drifted (I-096).
@@ -460,7 +463,7 @@ experiments belong in `src/` and `docs/ISSUES.md`.
 ## Working conventions for this project
 
 - **Deployment goes through the bundle. Do not create or edit workspace objects by hand.**
-  Since 2026-09-10 the App, the pipeline, the dashboard and 16 jobs are bound DAB resources
+  Since 2026-09-10 the App, the pipeline, the dashboard and 17 jobs are bound DAB resources
   (see the Declarative Automation Bundle block above). A change made with `jobs reset`,
   `jobs update --json`, `apps update` or the UI is **silently reverted by the next
   `bundle deploy`**, which re-asserts every bound resource from YAML on every run. Change
