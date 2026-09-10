@@ -29,6 +29,12 @@ npm-debug.log*
 # Databricks
 .databricks/
 *.dbc
+# Scratch dir for `databricks bundle generate --source-dir`. That command downloads the
+# WORKSPACE copy of every notebook next to the YAML it writes, and its default source-dir is
+# `src` — which would overwrite the repo with the stale content the bundle exists to remove
+# (I-096). It must live inside the repo (the CLI requires a path relative to the bundle root),
+# so it is ignored here and deleted after each use.
+.dab-scratch/
 
 # Secrets / credentials
 *.pem

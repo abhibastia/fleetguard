@@ -31,6 +31,8 @@ verifiable work. Grounded in what was already confirmed live before build start 
    projects/branches/endpoints/roles/databases/synced_tables/catalogs — CDF is not a
    bundle resource. Phase 5 enablement is a manual runbook step, and Phase 6 CI/CD must
    say so rather than assume `bundle deploy` covers it.
+   *Still true, and now one of **four** exceptions the bundle does not cover — see Phase 11
+   and `docs/ARCHITECTURE.md` §9.1. The bundle itself was built 2026-09-10.*
 2. **`static.nhtsa.gov` conditional requests: YES, with a trap.** `HEAD` returns both
    `Last-Modified` and `ETag`. `If-Modified-Since` works (`304`, 0 bytes).
    `If-None-Match` with the exact advertised ETag returns `200` and the full body —
@@ -299,6 +301,13 @@ plainly in `scoping.py`'s own docstring, not left implicit.
 - `table_update` trigger wired to `lb_<table>_history` (per §8.3's YAML), seeded demo state.
   *(The "Render always-on + pinger" item was dropped when Render stopped being the demo
   surface, and removed here with Render itself on 2026-09-10.)*
+- ✅ **Declarative Automation Bundle, 2026-09-10.** `databricks.yml` + `resources/` now
+  describe the App, the bronze/silver pipeline, the dashboard and 16 of the 24 jobs, all bound
+  to the existing objects. This closes the §8.5/§9 promise that had been in the proposal since
+  the start and was never built — and it found what the gap had cost: **8 of 16 job notebooks
+  were running code behind `main`** (I-096), two of them with bugs that had already been fixed
+  and shipped elsewhere. Four exceptions remain and are documented rather than papered over:
+  Lakebase CDF, AI Search endpoint/index, the agent serving endpoint, the metric view.
 - **Done when:** the full pipeline survives an idle-then-cold-start cycle without
   manual intervention.
 

@@ -1,0 +1,19 @@
+resources:
+  jobs:
+    lead_time_backtest_v3:
+      name: fleetguard-lead-time-backtest-v3
+      tasks:
+        - task_key: v3
+          disabled: false
+          email_notifications: {}
+          notebook_task:
+            notebook_path: ../src/backtest/09_lead_time_backtest_v3.py
+            source: WORKSPACE
+          run_if: ALL_SUCCESS
+          timeout_seconds: 14400
+      email_notifications: {}
+      max_concurrent_runs: 1
+      queue:
+        enabled: true
+      timeout_seconds: 0
+      webhook_notifications: {}

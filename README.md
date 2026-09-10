@@ -106,6 +106,38 @@ See `app/backend/README.md` for what this sets up and why every one of its envir
 variables is there. Frontend development lives in `app/frontend/` (`npm run dev`); rebuild
 the console the backend serves with `scripts/build_console.sh`.
 
+## Deploying
+
+Everything deployable is a **Declarative Automation Bundle** — `databricks.yml` plus
+`resources/` describe the App, the bronze/silver pipeline, the AI/BI dashboard and 16 jobs.
+They are *bound* to the existing workspace objects, so deploying updates them in place rather
+than creating copies.
+
+```bash
+databricks bundle summary -t prod --profile abhi   # nothing should read "to be created"
+databricks bundle deploy  -t prod --profile abhi
+```
+
+Shipping the App is four commands, and the last one is the one that matters:
+
+```bash
+./scripts/build_console.sh                                        # only if app/frontend/ changed
+databricks bundle deploy -t prod --profile abhi
+databricks apps start fleetguard-console --profile abhi           # if stopped, ~2 min
+databricks bundle run fleetguard_console -t prod --profile abhi   # ← ships the code
+```
+
+`bundle deploy` alone prints `Deployment complete!` and creates **no app deployment** — the
+running app keeps serving what it last deployed. See `docs/ISSUES.md` I-097.
+
+Deploying stays a deliberate manual act: it restarts the App under whoever is using it, so CI
+runs tests and lint only and holds no workspace credentials. Four things the bundle does *not*
+cover — Lakebase CDF (UI-only), the AI Search endpoint and index, the agent serving endpoint,
+and the `evidence_metrics` metric view — are documented in `docs/ARCHITECTURE.md`.
+
+Editing a workspace object by hand (`jobs reset`, `apps update`, the UI) is silently undone by
+the next deploy.
+
 ## Repository layout
 
 | Path | What's there |
@@ -116,6 +148,7 @@ the console the backend serves with `scripts/build_console.sh`.
 | `scripts/` | Runnable setup/build scripts — local dev server, console build, evidence/snapshot export, demo-state seeding |
 | `tests/` | Unit tests (run everywhere) and integration tests (opt-in, hit the live workspace) |
 | `dashboards/` | AI/BI dashboard definitions |
+| `resources/` | Bundle resource files — the App, the pipeline, the dashboard, 16 jobs, as code |
 
 ## Documentation map
 

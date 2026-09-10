@@ -18,6 +18,15 @@
 #     what makes this workflow safe to run on every push.
 #   - It does not deploy. Deployment stays a deliberate manual act
 #     (`databricks apps deploy`), because deploying restarts the app under whoever is using it.
+#   - **It does not run `databricks bundle validate`.** Measured 2026-09-10: with an empty
+#     config file and no environment credentials, `bundle validate --strict -t prod` fails on
+#     `default auth: cannot configure default credentials` before checking anything — pinning
+#     `run_as` and writing `root_path` out literally is not enough to make it offline. Adding
+#     it would mean putting a token for a shared bootcamp metastore into GitHub secrets, which
+#     is the decision above, reversed. Instead `tests/test_bundle_resources.py` asserts offline
+#     what actually goes wrong in that YAML: notebook paths that do not exist, job names that
+#     lose the `fleetguard-` prefix, an App that stops declaring its OBO scopes. It runs in
+#     `pytest` below, with no credentials.
 #   - It does not run `ruff format --check`. Three notebook-style files under src/ are not
 #     format-clean today, and ruff also rewrites fenced code samples inside docs/ISSUES.md,
 #     where wrong-then-corrected snippets are preserved on purpose. Enforcing format would mean

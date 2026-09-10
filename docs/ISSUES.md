@@ -26,6 +26,102 @@ no error and passed the obvious check.
 
 ## Tooling / process
 
+### I-097 — `bundle deploy` uploads the App's source and deploys nothing — **SILENT**
+*Date:* 2026-09-10 · *Status:* ✅ resolved
+
+**Found by** checking, rather than assuming, which command actually ships the App after the
+migration to a Declarative Automation Bundle (I-096).
+
+`databricks bundle deploy` reports `Deployment complete!` and, for a Databricks App, that
+sentence is not about the app. It uploads `app/backend/` into the bundle's `root_path` and
+updates the *app resource* (scopes, permissions, description) — but it creates **no app
+deployment**. The running app keeps serving whatever it last deployed, from wherever it last
+deployed it. Nothing in the output says so.
+
+Measured end to end:
+
+| step | `active_deployment.source_code_path` afterwards |
+|---|---|
+| `bundle deploy` (app STOPPED) | unchanged — no deployment created |
+| `apps start` | `/Workspace/Users/…/apps/fleetguard-console` ← **the old hand-synced path** |
+| `bundle deploy` again (app ACTIVE) | still the old path — no deployment created |
+| `bundle run fleetguard_console` | `…/.bundle/fleetguard/prod/files/app/backend` ✅ |
+
+The trap is the second row. `apps start` auto-deploys from the app's
+`default_source_code_path`, which `bundle deploy` does **not** update — so after binding the
+app to the bundle, a plain start silently resurrected the pre-bundle source. Anyone who
+deployed and started would have concluded the bundle worked while running code from the
+directory the bundle exists to replace.
+
+`bundle run <app_key>` is the step that both creates the deployment *and* rewrites
+`default_source_code_path` to the bundle path — after which `apps start` is safe again.
+
+**Fix / rule.** The App release flow is four commands, and the last one is not optional:
+
+```bash
+./scripts/build_console.sh                                       # only if app/frontend/ changed
+databricks bundle deploy -t prod --profile abhi
+databricks apps start fleetguard-console --profile abhi          # if STOPPED, ~2 min
+databricks bundle run fleetguard_console -t prod --profile abhi  # <- ships the code
+```
+
+**Verified live 2026-09-10, and the client is named deliberately** (see I-086 — "verified
+live" without naming the client turned an untested browser path into a documented pass): a
+**programmatic CLI bearer token**, not a browser session. `/api/me` returned
+`token_source: databricks-apps`, seven routes green (queue 50 · signals live · service
+campaigns 3 · depot risk 60 · work orders 100 · evidence), and the served console bundle
+hashes matched the local build exactly (`index-BOPm-YCG.js` / `index-B69MGBo6.css`). The
+browser path was not re-tested in this session and its per-user consent grant is unchanged.
+
+---
+
+### I-096 — the jobs ran workspace notebooks that had silently fallen behind `main` — **SILENT**
+*Date:* 2026-09-10 · *Status:* ✅ resolved
+
+**Found by** exporting every job's notebook from the workspace and diffing it against the repo
+while migrating deployment onto a Declarative Automation Bundle. Nothing had ever checked this.
+
+Jobs pointed at `/Workspace/Users/abhisek.bastia17@gmail.com/fleetguard/…`, a tree kept in sync
+by hand with `databricks workspace import --overwrite`. **8 of the 16 bundled jobs were running
+stale code.** Every drift was repo-ahead — no work existed only in the workspace — so the
+workspace was simply missing fixes that had reached `main`:
+
+| notebook | lines behind | what the workspace copy was still running |
+|---|---|---|
+| `src/backtest/10_emerging_signals.py` | 151 | the **pre-I-079 exact-only fleet match** — the bug where two real signals reported 0 exposed vehicles against 2,418 and 766, sorting a live defect to the bottom of the Emerging tab |
+| `src/agent/16_evaluate_agent.py` | 24 | `model_version` pinned to the literal `"3"` — **I-094**, the evaluation that scores a three-version-stale model and passes |
+| `src/lakebase/14_load_signals.py` | 7 | no `ADD COLUMN IF NOT EXISTS match_basis` and no `match_basis` in the insert — the migration half of **I-091** |
+| `src/fleet/06_train_model_b.py` | 9 | pre-refactor fuzzy-match feature block |
+| `src/agent/14_fleetguard_agent.py` | 5 | an older **agent system prompt** — the deployed agent's own instructions |
+| `src/ingest/01_download_flat_files.py` | 2 | lint fix only |
+| `src/ingest/05_poll_recalls_api.py` | 1 | lint fix only |
+| `src/fleet/04_build_fleet_registry.py` | 1 | lint fix only |
+
+The three fully-clean ones are worth naming too: `21_cdf_to_gold_facts`,
+`00_create_all_objects`, `09_lead_time_backtest_v3`, plus all **9 pipeline SQL files**, which
+were byte-identical. So this was not "everything is stale" — it was arbitrary, which is worse,
+because there was no rule for guessing which job you could trust.
+
+**Why nothing caught it.** The unit suite tests `app/backend/`, not `src/`. CI has no
+credentials and cannot see the workspace. The `src/` notebooks are lint-exempt by design
+(`# MAGIC` cells, injected `spark`). And a job that runs green from stale source looks
+identical to a job that runs green — I-091 is the same failure seen from the other end: a read
+shipped ahead of a migration that lived in a notebook nobody had run.
+
+**Fix.** The 16 jobs now run bundle-uploaded source
+(`…/.bundle/fleetguard/prod/files/src/…`), so `bundle deploy` and `git push` carry the same
+bytes and the hand-sync step is gone. `tests/test_bundle_resources.py` covers the failure this
+creates in exchange — a `notebook_path` pointing at a file that no longer exists — offline, in
+the existing suite.
+
+**Not yet done, and deliberately out of scope for the migration:** the two jobs whose stale
+code was a real bug (`fleetguard-emerging-signals`, `fleetguard-load-signals`) have **not been
+re-run**. They now point at the fixed source, but re-running them rewrites gold and Lakebase
+rows, which is a data decision rather than a deployment one. Live Lakebase is currently
+consistent — all 24 integration tests pass, `match_basis` exists — so nothing is broken today.
+
+---
+
 ### I-095 — a "privilege wall" that was a wrong query, and an enhancement whose method does not exist
 *Date:* 2026-09-09 · *Status:* ✅ resolved
 

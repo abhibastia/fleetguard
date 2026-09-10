@@ -1,0 +1,19 @@
+resources:
+  jobs:
+    model_b_golden_set:
+      name: fleetguard-model-b-golden-set
+      tasks:
+        - task_key: golden_set
+          disabled: false
+          email_notifications: {}
+          notebook_task:
+            notebook_path: ../src/fleet/05_build_model_b_golden_set.py
+            source: WORKSPACE
+          run_if: ALL_SUCCESS
+          timeout_seconds: 1800
+      email_notifications: {}
+      max_concurrent_runs: 1
+      queue:
+        enabled: true
+      timeout_seconds: 0
+      webhook_notifications: {}

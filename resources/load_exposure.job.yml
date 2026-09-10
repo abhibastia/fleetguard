@@ -1,0 +1,27 @@
+resources:
+  jobs:
+    load_exposure:
+      name: fleetguard-load-exposure
+      tasks:
+        - task_key: load_exposure
+          disabled: false
+          email_notifications: {}
+          environment_key: fgenv
+          notebook_task:
+            notebook_path: ../src/lakebase/13_load_exposure.py
+            source: WORKSPACE
+          run_if: ALL_SUCCESS
+          timeout_seconds: 7200
+      email_notifications: {}
+      environments:
+        - environment_key: fgenv
+          spec:
+            client: "3"
+            dependencies:
+              - psycopg[binary]
+              - databricks-sdk>=0.89.0
+      max_concurrent_runs: 1
+      queue:
+        enabled: true
+      timeout_seconds: 0
+      webhook_notifications: {}

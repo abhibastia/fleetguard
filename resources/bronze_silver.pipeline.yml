@@ -1,0 +1,34 @@
+# Lakeflow Declarative Pipeline: NHTSA flat files -> bronze_* -> silver_*.
+#
+# Generated from the live pipeline (937b9ce4-4fbe-4493-96ad-b76317bf58db) and then repointed
+# from the hand-synced workspace copy to `../src/pipelines/**`, which is where the 4 bronze
+# and 5 silver `.sql` files already lived. All nine were byte-identical to the workspace
+# copies when this was written (checked 2026-09-10) — unlike the job notebooks, the pipeline
+# SQL had not drifted.
+#
+# TWO THINGS NOT VISIBLE HERE THAT THE SQL DEPENDS ON, recorded so nobody "simplifies" them:
+#   - Every `read_files` call in those files needs `sep => '\t'`, `header => false`,
+#     `quote => '\0'`, `encoding => 'ISO-8859-1'`, `partitionColumns => ''`. The ODI flat
+#     files are tab-delimited with no quoting convention but free-text narratives containing
+#     `"`; with Spark's default quote char, 143 rows parse wrong and `_rescued_data` stays
+#     **0** (I-012). Zero rescued rows is necessary, not sufficient.
+#   - The volume layout is per-source subdirectories (`cmpl/`, `rcl/`, `inv/`, `tsbs/`)
+#     because Auto Loader monitors directories, not files.
+#
+# `development` IS DELIBERATELY UNSET. `mode: production` resolves it to `false`; the live
+# pipeline was `development: true`. For a serverless, triggered (non-continuous) pipeline
+# that changes cluster reuse and retry behaviour, not results — but the first bundle-deployed
+# run should still be checked against the reconciling counts in CLAUDE.md
+# (bronze = silver + quarantine, exactly, on every table) before this is called settled.
+
+resources:
+  pipelines:
+    bronze_silver:
+      name: fleetguard-bronze-silver
+      catalog: ${var.catalog}
+      schema: ${var.schema}
+      serverless: true
+      continuous: false
+      libraries:
+        - glob:
+            include: ../src/pipelines/**

@@ -71,6 +71,13 @@ env:
   #
   # THIS FILE IS NOT LIVE UNTIL THE APP IS REDEPLOYED. Changing it here and stopping is the
   # same silent no-op as I-083's scope block — the running app keeps the old value.
+  # Since 2026-09-10 redeploying means:
+  #   ./scripts/build_console.sh                                    # only if app/frontend/ changed
+  #   databricks bundle deploy -t prod --profile abhi               # uploads source, sets scopes/ACL
+  #   databricks apps start fleetguard-console --profile abhi       # if stopped (~2 min)
+  #   databricks bundle run fleetguard_console -t prod --profile abhi   # <- the step that ships THIS file
+  # `bundle deploy` alone is NOT enough: it uploads the source but creates no app deployment,
+  # so the app keeps serving whatever it last deployed (measured 2026-09-10, I-097).
   - name: FLEETGUARD_APPROVERS
     value: abhisek.bastia17@gmail.com,raghavendra.yama@gmail.com,sangwanrahul@icloud.com,zach@zachwilson.tech
 
@@ -81,14 +88,20 @@ env:
 # returned `403 Invalid scope, required scopes: postgres`. Nothing warns that the block had
 # no effect.
 #
-# Scopes live on the **app resource**, not in app.yaml:
+# Scopes live on the **app resource**, and since 2026-09-10 they are declared as code in
+# **`resources/fleetguard_console.app.yml`** and re-asserted by every `bundle deploy`:
 #
-#   databricks apps update fleetguard-console --json '{"name":"fleetguard-console",
-#     "user_api_scopes":["postgres","sql","model-serving"]}'
+#   user_api_scopes: [postgres, sql, model-serving]
 #
 #   postgres       -> generate_database_credential + get_endpoint (all Lakebase reads/writes)
 #   sql            -> SQL warehouse, for routes that query UC rather than Postgres
 #   model-serving  -> POST /serving-endpoints/.../invocations from the chat panel
+#
+# The equivalent one-off CLI form still works and is what the bundle replaced — it was the
+# only record of these scopes for two days, quoted in a comment and runnable from nowhere:
+#
+#   databricks apps update fleetguard-console --json '{"name":"fleetguard-console",
+#     "user_api_scopes":["postgres","sql","model-serving"]}'
 #
 # Three things that cost real time and are invisible from the error message:
 #   1. `iam.access-control:read` / `iam.current-user:read` arrive as platform defaults and

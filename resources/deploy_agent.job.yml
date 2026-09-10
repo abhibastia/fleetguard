@@ -1,0 +1,21 @@
+resources:
+  jobs:
+    deploy_agent:
+      name: fleetguard-deploy-agent
+      tasks:
+        - task_key: deploy
+          disabled: false
+          email_notifications: {}
+          notebook_task:
+            base_parameters:
+              model_version: "1"
+            notebook_path: ../src/agent/15_deploy_agent.py
+            source: WORKSPACE
+          run_if: ALL_SUCCESS
+          timeout_seconds: 5400
+      email_notifications: {}
+      max_concurrent_runs: 1
+      queue:
+        enabled: true
+      timeout_seconds: 0
+      webhook_notifications: {}

@@ -11,3 +11,8 @@
 # Test + lint only. Not installed on the Databricks Apps runtime.
 pytest>=9.1
 ruff>=0.16
+
+# Used by tests/test_bundle_resources.py to parse databricks.yml and resources/*.yml. It
+# already arrives transitively through `uvicorn[standard]` above, but a test that imports it
+# directly should say so rather than depend on another package's extras not changing.
+PyYAML>=6.0

@@ -1,0 +1,38 @@
+# Batch load of the emerging-signal table into Lakebase.
+#
+# The `environments` block is load-bearing and easy to lose. **For serverless jobs the
+# dependency list lives in the job, not the notebook** — a `%pip install` in the notebook does
+# not survive, and the job fails on import with no hint that the dependency was ever declared
+# (I-045). `client: "3"` pins the serverless client version.
+#
+# `psycopg[binary]` specifically: on serverless, psycopg-binary bundles its own OpenSSL and the
+# pure-Python impl must be forced at runtime — `db.py` does that by detecting
+# `DATABRICKS_RUNTIME_VERSION`.
+
+resources:
+  jobs:
+    load_signals:
+      name: fleetguard-load-signals
+      tasks:
+        - task_key: load
+          disabled: false
+          email_notifications: {}
+          environment_key: fgenv
+          notebook_task:
+            notebook_path: ../src/lakebase/14_load_signals.py
+            source: WORKSPACE
+          run_if: ALL_SUCCESS
+          timeout_seconds: 3600
+      email_notifications: {}
+      environments:
+        - environment_key: fgenv
+          spec:
+            client: "3"
+            dependencies:
+              - psycopg[binary]
+              - databricks-sdk>=0.89.0
+      max_concurrent_runs: 1
+      queue:
+        enabled: true
+      timeout_seconds: 0
+      webhook_notifications: {}

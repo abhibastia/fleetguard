@@ -1,0 +1,21 @@
+resources:
+  jobs:
+    evaluate_agent:
+      name: fleetguard-evaluate-agent
+      tasks:
+        - task_key: evaluate
+          disabled: false
+          email_notifications: {}
+          notebook_task:
+            base_parameters:
+              model_version: "3"
+            notebook_path: ../src/agent/16_evaluate_agent.py
+            source: WORKSPACE
+          run_if: ALL_SUCCESS
+          timeout_seconds: 10800
+      email_notifications: {}
+      max_concurrent_runs: 1
+      queue:
+        enabled: true
+      timeout_seconds: 0
+      webhook_notifications: {}

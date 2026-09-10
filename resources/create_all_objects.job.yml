@@ -1,0 +1,19 @@
+resources:
+  jobs:
+    create_all_objects:
+      name: fleetguard-create-all-objects
+      tasks:
+        - task_key: setup
+          disabled: false
+          email_notifications: {}
+          notebook_task:
+            notebook_path: ../src/setup/00_create_all_objects.py
+            source: WORKSPACE
+          run_if: ALL_SUCCESS
+          timeout_seconds: 0
+      email_notifications: {}
+      max_concurrent_runs: 1
+      queue:
+        enabled: true
+      timeout_seconds: 0
+      webhook_notifications: {}

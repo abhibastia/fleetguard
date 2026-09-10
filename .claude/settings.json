@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "jq -r '.tool_response.filePath // .tool_input.file_path' | { read -r f; case \"$f\" in *databricks.yml|*/resources/*.yml|*/resources/*.yaml) (cd \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\" && databricks bundle validate --profile free-edition 2>&1) ;; esac; }",
+            "command": "jq -r '.tool_response.filePath // .tool_input.file_path' | { read -r f; case \"$f\" in *databricks.yml|*/resources/*.yml|*/resources/*.yaml) (cd \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\" && databricks bundle validate --strict --target prod --profile abhi 2>&1) ;; esac; }",
             "timeout": 60,
             "statusMessage": "Validating Databricks bundle config..."
           },
