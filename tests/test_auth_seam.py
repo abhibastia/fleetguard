@@ -8,21 +8,23 @@ The rules being enforced:
   1. Failure is always an error, never a fallback to a broader principal.
   2. The mode is explicit; an unset value must not pick a trust model.
   3. Tokens never appear in reprs, logs or error text.
+
+The seam had two more providers until 2026-09-10 — a cookie-session provider for a U2M OAuth
+flow the app ran itself, and an app-owned GitHub login carrying no Databricks credential.
+Both were Render-only and went with it (`deploy/render`). Their tests went too; what is left
+here covers the two surfaces that actually ship.
 """
 
 import pytest
 from fleetguard_api.auth.tokens import (
-    AppLoginTokenProvider,
     AuthError,
     ForwardedHeaderTokenProvider,
     Principal,
-    SessionTokenProvider,
     StaticTokenProvider,
     build_token_provider,
 )
 
 TOKEN = "dapi-not-a-real-token-0123456789"
-NOW = 1_800_000_000.0  # arbitrary fixed instant; tests control the clock via now_fn
 
 
 class TestForwardedHeaderProvider:
@@ -57,95 +59,23 @@ class TestForwardedHeaderProvider:
         assert p.user_name == "a@b.com"
 
 
-class TestSessionProvider:
-    """Render: the token came from the U2M OAuth code exchange."""
+class TestStaticProvider:
+    """Local development: the developer supplies the token."""
 
-    def test_resolves_from_session_cookie(self):
-        store = {"sess-1": {"access_token": TOKEN, "user_name": "a@b.com", "created": NOW}}
-        p = SessionTokenProvider(store.get, now_fn=lambda: NOW).resolve(
-            {"cookie": "fg_session=sess-1"}
-        )
-        assert p.token == TOKEN
-        assert p.source == "render-u2m"
+    def test_resolves_regardless_of_headers(self):
+        prov = StaticTokenProvider(TOKEN, "dev@example.com")
+        assert prov.resolve({}).token == TOKEN
+        assert prov.resolve({"x-forwarded-access-token": "someone-elses"}).token == TOKEN
 
-    def test_parses_the_right_cookie_among_several(self):
-        store = {"s2": {"access_token": TOKEN, "created": NOW}}
-        p = SessionTokenProvider(store.get, now_fn=lambda: NOW).resolve(
-            {"cookie": "other=1; fg_session=s2; theme=dark"}
-        )
-        assert p.token == TOKEN
+    def test_source_and_identity(self):
+        p = StaticTokenProvider(TOKEN, "dev@example.com").resolve({})
+        assert p.source == "static-dev"
+        assert p.user_name == "dev@example.com"
 
-    @pytest.mark.parametrize("cookie", ["", "other=1", "fg_session=", "fg_session=unknown"])
-    def test_absent_or_unknown_session_raises(self, cookie):
+    def test_empty_token_refuses_at_construction(self):
+        """Fail at startup, not on the first query."""
         with pytest.raises(AuthError):
-            SessionTokenProvider({}.get).resolve({"cookie": cookie})
-
-    def test_session_without_a_token_raises(self):
-        """A session can exist while the OAuth exchange failed — that is not an identity."""
-        store = {"s": {"user_name": "a@b.com", "created": NOW}}
-        with pytest.raises(AuthError):
-            SessionTokenProvider(store.get, now_fn=lambda: NOW).resolve({"cookie": "fg_session=s"})
-
-    def test_expired_session_raises(self):
-        """The cookie's max_age is a client-side courtesy, not access control (I-062) — the
-        server must independently refuse a session past its own TTL."""
-        store = {"s": {"access_token": TOKEN, "created": NOW}}
-        provider = SessionTokenProvider(store.get, session_ttl_s=100, now_fn=lambda: NOW + 101)
-        with pytest.raises(AuthError, match="expired"):
-            provider.resolve({"cookie": "fg_session=s"})
-
-    def test_session_at_exactly_the_ttl_boundary_is_still_valid(self):
-        """Off-by-one check: `> ttl`, not `>= ttl` — a session is valid through its last
-        second, not evicted one tick early."""
-        store = {"s": {"access_token": TOKEN, "created": NOW}}
-        provider = SessionTokenProvider(store.get, session_ttl_s=100, now_fn=lambda: NOW + 100)
-        assert provider.resolve({"cookie": "fg_session=s"}).token == TOKEN
-
-    def test_session_with_no_created_timestamp_raises(self):
-        """Fail closed on unknown age, not open — a session missing `created` did not come
-        from this codebase's own login flow, and trusting it indefinitely would be exactly
-        the 'fall back to a broader principal' this module's rules forbid."""
-        store = {"s": {"access_token": TOKEN}}  # no "created"
-        with pytest.raises(AuthError, match="expired"):
-            SessionTokenProvider(store.get, now_fn=lambda: NOW).resolve({"cookie": "fg_session=s"})
-
-
-class TestAppLoginProvider:
-    """Render's actual production provider: identity without a Databricks token."""
-
-    def test_resolves_from_session_cookie(self):
-        store = {"s": {"user_name": "octocat", "created": NOW}}
-        p = AppLoginTokenProvider(store.get, now_fn=lambda: NOW).resolve({"cookie": "fg_session=s"})
-        assert p.user_name == "octocat"
-        assert p.source == "app-login"
-
-    def test_token_is_always_empty(self):
-        """The load-bearing invariant: this provider issues no Databricks credential at
-        all, on any input — there is nowhere for a real token to come from."""
-        store = {"s": {"user_name": "octocat", "created": NOW}}
-        p = AppLoginTokenProvider(store.get, now_fn=lambda: NOW).resolve({"cookie": "fg_session=s"})
-        assert p.token == ""
-
-    @pytest.mark.parametrize("cookie", ["", "other=1", "fg_session=", "fg_session=unknown"])
-    def test_absent_or_unknown_session_raises(self, cookie):
-        with pytest.raises(AuthError):
-            AppLoginTokenProvider({}.get).resolve({"cookie": cookie})
-
-    def test_session_without_a_user_name_raises(self):
-        store = {"s": {"created": NOW}}
-        with pytest.raises(AuthError):
-            AppLoginTokenProvider(store.get, now_fn=lambda: NOW).resolve({"cookie": "fg_session=s"})
-
-    def test_expired_session_raises(self):
-        store = {"s": {"user_name": "octocat", "created": NOW}}
-        provider = AppLoginTokenProvider(store.get, session_ttl_s=100, now_fn=lambda: NOW + 101)
-        with pytest.raises(AuthError, match="expired"):
-            provider.resolve({"cookie": "fg_session=s"})
-
-    def test_session_with_no_created_timestamp_raises(self):
-        store = {"s": {"user_name": "octocat"}}  # no "created"
-        with pytest.raises(AuthError, match="expired"):
-            AppLoginTokenProvider(store.get, now_fn=lambda: NOW).resolve({"cookie": "fg_session=s"})
+            StaticTokenProvider("")
 
 
 class TestModeSelection:
@@ -159,43 +89,16 @@ class TestModeSelection:
         with pytest.raises(AuthError):
             build_token_provider({"FLEETGUARD_AUTH_MODE": "trust-me"})
 
+    def test_retired_render_modes_are_not_silently_accepted(self):
+        """`render-u2m` and `app-login` were removed with Render. A config still naming one
+        must fail loudly rather than fall through to some other trust model."""
+        for retired in ("render-u2m", "app-login"):
+            with pytest.raises(AuthError, match="must be one of"):
+                build_token_provider({"FLEETGUARD_AUTH_MODE": retired})
+
     def test_databricks_apps_mode(self):
         prov = build_token_provider({"FLEETGUARD_AUTH_MODE": "databricks-apps"})
         assert isinstance(prov, ForwardedHeaderTokenProvider)
-
-    def test_render_mode_requires_a_session_lookup(self):
-        with pytest.raises(AuthError, match="session_lookup"):
-            build_token_provider({"FLEETGUARD_AUTH_MODE": "render-u2m"})
-
-    def test_app_login_mode_requires_a_session_lookup(self):
-        with pytest.raises(AuthError, match="session_lookup"):
-            build_token_provider(
-                {"FLEETGUARD_AUTH_MODE": "app-login", "FLEETGUARD_DATA_MODE": "snapshot"}
-            )
-
-    def test_app_login_mode_refuses_without_snapshot_data_mode(self):
-        """The load-bearing invariant (I-062's neighbour, not a regression from it): this
-        provider issues no Databricks credential, so it must never pair with a data mode
-        that expects one. Checked at construction so a misconfiguration fails at startup,
-        not on the first query a signed-in user makes."""
-        with pytest.raises(AuthError, match="FLEETGUARD_DATA_MODE"):
-            build_token_provider(
-                {"FLEETGUARD_AUTH_MODE": "app-login"}, session_lookup=lambda _: None
-            )
-
-    def test_app_login_mode_refuses_with_lakebase_data_mode_explicitly(self):
-        with pytest.raises(AuthError, match="FLEETGUARD_DATA_MODE"):
-            build_token_provider(
-                {"FLEETGUARD_AUTH_MODE": "app-login", "FLEETGUARD_DATA_MODE": "lakebase"},
-                session_lookup=lambda _: None,
-            )
-
-    def test_app_login_mode(self):
-        prov = build_token_provider(
-            {"FLEETGUARD_AUTH_MODE": "app-login", "FLEETGUARD_DATA_MODE": "snapshot"},
-            session_lookup=lambda _: None,
-        )
-        assert isinstance(prov, AppLoginTokenProvider)
 
     def test_static_dev_requires_a_token(self):
         with pytest.raises(AuthError, match="FLEETGUARD_DEV_TOKEN"):
@@ -207,6 +110,10 @@ class TestModeSelection:
         )
         assert isinstance(prov, StaticTokenProvider)
         assert prov.resolve({}).token == TOKEN
+
+    def test_mode_is_case_and_whitespace_tolerant(self):
+        prov = build_token_provider({"FLEETGUARD_AUTH_MODE": "  Databricks-Apps  "})
+        assert isinstance(prov, ForwardedHeaderTokenProvider)
 
 
 class TestTokenNeverLeaks:
@@ -231,12 +138,9 @@ class TestSurfacePortability:
         apps = ForwardedHeaderTokenProvider().resolve(
             {"x-forwarded-access-token": TOKEN, "x-forwarded-email": "a@b.com"}
         )
-        store = {"s": {"access_token": TOKEN, "user_name": "a@b.com", "created": NOW}}
-        render = SessionTokenProvider(store.get, now_fn=lambda: NOW).resolve(
-            {"cookie": "fg_session=s"}
-        )
+        local = StaticTokenProvider(TOKEN, "a@b.com").resolve({})
 
-        assert apps.token == render.token
-        assert apps.user_name == render.user_name
+        assert apps.token == local.token
+        assert apps.user_name == local.user_name
         # Only the provenance differs — which is exactly the migration surface area.
-        assert apps.source != render.source
+        assert apps.source != local.source

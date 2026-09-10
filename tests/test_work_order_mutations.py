@@ -26,7 +26,7 @@ from fleetguard_api.routers.work_orders import (
     update_work_order,
 )
 
-APPROVER = Principal(token="tok", user_name="ops@example.com", source="render-u2m")
+APPROVER = Principal(token="tok", user_name="ops@example.com", source="databricks-apps")
 SELECT_FOR_UPDATE = "FOR UPDATE"
 UPDATE_STMT = "UPDATE bootcamp_students.fleetguard_work_order"
 

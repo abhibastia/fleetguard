@@ -21,7 +21,7 @@ from fleetguard_api.auth.tokens import Principal
 from fleetguard_api.routers import audit_log
 from fleetguard_api.routers.audit_log import export_audit_log_csv, list_audit_log
 
-USER = Principal(token="tok", user_name="ops@example.com", source="render-u2m")
+USER = Principal(token="tok", user_name="ops@example.com", source="databricks-apps")
 Q = "fleetguard_audit_log"
 
 LAUNCH_ROW = {

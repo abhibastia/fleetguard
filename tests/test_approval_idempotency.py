@@ -32,7 +32,7 @@ from fleetguard_api.routers import approval
 from fleetguard_api.routers.approval import ApprovalRequest, approve_campaign
 
 BODY = ApprovalRequest(title="Steering remediation", rationale="Park It campaign.")
-APPROVER = Principal(token="tok", user_name="ops@example.com", source="render-u2m")
+APPROVER = Principal(token="tok", user_name="ops@example.com", source="databricks-apps")
 
 EXISTING = {
     "service_campaign_id": "SC-21V037000-abc12345",
@@ -172,7 +172,7 @@ def test_non_approver_is_refused_before_any_database_work(monkeypatch):
         raise AssertionError("connect() must not be reached for a non-approver")
 
     monkeypatch.setattr(approval, "connect", explode)
-    outsider = Principal(token="tok", user_name="stranger@example.com", source="render-u2m")
+    outsider = Principal(token="tok", user_name="stranger@example.com", source="databricks-apps")
 
     with pytest.raises(HTTPException) as exc:
         approve_campaign(outsider, "21V037000", BODY)
