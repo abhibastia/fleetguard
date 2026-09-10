@@ -834,9 +834,16 @@ The App's OBO scopes, previously a CLI invocation quoted only in a comment, are 
 **Release:**
 
 ```bash
-databricks bundle deploy -t prod --profile abhi
-databricks bundle run fleetguard_console -t prod --profile abhi   # the App only
+./scripts/deploy.sh abhi prod          # guards, validates, deploys, verifies provenance
+databricks bundle run fleetguard_console -t prod --profile abhi   # the App only, deliberate
 ```
+
+`scripts/deploy.sh` **refuses to deploy from a dirty tree**. `bundle deploy` uploads the
+working tree but records `HEAD`, so deploying with uncommitted changes puts code in the
+workspace that exists in no commit and labels it with a commit that lacks it — silently.
+That happened twice on 2026-09-10, the second time within hours of the first being written
+up, which is why this is a script and not a paragraph (I-098). It verifies afterwards that
+the deployment state names `HEAD`, rather than trusting the guard.
 
 `bundle deploy` alone does **not** deploy the App — it uploads source, updates the app
 resource, prints `Deployment complete!`, and creates no app deployment; a plain `apps start`

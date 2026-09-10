@@ -84,8 +84,16 @@ The point: everything that follows sits on a measured, falsifiable claim with a 
 
 ### Beat 2 · Emerging signals — the proactive half
 
-"**4 affecting your fleet**" of 50. RAM 2500 service brakes: **1,256 fleet vehicles**, peak
-z 5.62, 64 complaints.
+"**6 affecting your fleet**" of 50. The headline is now **RAM PROMASTER — 2,418 fleet
+vehicles**, carrying a **`VARIANT` badge**, with RAM 2500 service brakes (**1,256**, peak
+z 5.62, 64 complaints) behind it.
+
+**Say what the badge means, it is the honest part.** NHTSA writes `PROMASTER`; the fleet
+registry, built from vPIC, writes `PROMASTER 1500`/`2500`/`3500`. Same trucks, no exact string
+match — which is why this signal read **0 fleet vehicles** until 2026-09-11. The 2,418 includes
+315 `PROMASTER CITY`, a smaller van arguably not the same vehicle, so the tier travels with the
+count rather than being blended away: §7's determinism guarantee covers `EXACT` only, and a
+`MODEL_VARIANT` number is a prompt to confirm, not a fact to act on.
 
 Say the three-state distinction explicitly, because it is the honest core: **a signal is not an
 investigation, and an investigation is not a recall.** Nothing here has been acted on by NHTSA.
@@ -189,16 +197,22 @@ existed, but nothing supplied the id until E-03 was wired (`ISSUES.md`).
 | Exposure (EXACT) | **118,323** distinct (vin, campaign) | `fleetguard_vehicle_exposure` |
 | `17V629000` | **25** vehicles / **22** depots, EXACT | verified 2026-09-09 |
 | Ford F-250 in fleet | **2,116** | verified 2026-09-09 |
-| Signals | **48** detected / 9 live / **2** fleet-relevant | `gold_emerging_signal` |
-| Signals in console | **50** / 9 live / **4** fleet-relevant | Lakebase = 48 detector + 2 agent-opened |
-| RAM 2500 signal | **1,256** vehicles, z 5.62, 64 complaints | verified 2026-09-09 |
+| Signals | **48** detected / 9 live / **4** fleet-relevant | `gold_emerging_signal`, rebuilt 2026-09-11 |
+| Signals in console | **50** / 9 live / **6** fleet-relevant | Lakebase = 48 detector + 2 agent-opened |
+| Top signal (RAM PROMASTER) | **2,418** vehicles, `MODEL_VARIANT` | verified 2026-09-11 |
+| RAM 2500 signal | **1,256** vehicles, z 5.62, 64 complaints, `EXACT` | verified 2026-09-11 |
 | Model B | precision **83.7%**, recall **96.3%**, AUC 0.925 | 765-pair golden set |
 | Work orders / audit / cost | **331** / **723** / **$84,409.68** | verified 2026-09-09 |
 
-**Why the console says 4 and the warehouse says 2.** `gold_emerging_signal` holds 48 detector
-rows, 2 of them fleet-relevant. Lakebase adds the 2 agent-opened signals, giving 50 and 4. Both
-are right; they count different things. This becomes 6 only after B3 rebuilds the gold table with
-B1's tiered match.
+**Why the console says 6 and the warehouse says 4.** `gold_emerging_signal` holds 48 detector
+rows, **4** of them fleet-relevant. Lakebase adds the 2 agent-opened signals, giving **50 and 6**.
+Both are right; they count different things.
+
+**Updated 2026-09-11 — the rebuild happened.** It used to read 2 and 4: B1/I-079's tiered match
+reached `main` on 2026-09-09 but the *stored* table still held the pre-fix zeros, so RAM
+PROMASTER and Chevrolet Silverado 1500 both showed **0** against 2,418 and 766 real vehicles.
+Rebuilt during the early B3 rehearsal (I-099). If a doc still says "2 of 48" or "4 of 50", it
+predates that.
 
 ---
 

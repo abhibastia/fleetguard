@@ -1012,23 +1012,30 @@ guidance alongside rows.
   stale `index.html` for minutes after a successful deploy on the old Render host (I-054); the
   general lesson holds anywhere a CDN or proxy sits in front, and an unknown path returns
   **200 HTML** via the SPA catch-all, so `/` proves nothing either way.
-- The Emerging tab reads "**4 affecting your fleet**" of **50** — 2 batch + 2 agent-opened. A third
-  was opened 2026-09-09 to verify E-03's trace wiring and **removed 2026-09-10** after a reviewer's
-  screenshot showed three RAM 2500 rows reading as clutter; it duplicated the detector's own
-  subject. The trace loop stays proved — `gold_agent_action` keeps the traced action and CDF
-  history is append-only. **Verified
-  live 2026-09-09, it is still 4.** B1's *code* has landed and deployed, but the stored
-  `fleet_vehicles` values are pre-fix until **B3 rebuilds `gold_emerging_signal`**; only then does
-  it become 6 of 50. The warehouse says 2 of 48 and Lakebase says 4 of 50 — both correct, counting
-  different things (Lakebase adds the 2 agent-opened rows). Do not confuse either with I-079's
-  separate "2 → 4 of 48".
+- The Emerging tab reads "**6 affecting your fleet**" of **50** — 4 batch + 2 agent-opened.
+  **Updated 2026-09-11: it was 4 of 50 until the B3 rehearsal rebuilt `gold_emerging_signal`.**
+  B1/I-079's tiered match reached `main` on 2026-09-09 but the *stored* values stayed pre-fix,
+  so RAM PROMASTER and Chevrolet Silverado 1500 both showed **0** against 2,418 and 766 real
+  vehicles. Rebuilt and loaded (I-099), verified live in both stores.
+  **The two stores still count different things, and both are right:** the warehouse
+  (`gold_emerging_signal`) says **4 of 48**, Lakebase says **6 of 50**, because Lakebase also
+  holds the 2 agent-opened rows. If a doc says "2 of 48" or "4 of 50" it predates 2026-09-11.
+  A third agent-opened signal existed briefly — opened 2026-09-09 to verify E-03's trace wiring,
+  **removed 2026-09-10** after a reviewer's screenshot showed three RAM 2500 rows reading as
+  clutter, since it duplicated the detector's own subject. The trace loop stays proved:
+  `gold_agent_action` keeps the traced action and CDF history is append-only.
 - **The agent endpoint stops, and a request does not wake it (I-092).** Restore takes **~3 min**
   and there is no `start` subcommand. This is step 1 of `DEMO.md`'s pre-flight for a reason.
 - **The approver list IS deployed** as of 2026-09-09 (deployment `01f1ac4926e91a33831468ede9ae27cd`,
   `SUCCEEDED`): four addresses, three judges, all holding `CAN_MANAGE`. Nothing further is needed —
   but the general rule stands for any *future* `app.yaml` edit, because an app running an older
   deployment enforces the older list and its 403 is identical to a missing grant.
-- **Always `databricks sync --dry-run` before deploying.** This deploy silently carried two
+- **~~Always `databricks sync --dry-run` before deploying.~~ SUPERSEDED 2026-09-10 — `sync` is
+  no longer how anything deploys.** The bundle owns the workspace copy of the source, so the
+  equivalent pre-flight is `databricks bundle summary -t prod` (nothing should read *to be
+  created*) and, for the App, remembering that `bundle deploy` alone ships **no** app
+  deployment — `databricks bundle run fleetguard_console` is the step that does (I-097). The
+  lesson the original recorded still stands, and is now structural rather than a habit: this deploy silently carried two
   further commits that had reached `main` but never the App — `signals.py` (I-079) and the
   console bundle (I-087). The dry run names the exact file set; nothing else does.
 - **The demo state is seeded** (B2): 3 launched campaigns, 331 work orders, 723 audit rows, 44

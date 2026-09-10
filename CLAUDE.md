@@ -489,10 +489,14 @@ experiments belong in `src/` and `docs/ISSUES.md`.
   `bundle deploy`**, which re-asserts every bound resource from YAML on every run. Change
   `resources/*.yml` and deploy:
   ```bash
-  databricks bundle validate --strict -t prod --profile abhi
   databricks bundle summary -t prod --profile abhi   # nothing should be "to be created"
-  databricks bundle deploy -t prod --profile abhi
+  ./scripts/deploy.sh abhi prod                      # validates + deploys + verifies provenance
   ```
+  **Use the script, not a bare `bundle deploy`.** It refuses a dirty tree: `bundle deploy`
+  uploads the working tree but records `HEAD`, so an uncommitted deploy puts code in the
+  workspace that exists in no commit — silently (I-098, which recurred within hours of being
+  documented). It deliberately does **not** deploy the App; that stays
+  `databricks bundle run fleetguard_console`.
   Adding a *new* workspace object that should be managed: create the resource file, then
   `databricks bundle deployment bind <key> <id>` — and run `jobs get <id>` first to confirm
   `creator_user_name` is ours. The jobs namespace is flat across ~296 students; a mis-typed

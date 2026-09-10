@@ -115,7 +115,7 @@ than creating copies.
 
 ```bash
 databricks bundle summary -t prod --profile abhi   # nothing should read "to be created"
-databricks bundle deploy  -t prod --profile abhi
+./scripts/deploy.sh abhi prod                      # guards a dirty tree, deploys, checks provenance
 ```
 
 Shipping the App is four commands, and the last one is the one that matters:
