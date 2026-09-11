@@ -643,35 +643,101 @@ than discovering it mid-demo.
 
 ## Picking this up tomorrow
 
-### START HERE — state as of end of 2026-09-09
+### START HERE — state as of end of 2026-09-11
 
-**Everything is committed and pushed.** `main` == `origin/main`, working tree clean, CI green.
-Nothing is half-finished; there is no in-flight edit to reconstruct.
+**Everything is committed, pushed and merged.** `main` == `origin/main` at **`b14fa12`**, working
+tree clean, CI green, no open PRs. Four PRs merged today (#1–#4). Nothing is half-finished and
+there is no in-flight edit to reconstruct.
 
-**Nothing is running that needs attention.** The Databricks App is **STOPPED** (start it with
-`databricks apps start fleetguard-console`, ~2 min). The agent serving endpoint is on
-scale-to-zero. The only continuously-billing resource is the **AI Search endpoint at
-~$6.72/day** — a known, accepted cost (I-018), roughly $115 between now and the demo.
+#### The one thing that is actually broken right now, and it is expected
 
-**One thing is waiting on another person, and as of 2026-09-09 it no longer blocks anything:**
-TA Raghu (`raghavendra.yama@gmail.com`, who is **also one of the judges**) has `CAN_MANAGE` on
-the App and has been asked to sign in and browse. See **A1** — he already has a Lakebase role, so
-his pass cannot close A1 on its own, and neither can the other two judges, who also have roles.
-**All three judges can start the app themselves** as of 2026-09-09, so none of them is waiting on
-the owner to bring it up.
-**A1's demo-day risk is retired regardless of his reply**; what remains is a robustness question
-off the critical path.
+**The agent serving endpoint is `DEPLOYMENT_STOPPED`** — measured 2026-09-11. Not "scaled to
+zero": **stopped**, the fatal one of the two idle states. Every request returns
+`400 the given endpoint is stopped`, so **the Assistant tab is offline** and will not wake on
+its own. This is I-092's fourth occurrence and matches the recorded progression
+(active → scaled to zero → stopped after longer idle).
 
-**To pick up work, go straight to
+**This is an accepted cost decision, not a regression** — scale-to-zero was kept rather than
+paying continuous serving through judging. But it means **restoring the endpoint is a mandatory
+step before any demo or dry run**, takes **~3 min**, and there is no `start` subcommand
+(`serving_endpoints.update_config` via the SDK; see `DEMO.md` pre-flight step 1).
+
+**Check `state.ready` and `deployment_state_message`, never `scale_to_zero_enabled`** — that flag
+reads `True` in both idle states and distinguishes nothing (I-092).
+
+#### What else is running, and what it costs
+
+| resource | state | note |
+|---|---|---|
+| AI Search `fleetguard-vs` | **running, ~$6.72/day** | the only continuously-billing resource; ~$87 to the demo |
+| Databricks App | **STOPPED** | `databricks apps start fleetguard-console`, ~2 min. All three judges hold `CAN_MANAGE` and can start it themselves |
+| Agent endpoint | **STOPPED** (see above) | v6, scale-to-zero on |
+| `fleetguard-cdf-to-gold` | **UNPAUSED** | event-driven only, capped at 1 run/min. Note: a hand-applied pause is now reverted by the next deploy — change the YAML instead |
+
+#### Deployment changed today — read this before touching the workspace
+
+**Deployment is a Declarative Automation Bundle.** `databricks.yml` + `resources/` own the App,
+the pipeline, the dashboard and **17 jobs**, all bound to existing objects.
+
+- **Deploy with `./scripts/deploy.sh abhi prod`, never a bare `bundle deploy`.** The script
+  refuses a dirty tree and verifies afterwards that the deployment state names `HEAD`.
+  `bundle deploy` uploads the working tree but records `HEAD`, so an uncommitted deploy puts code
+  in the workspace that exists in no commit — silently. That happened **twice** on 2026-09-10,
+  the second time hours after being documented (I-098).
+- **`bundle deploy` does NOT ship the App.** `databricks bundle run fleetguard_console` does, and
+  it restarts the App under whoever is using it — deliberately manual (I-097).
+- **Editing a bound object by hand is silently undone** by the next deploy.
+- **Never `bundle destroy`.** `prevent_destroy` guards the App, pipeline and dashboard.
+- **`/Workspace/Users/…/fleetguard/` is DELETED.** Do not recreate or import into it. Its 40
+  files were verified to exist in git first (26 identical, 14 repo-ahead, 0 unique).
+- **7 jobs are deliberately non-runnable** — they read that deleted tree: `build-backtest-scope`,
+  `embed-backtest-complaints`, `hybrid-query-test`, `inspect-eval`, `lead-time-backtest-v2`,
+  `measure-cdf-latency`, `semantic-subdivision`. Rejected experiments; code is in `src/`. To
+  revive one, add it to the bundle.
+
+#### Data state
+
+Complaints run to **2026-08-27**. `gold_emerging_signal` holds **48 signals / 4 fleet-relevant**;
+Lakebase holds **50 / 6** (it adds the 2 agent-opened rows). **Both are right and count different
+things.** Anything saying "2 of 48" or "4 of 50" predates 2026-09-11.
+
+**The documented refresh chain does not work** — ingest → bronze/silver reports success and
+changes nothing, because Auto Loader tracks files by path and the ingest overwrites in place
+(I-099a). Genuinely new data needs a pipeline **full refresh**, which also triggers a **~7 h AI
+Search index rebuild**. Recorded as an open decision with a four-rule go/no-go for 20 Sept.
+
+#### What changed on 2026-09-11 (four merged PRs)
+
+1. **Deployment migrated to a bundle** (#1) — and the migration acted as a probe: **8 of 16 job
+   notebooks were running stale code** (I-096), including the pre-I-079 fleet match and the
+   agent's own system prompt.
+2. **A review of that migration found two silent bugs it had shipped** (#1, I-098) — model-version
+   pins re-creating I-094 one layer up, and a test suite that let an app-owned Lakebase
+   credential through untouched.
+3. **B3 rehearsed two weeks early** (#2, I-099) — found the refresh does nothing, and **two jobs
+   on `main` that had never executed**. Fixed the Emerging tab's zeros: RAM PROMASTER 0 → 2,418,
+   Silverado 1500 0 → 766.
+4. **Housekeeping + the CD gap documented** (#3, I-100) — CD is blocked on account access, not
+   effort; the design and the rejected PAT fallback are recorded.
+5. **The rubric recovered and mapped** (#4) — see the pre-submission plan, item 0.
+
+#### Where to go next
+
+**Go straight to
 [PRE-SUBMISSION PLAN](#pre-submission-plan--written-2026-09-11-submission-24-sept-demo-2530-sept)** —
-written 2026-09-11 and ranked. It supersedes *WHAT IS LEFT BEFORE THE DEMO* below, which is
-dated 2026-09-08 and partly overtaken; that section is kept for its detail, not its priorities.
+ranked, with reasoning. It supersedes *WHAT IS LEFT BEFORE THE DEMO* below, which is dated
+2026-09-08 and kept for its detail, not its priorities.
 
-**Its first item is the rubric**, recovered 2026-09-11 from the proposal feedback (100/100,
-Grade A) and mapped against what was actually built. Read that mapping before anything else —
-it names the one graded line whose basis has since narrowed (Velocity), and the one that only
-became true on 2026-09-10 (deployment via Asset Bundles).
-Everything between here and there is history, kept for the record.
+**The two highest-value actions tomorrow:** (0) confirm what the 24 Sept submission actually
+asks for — the rubric we have grades the *proposal*, not the final artefact; and (1) a **full dry
+run**, because everything has been verified individually and **nothing in composition**, which is
+where this project's failures live. Start by restoring the agent endpoint.
+
+**One fact to carry into any conversation about latency:** Velocity is **two numbers**, not one —
+CDF capture **7.1–15.6 s** (genuinely sub-minute), full chain to a gold fact **2.5–4.5 min**. The
+proposal's "<1 minute" was graded on trigger settings the platform rejects as impossible (I-081).
+
+Everything between here and the pre-submission plan is history, kept for the record.
 
 #### What changed on 2026-09-09
 
