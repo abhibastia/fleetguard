@@ -461,6 +461,14 @@ a question about behaviour, not about code.
 ### I-092 — the agent serving endpoint was STOPPED, and a request does not wake it — **SILENT**
 *Date:* 2026-09-09 · *Status:* ✅ resolved
 
+> **RECURRED 2026-09-11 — fourth occurrence, and the first one nobody was surprised by.**
+> Found by running this issue's own check while writing the cold-start handover:
+> `deployment: DEPLOYMENT_STOPPED`, `deployment_state_message: 'Stopped'`, `ready: NOT_READY`,
+> `scale_to_zero_enabled: True`. **Not restored** — offline between sessions is an accepted cost
+> decision, and the measured progression (active → scaled to zero → stopped) means it would stop
+> again anyway. The consequence is that restoring is **mandatory before any demo or dry run**,
+> not merely advisable, and `DEMO.md` pre-flight step 1 is load-bearing rather than ceremonial.
+
 **Found by** the demo dry-run's first agent question, which returned
 `502 → Agent endpoint returned 400: The given endpoint is stopped, please retry after starting
 the endpoint.` Retried: same. The request does **not** wake it.
