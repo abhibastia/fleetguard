@@ -23,7 +23,9 @@ verifiable work. Grounded in what was already confirmed live before build start 
   (counts in `CLAUDE.md` — use those, don't re-estimate).
 - Architecture, identity model, and quality-control design finalized and graded
   (100/100, see `docs/feedback-final-proposal-fleetguard.pdf`), then corrected against
-  measured data on 2026-08-31.
+  measured data on 2026-08-31. **That PDF carries the rubric and its weights** — mapped
+  against the built system in `docs/STATUS.md`'s pre-submission plan, item 0, including the
+  two lines where the build diverged from what was graded.
 
 ## Pre-work — both resolved
 

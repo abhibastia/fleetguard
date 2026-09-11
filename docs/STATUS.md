@@ -662,7 +662,15 @@ the owner to bring it up.
 **A1's demo-day risk is retired regardless of his reply**; what remains is a robustness question
 off the critical path.
 
-**To pick up work, go straight to [WHAT IS LEFT BEFORE THE DEMO](#what-is-left-before-the-demo).**
+**To pick up work, go straight to
+[PRE-SUBMISSION PLAN](#pre-submission-plan--written-2026-09-11-submission-24-sept-demo-2530-sept)** —
+written 2026-09-11 and ranked. It supersedes *WHAT IS LEFT BEFORE THE DEMO* below, which is
+dated 2026-09-08 and partly overtaken; that section is kept for its detail, not its priorities.
+
+**Its first item is the rubric**, recovered 2026-09-11 from the proposal feedback (100/100,
+Grade A) and mapped against what was actually built. Read that mapping before anything else —
+it names the one graded line whose basis has since narrowed (Velocity), and the one that only
+became true on 2026-09-10 (deployment via Asset Bundles).
 Everything between here and there is history, kept for the record.
 
 #### What changed on 2026-09-09
@@ -748,6 +756,198 @@ began contradicting the canonical list (it still asserted "judges are not in
 `FLEETGUARD_APPROVERS`" after one had been added). Commit `0cf9c8e` consolidated these once
 already and the duplicate re-grew, so it is now a pointer rather than a list. **Do not restore
 prose here** — add to section A/B/C instead.
+
+---
+
+## PRE-SUBMISSION PLAN — written 2026-09-11, submission 24 Sept, demo 25–30 Sept
+
+**Read this before the section below it, which is dated 2026-09-08 and partly overtaken.**
+Ranked by what would hurt most if skipped, with the reasoning, so a cold session can act on it
+without re-deriving the argument. Everything is done or deliberately cut; none of this is
+building — it is verification, closing decisions, and one gap that is not technical at all.
+
+### 0. The rubric — recovered 2026-09-11 from the proposal feedback, and mapped to what was built
+
+**Partially closes what was an open gap.** `docs/feedback-final-proposal-fleetguard.pdf` (the
+**proposal** grade, 2026-08-30 — **100/100, Grade A, "Required Revisions: None"**) carries the
+rubric, its weights, and a 14-line requirements checklist. Until now nothing in the repo stated
+what was being graded.
+
+**Caveat that must not be lost: this is feedback on the *proposal*, not the final-submission
+rubric.** It is the best available proxy and the categories are almost certainly stable, but
+whether the 24 Sept submission wants additional artefacts — a written report, a recorded
+walkthrough — is **still unconfirmed**. That question is one message to the TA and is still
+worth asking.
+
+**The grader's own instruction for what comes next:**
+
+> *"Proceed to build with confidence; the next priority is implementing the pipelines and
+> validating the stated latency and backtest outcomes in a live environment."*
+
+All three are done: pipelines built, latency measured live (CDF 7.1–15.6 s; end-to-end
+2.5–4.5 min), backtest measured live (16.0% vs 11.1%, 1.44×, p ≈ 0.009 — including the negative
+semantic result, I-049).
+
+| Rubric category | Weight | Built state |
+|---|---:|---|
+| Project definition and data sources | 15 | ✅ all six sources live and measured |
+| Spark data pipeline | 10 | ✅ — one documented deviation: `ai_extract` moved out of silver to per-surfaced-signal (I-009) |
+| Third-party API integration | 10 | ✅ `recallsByVehicle` polling job |
+| Lakebase data model | 10 | ✅ 11 tables, CDF replicating |
+| Action-taking AI agent | 15 | ✅ six tools, human-gated write |
+| Analytics pipeline | 10 | ⚠️ see **A** below |
+| Frontend and deployment | 10 | ✅ — see **B** below, this one only became true on 2026-09-10 |
+| Big Data characteristics | 10 | ⚠️ see **C** below |
+| Architecture diagram | 10 | ✅ plus `_current` as-built versions |
+
+**A. The analytics pipeline's second fact table was renamed, and its shape changed.** The rubric
+credits *"agent_activity_fact and signal_lifecycle_fact"*. Built: `gold_agent_action` (3 rows)
+and **`gold_defect_signal_current`** (50 rows). The second is a **current-state snapshot, not a
+lifecycle history**. The lifecycle data is not lost — `lb_fleetguard_defect_signal_history`
+holds 50 inserts + 48 update pre/post-image pairs — it is simply not materialised as a fact
+table. Defensible, but say it plainly rather than let a grader find a table that does not match
+the name they were given.
+
+**B. "Explicit deployment via Asset Bundles" was credited at proposal time and was NOT true for
+the entire build — until 2026-09-10.** The rubric's Frontend-and-deployment line names it
+directly. The bundle migration closed a gap in something already graded, which is the strongest
+argument that the work was worth doing.
+
+**C. Velocity is the one graded line whose basis measurement has since narrowed — know this
+before anyone asks.** The rubric reads *"Velocity (<1 minute) justified for operational stream
+with concrete trigger settings"*, and the grader described the stream as *"Lakebase writes →
+Lakebase CDF → DLT facts → dashboards"*.
+
+Measured since: **the concrete trigger settings in the proposal (15 s / 5 s) are impossible** —
+`jobs create` rejects them, the platform floor is 60 s (I-081). So:
+
+- **CDF replication itself: 7.1–15.6 s — genuinely sub-minute** ✅
+- **The full chain to a gold fact: 2.5–4.5 min** (two live cycles, 155 s and 269 s) ✗
+
+The requirement still Meets on the streaming capture, which is the ingest the V is about. But
+**the end-to-end figure is minutes, and must never be quoted as sub-minute.** `README` and
+`ARCHITECTURE` already keep the two numbers apart deliberately; the frozen proposal does not,
+which is exactly what its contradictions header exists for. If a judge asks "you claimed
+sub-minute", the honest answer is: *the capture is, the derived fact is not, and here is the
+measurement of both.*
+
+### 1. A full demo dry run against the live App — **the highest-value technical action**
+
+The last dry run (2026-09-09) found **two demo-breaking failures that no test could see**:
+`/api/signals` returning 500 on every request (I-091), and the agent endpoint being STOPPED
+rather than scaled to zero, which a request does not wake (I-092).
+
+**Everything that dry run verified has since been perturbed:**
+
+| changed since | what it touched |
+|---|---|
+| the bundle migration | the App now deploys from `.bundle/…`, not the old sync path |
+| I-098 / I-099 fixes | two job notebooks, the signals loader's reconciliation |
+| the B3 rehearsal | `gold_emerging_signal` and Lakebase signal rows |
+| tree deletion | the old workspace notebook tree is gone |
+
+Individually verified; **never verified in composition**. A dry run is the only thing that
+tests the composition, and this project's record is that composition is where it breaks.
+
+Walk `DEMO.md` end to end: start the App (~2 min), warm the agent (first question ~47 s cold),
+then all nine beats and 9 tabs. Budget **~1 hour**. Cost is App compute plus one agent wake.
+
+### 2. Verify the agent endpoint is *ready*, not merely configured
+
+I-092: it has been found **STOPPED three times**, and `scale_to_zero_enabled: True` read `True`
+while the entity was `DEPLOYMENT_STOPPED` and every request 400'd. **Check `state.ready`, never
+the flag.** Restore is ~3 min and there is no `start` subcommand. Do it once now and again on
+submission day — it is step 1 of `DEMO.md`'s pre-flight for a reason.
+
+### 3. Two judges have never opened the App — make sure the invitation says what to expect
+
+Raghu signed in and browsed every page (2026-09-11), and his consent grant is correct.
+`sangwanrahul@icloud.com` and `zach@zachwilson.tech` hold `CAN_MANAGE` but there is no record of
+either ever opening it.
+
+A first-time user gets a fresh consent screen listing `postgres` / `sql` / `model-serving` and
+**must accept it** — declining returns `403 Invalid scope` on every data page, which reads as a
+broken app rather than an unauthorised one. And per I-086, consent is **sticky**: anyone who
+opened the app before 2026-09-08 holds a defaults-only grant that no restart or re-login widens,
+producing that same permanent 403. Self-service fix, and it must be in the note they receive:
+`DELETE /api/2.0/oauth-app-integrations/ed81b232-1eff-44ee-a422-ac522cf38de9/user-consent/me`,
+then reopen in an **incognito** window.
+
+**The action is one paragraph in whatever message accompanies the submission**, not code.
+
+### 4. Supersede the "please don't approve" instruction — **after** submission
+
+Judges were asked not to approve, because a pre-submission approval writes a service campaign
+plus ~200 work orders into append-only CDF and permanently alters the state the project is
+graded on. That standing instruction is still blanket.
+
+**Approval is the strongest thing in the demo** — §5.3's human gate, the one moment a judge acts
+rather than watches. If the instruction is not explicitly lifted after submission, they will not
+exercise it. Lifting it is a message, not a change.
+
+### 5. Close C2 — record E-07 and E-09 as decided, not built
+
+Both are marked **ADOPT** in `ENHANCEMENTS.md` with zero implementation and no logged reversal —
+which is exactly I-051's pattern, sitting in a backlog a judge can read as unfinished work.
+E-09 (LangGraph) is arguably **already satisfied** by the action-envelope pattern, which suspends
+across a process *and identity* boundary; E-07 is a mechanism demo with n=1 by its own admission.
+**~15 minutes of writing.** Reduces apparent unfinished work without building anything.
+
+### 6. OPTIONAL — the data refresh, go/no-go for **20 September**
+
+Data currently runs to **2026-08-27** (14 days stale as of 2026-09-11). A refresh needs a
+pipeline **full refresh**, which reloads `silver_complaint_chunk` and re-embeds **1.75M chunks
+≈ 7 h**. See I-099a for why the incremental path silently does nothing.
+
+**Recommendation: optional, and defensible either way. If yes, the 20th works — demo eve does
+not.**
+
+*It does not make the system better.* No judge can tell the corpus is a fortnight old, the
+ingest job is documented as manual by design, and corpus freshness was never the liveness claim
+— the live claim is the operational path (recall → approval → work orders → CDF → UC, measured
+2.5–4.5 min), which is unaffected.
+
+**If it goes ahead on the 20th, four rules:**
+
+1. **Start early morning.** Seven hours begun at 09:00 lands inside the working day; begun at
+   15:00 it lands while you sleep and any failure eats the 21st. **Treat the 21st as the retry
+   day, not as spare.**
+2. **Do NOT run `fleetguard-lead-time-backtest-v3`.** It is the only job that moves the
+   published evidence (16.0% at 197 days, 1.44×, p ≈ 0.009) — quoted in README, the evidence
+   page and the frozen proposal. Verified 2026-09-11: `export_evidence.py` **reads**
+   `gold_lead_time_summary` rather than recomputing (re-running it changed only the timestamp),
+   so a data refresh leaves the published result alone unless that job is invoked. The result is
+   a dated measurement of the method over 777 investigations; pinning it is more honest than
+   quietly re-deriving it days before grading.
+3. **Expect `fleetguard-load-signals` to FAIL, and know why.** Its reconciliation now asserts
+   `detector == len(pdf)` on the `source='DETECTOR'` slice, and the write is
+   `ON CONFLICT DO UPDATE` which **never deletes**. Any signal that drops out of gold when the
+   detection window moves stays in Postgres as an orphan and the count will not match. That is
+   the check working. Fix is a deliberate delete of the dropped `DETECTOR` signal ids — ~15
+   minutes if anticipated, an hour of confusion if not.
+4. **Budget the downstream tail:** `DEMO.md` numbers, the agent smoke-test pins in
+   `14_fleetguard_agent.py`, and `export_demo_snapshot.py`. ~30 minutes now that the shape is
+   known (it was done on 2026-09-11).
+
+**What a refresh does NOT touch:** the seeded demo state. 3 launched campaigns, 331 work orders,
+723 audit rows, 44 overdue across 28 depots all live in Lakebase and are untouched by a
+UC-side refresh. The demo's spine is safe either way.
+
+### Explicitly NOT before submission
+
+| item | why not |
+|---|---|
+| **CD** (`bundle deploy` on merge) | Blocked on account access, not effort — needs an account-level OIDC federation policy this identity cannot create (I-100). The design and the rejected PAT fallback are recorded. Nothing to do but ask the account owner. |
+| **A1's remaining question** | Whether Lakebase auto-provisions for an identity that has never used it. **No judge can answer it** — all three hold roles. Off the critical path since 2026-09-09. |
+| **C3 notification digest** | Never started, needs a new email dependency, lowest value of anything remaining. |
+| **Rebuilding the AI Search index** for its own sake | ~7 h and no demo value; only as a consequence of item 6. |
+
+### Standing costs while this runs
+
+`fleetguard-vs` (AI Search) at **~$6.72/day** is the only continuously-billing resource —
+roughly **$87** between 2026-09-11 and the demo. The App is STOPPED between sessions and the
+agent endpoint is scale-to-zero. `fleetguard-cdf-to-gold` is UNPAUSED but event-driven, capped
+at one run per minute, and fires only on agent writes or signal loads.
 
 ---
 
