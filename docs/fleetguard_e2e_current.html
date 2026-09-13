@@ -92,7 +92,7 @@
 <div class="page">
 
   <h1>FleetGuard</h1><span class="sub">Vehicle defect early warning &amp; recall response — end-to-end architecture</span><span class="live">AS-BUILT · 2026-09-08</span>
-  <p class="strap">Real NHTSA defect data · Lakeflow → AI Search → MLflow → Mosaic AI Agent Framework → Lakebase → CDF → gold facts · Databricks App (primary) · local server (development). Tracks <span class="m">ARCHITECTURE.md</span> — supersedes <span class="m">fleetguard_e2e.html</span>, the frozen 2026-08-31 proposal diagram.</p>
+  <p class="strap">Real NHTSA defect data · Lakeflow → AI Search → MLflow → Agent Framework → Lakebase → CDF → gold facts · Databricks App (primary) · local server (development). Tracks <span class="m">ARCHITECTURE.md</span> — supersedes <span class="m">fleetguard_e2e.html</span>, the frozen 2026-08-31 proposal diagram.</p>
   <div class="rule"></div>
 
   <div class="cols">
@@ -206,8 +206,8 @@
       <div class="card"><span class="badge done">OLTP</span><div class="ch">Lakebase · managed Postgres</div>
         <p class="m">vehicle · depot · defect_signal · recall_campaign</p>
         <p class="m">vehicle_exposure · service_campaign · work_order</p>
-        <p class="m">agent_action · approval · audit_log · technician</p>
-        <p>12 tables, all <span class="m">REPLICA IDENTITY FULL</span></p>
+        <p class="m">agent_action · approval · audit_log · technician · watchlist</p>
+        <p>13 tables, all <span class="m">REPLICA IDENTITY FULL</span></p>
       </div>
 
       <div class="card"><div class="ch">ResponsesAgent · 5 read tools</div>
@@ -216,9 +216,9 @@
         <p class="m">propose_service_campaign()</p>
       </div>
 
-      <div class="card red redbg"><div class="ch">The one write tool</div>
-        <p class="m">open_defect_signal()</p>
-        <p class="k">returns an action envelope — the model never writes</p>
+      <div class="card red redbg"><div class="ch">2 write tools</div>
+        <p class="m">open_defect_signal() · watch_campaign()</p>
+        <p class="k">both return an action envelope — the model never writes</p>
         <p>console validates + executes under the <b>caller's own OBO token</b></p>
       </div>
 

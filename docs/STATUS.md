@@ -878,8 +878,8 @@ semantic result, I-049).
 | Project definition and data sources | 15 | ✅ all six sources live and measured |
 | Spark data pipeline | 10 | ✅ — one documented deviation: `ai_extract` moved out of silver to per-surfaced-signal (I-009) |
 | Third-party API integration | 10 | ✅ `recallsByVehicle` polling job |
-| Lakebase data model | 10 | ✅ 11 tables, CDF replicating |
-| Action-taking AI agent | 15 | ✅ six tools, human-gated write |
+| Lakebase data model | 10 | ✅ 12 tables, CDF replicating |
+| Action-taking AI agent | 15 | ✅ seven tools, human-gated writes |
 | Analytics pipeline | 10 | ⚠️ see **A** below |
 | Frontend and deployment | 10 | ✅ — see **B** below, this one only became true on 2026-09-10 |
 | Big Data characteristics | 10 | ⚠️ see **C** below |
@@ -1259,7 +1259,7 @@ Lowest value of anything remaining.
 
 **C4. UC Functions + MCP — INVESTIGATED AND DECLINED 2026-09-09. Do not re-propose without
 reading this.** The idea is superficially strong and was ranked highly before the code was
-read: the agent's six tools are Python closures inside the model, so they are ungoverned,
+read: the agent's seven tools are Python closures inside the model, so they are ungoverned,
 ungrantable and unreusable — an odd gap in a project whose thesis is governance. Exposing them
 as UC Functions over MCP would close it on paper.
 

@@ -99,7 +99,7 @@ metastore. Catalog creation is unavailable, so **medallion layers are table-name
 ```
 static.nhtsa.gov ──► Volume (per-source subdirs) ──► bronze_* ──► silver_* ──► gold_* ──► Lakebase ──► CDF ──► UC
    If-Modified-Since      Auto Loader needs a         4 tables    + quarantine   fleet +    Postgres   7–16 s
-   only                   DIRECTORY, not a file       8.44M rows  reconciled     backtest   11 tables
+   only                   DIRECTORY, not a file       8.44M rows  reconciled     backtest   12 tables
 ```
 
 ### 4.1 Ingestion

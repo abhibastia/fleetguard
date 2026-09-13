@@ -74,10 +74,11 @@ above, sourced from the same measurement.
   split so `bronze = silver + quarantine` reconciles exactly at every layer.
 - **Semantic retrieval**: Databricks AI Search over 1.7M+ complaint narrative chunks,
   hybrid (BM25 + embedding) search.
-- **A registered, deployed agent** (Mosaic AI Agent Framework, Model Serving): six tools —
+- **A registered, deployed agent** (Agent Framework, Model Serving): seven tools —
   five read (complaint search, fleet exposure, fleet vocabulary lookup, emerging-signal
-  lookup, campaign proposal) and one real write (`open_defect_signal`, executed by the app
-  under the caller's own identity, never by the model) — traced with MLflow, evaluated
+  lookup, campaign proposal) and two real writes (`open_defect_signal`, `watch_campaign` —
+  both executed by the app under the caller's own identity, never by the model) — traced
+  with MLflow, evaluated
   against a held-out golden set built from NHTSA's own recall text.
 - **Lakebase Postgres** as the operational store for fleet state (vehicles, depots, service
   campaigns, work orders, audit log). Change Data Feed replicates every write into Unity
