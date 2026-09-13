@@ -72,6 +72,10 @@ above, sourced from the same measurement.
 - **Ingestion → medallion pipeline** (Lakeflow Declarative Pipelines): NHTSA's complaint,
   recall, investigation, and TSB flat files → bronze → silver → gold, with a quarantine
   split so `bronze = silver + quarantine` reconciles exactly at every layer.
+- **External APIs consumed**: `static.nhtsa.gov` flat files (`If-Modified-Since` only — the
+  host ignores `If-None-Match`), `api.nhtsa.gov/recalls/recallsByVehicle` (no conditional-request
+  support), and vPIC (`DecodeVINValuesBatch`) for authoritative make/model/year decode. Full
+  list, including this console's own REST API, in [`docs/API.md`](docs/API.md).
 - **Semantic retrieval**: Databricks AI Search over 1.7M+ complaint narrative chunks,
   hybrid (BM25 + embedding) search.
 - **A registered, deployed agent** (Agent Framework, Model Serving): seven tools —
@@ -160,6 +164,7 @@ Read `docs/STATUS.md` first if you're picking this up cold — it's the one page
 |---|---|
 | [`docs/DEMO.md`](docs/DEMO.md) | **Start here to look around** — pre-flight, the nine beats, numbers with sources, what not to claim |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | The living spec — what the system *is*, kept true with the code |
+| [`docs/API.md`](docs/API.md) | Every console REST endpoint and every external API this project consumes, one page |
 | [`docs/STATUS.md`](docs/STATUS.md) | Where the build has got to, updated every session |
 | [`docs/ISSUES.md`](docs/ISSUES.md) | Every problem hit during the build, root cause, resolution — append-only |
 | [`docs/ENHANCEMENTS.md`](docs/ENHANCEMENTS.md) | Evaluated backlog: adopted, deferred, or rejected, with reasons |
