@@ -16,6 +16,7 @@ no error and passed the obvious check.
 |---|---|---|---|
 | I-028 | Phase 5 | **RESOLVED 2026-08-31.** User confirmed authorisation to use the existing CDF mapping `databricks_postgres.bootcamp_students` → `bootcamp_students.bootcamp_cdc`. Naming decided as `fleetguard_<entity>` → `lb_fleetguard_<entity>_history` (see I-036). Phase 5 unparked. | ✅ resolved |
 | I-018 | Cost | **Sized (see I-025).** Embedding is ~275M tokens ≈ **$28–36 one-off** — not the problem. The AI Search *endpoint* is **~$403/month recurring** and is the real exposure. Mitigation is index lifecycle (billing stops 24h after the last index is deleted), not corpus trimming. Still open only as a decision on how long to leave the index up. | **open** |
+| I-101 | Cost | The agent's AI Search endpoint (`fleetguard-vs` / `complaint_chunk_idx`) was **deliberately deleted** 2026-09-08 after ~15K DBUs of usage that day, to cap billing. Any run of `14_fleetguard_agent.py` now fails on its first smoke-test cell (`search_complaints`), which blocks live verification of every tool in the file — including new ones — until the endpoint is recreated. Recreating it is a cost decision, not a bug fix. | **watch** |
 | I-100 | CI/CD | The proposal's CD half (`bundle deploy` on merge to main) **cannot be built from this account**. The right mechanism — GitHub OIDC workload identity federation, which stores no secret — needs an account-level federation policy; this identity has no account profile and is in group `users` only. Design and the rejected PAT fallback are recorded. Needs the account owner. | **open** |
 | I-017 | Platform | Lakebase CDF is **not** a Declarative Automation Bundle resource, so Phase 5 enablement can't be captured in `bundle deploy`. Manual runbook step; CI/CD must not assume otherwise. | **watch** |
 | I-016 | Platform | Table properties (retention, `VACUUM`) on Lakebase CDF sync-managed destination tables are undocumented — may not be settable. Fallback is a downstream Delta copy under our own retention. Confirm during Phase 5. | **open** |
@@ -26,6 +27,46 @@ no error and passed the obvious check.
 ---
 
 ## Tooling / process
+
+### I-101 — the AI Search endpoint was deleted to cap billing, and it blocks the agent's smoke test
+*Date:* 2026-09-13 · *Status:* **watch** — deliberate, not a defect; recreate on demand
+
+**Found by** running `fleetguard-agent-build` (the bundle job that logs/registers
+`14_fleetguard_agent.py`) after adding the `watch_campaign` tool. The job failed at the very
+first smoke-test cell:
+
+```
+NotFound: AI Search endpoint 70cf7dd2-9f5b-405b-b7f7-823dfdab7d41 not found.
+```
+
+**Root cause is a decision, not a bug.** The user had run up ~15K DBUs on 2026-09-08 and
+deleted the AI Search endpoint (`fleetguard-vs`, documented in `STATUS.md` as **~$6.72/day**
+while running) to stop it billing. `docs/STATUS.md`'s "Now billing" section still describes
+that endpoint as live — it is stale as of this entry and should be corrected in the same pass
+that recreates the endpoint, not before.
+
+**Consequence.** `search_complaints` is the first cell in the notebook's smoke-test sequence,
+so its failure blocks every cell after it — `lookup_fleet_exposure`, `lookup_fleet_models`,
+`lookup_emerging_signals`, `propose_service_campaign`, `open_defect_signal`, and the new
+`watch_campaign` — regardless of whether those tools themselves work. A tool cannot be
+live-verified in isolation without either the index back up or reordering the smoke-test
+cells, and reordering a shared smoke test around one billing-avoidance decision is worse than
+just naming the constraint here.
+
+**What is and is not verified as a result.** `watch_campaign`'s write path is fully covered by
+unit tests (`tests/test_agent_actions.py::TestWatchCampaign`, `tests/test_chat.py`,
+`tests/test_watchlist_routes.py`) against a fake cursor, and the new `fleetguard_watchlist`
+Lakebase table was created and proved live (uniqueness index rejects a duplicate, permits a
+dismissed rewatch). What is **not** verified: the tool actually round-tripping through a live
+`ResponsesAgent` end to end. That step is deferred until the endpoint is recreated for an
+actual demo window — a cost/timing call, not something to do as a side effect of adding a
+tool.
+
+**Resolution when it's time:** recreate the AI Search endpoint + `complaint_chunk_idx` index,
+run `fleetguard-agent-build`, then update `STATUS.md`'s billing section to match whatever is
+actually running.
+
+---
 
 ### I-100 — the proposal's CD half cannot be built from this account
 *Date:* 2026-09-11 · *Status:* **open** — blocked externally, design recorded

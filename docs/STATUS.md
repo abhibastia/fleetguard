@@ -1,6 +1,6 @@
 # FleetGuard — project status
 
-**Last updated:** 2026-09-10 · **MVP target: 7 September — MET** · **Demo: 25–30 September**
+**Last updated:** 2026-09-13 · **MVP target: 7 September — MET** · **Demo: 25–30 September**
 
 > **CHANGED 2026-09-10 — RENDER IS GONE. Two surfaces now, not three.**
 > The supported ways to run FleetGuard are **Databricks Apps** (`fleetguard-console`, the demo
@@ -643,11 +643,30 @@ than discovering it mid-demo.
 
 ## Picking this up tomorrow
 
-### START HERE — state as of end of 2026-09-11
+### START HERE — state as of end of 2026-09-13
 
-**Everything is committed, pushed and merged.** `main` == `origin/main` at **`b14fa12`**, working
-tree clean, CI green, no open PRs. Four PRs merged today (#1–#4). Nothing is half-finished and
-there is no in-flight edit to reconstruct.
+**Not on `main` right now.** A second agent write action, `watch_campaign` (flags an NHTSA
+recall campaign for the fleet safety team, distinct from `open_defect_signal`'s
+component/make/model pattern), is built and committed on **`feature/watch-campaign-action`**
+(`f531e25`), not yet merged. New `fleetguard_watchlist` Lakebase table, `GET /watchlist`
+console endpoint, unit tests (all passing), `ARCHITECTURE.md` updated. See I-101 below for
+what is and is not verified.
+
+**The bundle's `prod` deployment state currently points at that feature branch, not `main`** —
+`./scripts/deploy.sh` was run from it to push the updated agent notebook source. This is
+correct provenance (the script verified it), but it means `prod` is temporarily running
+feature-branch code until this merges and gets redeployed from `main`. Worth remembering before
+trusting "what's deployed == what's on `main`" as an invariant.
+
+**AI Search endpoint is `DELETED`, not merely stopped or scaled to zero.** Confirmed live
+2026-09-13: `complaint_chunk_idx`'s endpoint 404s (`AI Search endpoint ... not found`), and
+`vector-search-endpoints list-endpoints` shows none belonging to this project — deleted
+2026-09-08 after ~15K DBUs that day, a deliberate billing decision (I-101). Consequence: **any**
+run of `14_fleetguard_agent.py`'s smoke-test cells fails immediately on `search_complaints`
+(the first cell), which blocked live verification of `watch_campaign` — not a defect in the new
+code, just an ordering collision with an unrelated cost decision. Recreating the endpoint (and
+re-syncing the index) is a cost/timing call for whoever is about to demo, not something to do
+reflexively.
 
 #### The one thing that is actually broken right now, and it is expected
 
@@ -669,7 +688,7 @@ reads `True` in both idle states and distinguishes nothing (I-092).
 
 | resource | state | note |
 |---|---|---|
-| AI Search `fleetguard-vs` | **running, ~$6.72/day** | the only continuously-billing resource; ~$87 to the demo |
+| AI Search `fleetguard-vs` | **DELETED** (2026-09-08, ~15K DBUs that day) | not billing; must be recreated + `complaint_chunk_idx` re-synced before any agent smoke test or demo that touches `search_complaints` (I-101) |
 | Databricks App | **STOPPED** | `databricks apps start fleetguard-console`, ~2 min. All three judges hold `CAN_MANAGE` and can start it themselves |
 | Agent endpoint | **STOPPED** (see above) | v6, scale-to-zero on |
 | `fleetguard-cdf-to-gold` | **UNPAUSED** | event-driven only, capped at 1 run/min. Note: a hand-applied pause is now reverted by the next deploy — change the YAML instead |

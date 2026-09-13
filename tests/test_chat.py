@@ -5,6 +5,8 @@ indistinguishable from "Agent endpoint returned 400" alone.
 
 from __future__ import annotations
 
+from datetime import datetime
+
 import fleetguard_api.deps as deps_module
 import fleetguard_api.routers.chat as chat_module
 from fastapi.testclient import TestClient
@@ -195,3 +197,50 @@ def test_a_response_without_a_request_id_still_writes_the_action(monkeypatch):
     resp = client.post("/api/chat", json={"messages": [{"role": "user", "content": "open one"}]})
     assert resp.status_code == 200
     assert captured["trace_id"] is None
+
+
+def test_a_watch_campaign_result_round_trips_through_action_result(monkeypatch):
+    """`ChatReply.action_result` is a union of two shapes now — `execute()` dispatches by
+    action name and this proves the response model accepts the *other* one, not just the
+    `open_defect_signal` shape every other test in this file exercises."""
+    _configure(monkeypatch)
+
+    def _fake_execute(principal, envelope, trace_id=None):
+        return chat_module.agent_actions.WatchCampaignResult(
+            action="watch_campaign",
+            watchlist_id="WATCH-test",
+            campaign_id="17V629000",
+            watched_by="ops@example.com",
+            watched_at=datetime(2026, 9, 13, 12, 0, 0),
+        )
+
+    monkeypatch.setattr(chat_module.agent_actions, "execute", _fake_execute)
+    monkeypatch.setattr(
+        chat_module.httpx,
+        "post",
+        lambda *a, **k: _FakeResponse(
+            200,
+            {
+                "object": "response",
+                "output": [
+                    {
+                        "content": [
+                            {"type": "output_text", "text": "Requested."},
+                            {
+                                "type": "output_text",
+                                "text": chat_module.agent_actions.ACTION_SENTINEL
+                                + ' {"__fleetguard_action__": "watch_campaign"}',
+                            },
+                        ]
+                    }
+                ],
+            },
+        ),
+    )
+
+    resp = client.post("/api/chat", json={"messages": [{"role": "user", "content": "watch it"}]})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["action_result"]["action"] == "watch_campaign"
+    assert body["action_result"]["watchlist_id"] == "WATCH-test"
+    assert body["action_result"]["campaign_id"] == "17V629000"

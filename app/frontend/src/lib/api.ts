@@ -88,9 +88,11 @@ export interface ChatTurn {
 }
 
 /** What the console actually did when the agent requested a write. Distinct from `reply`
- *  on purpose: this is the committed row, whereas `reply` is the model's prose about it. */
-export interface AgentActionResult {
-  action: string;
+ *  on purpose: this is the committed row, whereas `reply` is the model's prose about it.
+ *  A union because there are two write actions now — narrow on `.action` before reading
+ *  action-specific fields. */
+export interface OpenDefectSignalActionResult {
+  action: "open_defect_signal";
   signal_id: string;
   component: string;
   make: string | null;
@@ -101,10 +103,29 @@ export interface AgentActionResult {
   opened_by: string;
 }
 
+export interface WatchCampaignActionResult {
+  action: "watch_campaign";
+  watchlist_id: string;
+  campaign_id: string;
+  watched_by: string;
+  watched_at: string;
+}
+
+export type AgentActionResult = OpenDefectSignalActionResult | WatchCampaignActionResult;
+
 export interface ChatReply {
   reply: string;
   endpoint: string;
   action_result: AgentActionResult | null;
+}
+
+export interface WatchlistEntry {
+  watchlist_id: string;
+  campaign_id: string;
+  rationale: string;
+  watched_by: string;
+  status: string;
+  watched_at: string;
 }
 
 export interface Signal {
@@ -337,4 +358,5 @@ export const api = {
   auditLog: (limit = 200) => request<AuditLogEntry[]>(`/audit-log?limit=${limit}`),
   depotRisk: () => request<DepotRisk[]>("/depot-risk"),
   recallTrend: () => request<RecallTrend>("/recall-trend"),
+  watchlist: (limit = 50) => request<WatchlistEntry[]>(`/watchlist?limit=${limit}`),
 };

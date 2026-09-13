@@ -32,6 +32,7 @@ from .routers import (
     signals,
     technicians,
     trends,
+    watchlist,
     work_orders,
 )
 
@@ -105,6 +106,7 @@ api.include_router(technicians.router)
 api.include_router(audit_log.router)
 api.include_router(depots.router)
 api.include_router(trends.router)
+api.include_router(watchlist.router)
 api.include_router(auth_routes.router)
 app.include_router(api)
 

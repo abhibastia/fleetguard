@@ -55,8 +55,9 @@ class ChatReply(BaseModel):
     endpoint: str
     # Present only when the agent requested a write and this console performed it. The UI
     # renders this separately from `reply`, because the committed row — not the model's
-    # prose — is what actually happened.
-    action_result: agent_actions.ActionResult | None = None
+    # prose — is what actually happened. Two shapes because there are now two write
+    # actions (open_defect_signal, watch_campaign); the frontend narrows on `.action`.
+    action_result: agent_actions.ActionResult | agent_actions.WatchCampaignResult | None = None
 
 
 def _extract(payload: dict) -> tuple[str, list[dict]]:
