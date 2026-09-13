@@ -329,11 +329,15 @@ export function App() {
           <Home
             onNavigate={(v) =>
               setView(
+                // Explicit per target, not a fallback — a card added later that passes an
+                // id nobody maps here should be a visible bug, not a silent misroute to
+                // Evidence (the previous shape of this ternary, before there were three
+                // internal cards to tell apart).
                 v === "queue"
                   ? { name: "queue" }
                   : v === "signals"
                     ? { name: "signals" }
-                    : { name: "evidence" },
+                    : { name: "evidence" }, // v === "evidence"
               )
             }
           />

@@ -1378,6 +1378,15 @@ thead th.sortable:hover {
   }
 }
 
+/* The dashboard card is an <a>, not a <button> like every other .home-path — the first
+   external link in this codebase. `.home-path`'s button reset (text-align/cursor/font/color)
+   doesn't cover anchor defaults, so restate display and underline here rather than widen the
+   shared rule for one link. */
+.home-path-external {
+  display: block;
+  text-decoration: none;
+}
+
 /* An inline button that reads as a link — used for "See the evidence →" inside a paragraph,
    where a real <a> would need a route and a card-wide button would swallow the sentence. */
 .linklike {

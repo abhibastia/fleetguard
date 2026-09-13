@@ -4,9 +4,11 @@ Vehicle defect early-warning and recall-response platform for commercial fleets,
 Databricks (Lakeflow, Lakebase, Unity Catalog, Model Serving, AI Search) against NHTSA's
 public defect corpus.
 
-A fleet operator running thousands of vehicles today learns about safety defects the same
-way a private owner does — when a recall posts. FleetGuard gives them two capabilities
-instead of one:
+**Built for a fleet safety team** running thousands of vehicles — the people who resolve a
+recall against the roster and decide what gets dispatched — and for the safety leadership
+above them who need to know the program is actually working, not just busy. Today, a fleet
+learns about safety defects the same way a private owner does — when a recall posts.
+FleetGuard gives the team two capabilities instead of one:
 
 - **Reactive — recall response.** A campaign posts; FleetGuard resolves its scope against
   the fleet's VIN roster, ranks exposure by depot and severity, and issues work orders under
