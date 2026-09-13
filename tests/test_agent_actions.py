@@ -13,6 +13,7 @@ happens when the model emits something malformed, hostile, or simply absent.
 from __future__ import annotations
 
 import json
+from datetime import datetime
 
 import pytest
 from fakes import FakeCursor, install
@@ -20,6 +21,7 @@ from fastapi import HTTPException
 from fleetguard_api import agent_actions
 from fleetguard_api.agent_actions import ACTION_SENTINEL, execute, parse_envelope
 from fleetguard_api.auth.tokens import Principal
+from fleetguard_api.db import UniqueViolation
 
 USER = Principal(token="tok", user_name="ops@example.com", source="databricks-apps")
 ANON = Principal(token="tok", user_name=None, source="static-dev")
@@ -40,6 +42,29 @@ VEHICLE_COUNT_Q = "FROM bootcamp_students.fleetguard_vehicle"
 INSERT_SIGNAL = "INSERT INTO bootcamp_students.fleetguard_defect_signal"
 INSERT_AUDIT = "INSERT INTO bootcamp_students.fleetguard_audit_log"
 INSERT_AGENT_ACTION = "INSERT INTO bootcamp_students.fleetguard_agent_action"
+
+CAMPAIGN_ID = "17V629000"
+
+VALID_WATCH = {
+    "__fleetguard_action__": "watch_campaign",
+    "status": "REQUESTED",
+    "params": {"campaign_id": CAMPAIGN_ID, "rationale": "worth tracking"},
+}
+
+CAMPAIGN_LOOKUP_Q = "FROM bootcamp_students.fleetguard_recall_campaign"
+INSERT_WATCHLIST = "INSERT INTO bootcamp_students.fleetguard_watchlist"
+
+
+def _watch_cursor(
+    campaign_exists: bool = True,
+    watched_at: datetime | None = None,
+    raise_on: tuple[str, Exception] | None = None,
+) -> FakeCursor:
+    script = {
+        CAMPAIGN_LOOKUP_Q: [{"campaign_id": CAMPAIGN_ID}] if campaign_exists else [],
+        INSERT_WATCHLIST: [{"watched_at": watched_at or datetime(2026, 9, 13, 12, 0, 0)}],
+    }
+    return FakeCursor(script, raise_on=raise_on)
 
 
 @pytest.fixture(autouse=True)
@@ -326,6 +351,110 @@ class TestExecute:
 
         with pytest.raises(RuntimeError):
             execute(USER, VALID)
+
+        assert conn.rolled_back and not conn.committed
+
+
+class TestWatchCampaign:
+    """`watch_campaign` — the agent's second write. Same threat model as `open_defect_signal`
+    (every field originated in LLM output) plus one thing that one doesn't have: a foreign
+    reference to check, since `fleetguard_watchlist.campaign_id` carries no DB-level FK."""
+
+    def test_unidentified_principal_is_refused_before_any_database_work(self, monkeypatch):
+        def explode(*a, **k):
+            raise AssertionError("connect() must not be reached without an identity")
+
+        monkeypatch.setattr(agent_actions, "connect", explode)
+        with pytest.raises(HTTPException) as exc:
+            execute(ANON, VALID_WATCH)
+        assert exc.value.status_code == 403
+
+    def test_snapshot_mode_refuses_rather_than_faking(self, monkeypatch):
+        monkeypatch.setattr(agent_actions.snapshot, "is_snapshot", lambda: True)
+        monkeypatch.setattr(
+            agent_actions, "connect", lambda *a, **k: pytest.fail("connect() in snapshot mode")
+        )
+        with pytest.raises(HTTPException) as exc:
+            execute(USER, VALID_WATCH)
+        assert exc.value.status_code == 501
+
+    @pytest.mark.parametrize(
+        "params",
+        [
+            {},  # campaign_id and rationale both required
+            {"campaign_id": "", "rationale": "x"},  # empty campaign_id
+            {"campaign_id": CAMPAIGN_ID},  # rationale missing
+            {"campaign_id": CAMPAIGN_ID, "rationale": ""},  # empty rationale
+            {"campaign_id": "C" * 100, "rationale": "x"},  # unbounded length
+        ],
+    )
+    def test_malformed_params_are_rejected_before_any_connection(self, monkeypatch, params):
+        def explode(*a, **k):
+            raise AssertionError("connect() must not be reached with malformed params")
+
+        monkeypatch.setattr(agent_actions, "connect", explode)
+        with pytest.raises(Exception) as exc:
+            execute(USER, {"__fleetguard_action__": "watch_campaign", "params": params})
+        assert not isinstance(exc.value, AssertionError)
+
+    def test_unknown_campaign_is_refused(self, monkeypatch):
+        """`fleetguard_watchlist.campaign_id` has no FK — this check is what stops a
+        hallucinated campaign number from being recorded as if it were real."""
+        cur = _watch_cursor(campaign_exists=False)
+        install(monkeypatch, agent_actions, cur)
+
+        with pytest.raises(HTTPException) as exc:
+            execute(USER, VALID_WATCH)
+        assert exc.value.status_code == 404
+
+    def test_writes_the_watchlist_row_and_returns_the_committed_row(self, monkeypatch):
+        cur = _watch_cursor()
+        conn = install(monkeypatch, agent_actions, cur)
+
+        result = execute(USER, VALID_WATCH, trace_id="tr-456")
+
+        assert result.action == "watch_campaign"
+        assert result.watchlist_id.startswith("WATCH-")
+        assert result.campaign_id == CAMPAIGN_ID
+        assert result.watched_by == "ops@example.com"
+        assert conn.committed and not conn.rolled_back
+
+    def test_writes_an_audit_row_attributed_to_the_caller(self, monkeypatch):
+        cur = _watch_cursor()
+        install(monkeypatch, agent_actions, cur)
+
+        execute(USER, VALID_WATCH)
+
+        assert "CAMPAIGN_WATCHED" in cur.sql_for(INSERT_AUDIT)
+        assert cur.params_for(INSERT_AUDIT)["actor"] == "ops@example.com"
+
+    def test_writes_the_agent_action_row_with_on_behalf_of(self, monkeypatch):
+        cur = _watch_cursor()
+        install(monkeypatch, agent_actions, cur)
+
+        execute(USER, VALID_WATCH, trace_id="tr-456")
+
+        params = cur.params_for(INSERT_AGENT_ACTION)
+        assert params["tool"] == "watch_campaign"
+        assert params["actor"] == "ops@example.com"
+        assert params["trace"] == "tr-456"
+
+    def test_duplicate_active_watch_is_refused_with_409(self, monkeypatch):
+        """`ux_fg_watchlist_active` (src/lakebase/22_create_watchlist_table.py) is what
+        actually serialises a double-click; this is the message layered on top of it."""
+        cur = _watch_cursor(raise_on=(INSERT_WATCHLIST, UniqueViolation("duplicate key")))
+        install(monkeypatch, agent_actions, cur)
+
+        with pytest.raises(HTTPException) as exc:
+            execute(USER, VALID_WATCH)
+        assert exc.value.status_code == 409
+
+    def test_a_failed_write_rolls_back_rather_than_leaving_a_partial_record(self, monkeypatch):
+        cur = _watch_cursor(raise_on=(INSERT_AUDIT, RuntimeError("audit insert failed")))
+        conn = install(monkeypatch, agent_actions, cur)
+
+        with pytest.raises(RuntimeError):
+            execute(USER, VALID_WATCH)
 
         assert conn.rolled_back and not conn.committed
 

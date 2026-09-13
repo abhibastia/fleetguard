@@ -58,7 +58,7 @@ against 11.1% on a volume-matched placebo** (1.44×, z ≈ 2.62, p ≈ 0.009).
 | 4 Model B + golden set | ✅ Done — precision 83.7% / recall 96.3%, real numbers on the evidence page |
 | 5 Lakebase + CDF | ✅ Done — loaded and latency-measured |
 | 6 OAuth wiring | ⬜ Not started |
-| 7 Agent tools + write path | ✅ Done — six tools; the write (`open_defect_signal`) executes in the app under the caller's identity, see §7.1 |
+| 7 Agent tools + write path | ✅ Done — seven tools; both writes (`open_defect_signal`, `watch_campaign`) execute in the app under the caller's identity, see §7.1 |
 | 8 App + external surface | ⬜ Not started |
 | 9 Model A + backtest | ✅ Done — **result is negative**, see §6 |
 | 10 Governance | ✅ Visible slice — Postgres RLS on depot scoping, proved live |
@@ -293,23 +293,30 @@ and each was violated at least once.
 | Project tables are `fleetguard_`-prefixed | Name guard; shared schema |
 | Backtest population is exactly **777** investigations | Assertion in scope build |
 | No detection dated on or after its investigation opened | Integration test |
-| The agent can open a defect signal, but **never** reaches `fleetguard_work_order` | Build assertion on `propose_service_campaign`; dispatch is behind `FLEETGUARD_APPROVERS` |
-| An agent write is attributed to a **real human**, never a service principal | `agent_actions.execute` refuses (403) a token carrying no identity |
+| The agent can open a defect signal or watch a campaign, but **never** reaches `fleetguard_work_order` or `fleetguard_service_campaign` | Build assertion on `propose_service_campaign`; dispatch is behind `FLEETGUARD_APPROVERS` |
+| An agent write is attributed to a **real human**, never a service principal | `agent_actions.execute` refuses (403) a token carrying no identity, for both write actions |
 | Fleet counts joining NHTSA and vPIC model strings state their **match tier** | `ActionResult.match_basis`; I-075 |
+| A `watch_campaign` request checks the campaign exists before writing | `fleetguard_watchlist` carries no DB-level FK; `_execute_watch_campaign` refuses (404) an unknown `campaign_id` |
 
 ---
 
 ### 7.1 The agent's write path
 
-The agent has six tools; five read, and one — `open_defect_signal` — writes a business
+The agent has seven tools; five read, and two write. `open_defect_signal` writes a business
 record that appears in the operator's **Emerging** tab beside the batch detector's rows.
+`watch_campaign` — added after §7's original build — is a plainer write: it flags one NHTSA
+campaign number for the fleet safety team to keep an eye on, with a rationale, and nothing
+else. It touches no work order, no service campaign, and computes no fact of its own.
 
-**The model does not perform the write, and cannot.** Its serving endpoint has no Postgres
+**The model does not perform either write, and cannot.** Its serving endpoint has no Postgres
 path, and giving it one is closed on this account (all three routes — the `DatabricksLakebase`
 resource, a secret-backed service principal, and OBO for Model Serving — were checked and
-none are available; see `docs/ISSUES.md`). So the tool returns a deterministic *action
-envelope*, the FastAPI app validates it against a Pydantic model, and **the app** executes the
-insert through the existing `connect(principal)` path — under the caller's own OBO token.
+none are available; see `docs/ISSUES.md`). So each tool returns a deterministic *action
+envelope*, the FastAPI app validates it against a Pydantic model (`OpenDefectSignalParams` or
+`WatchCampaignParams`), and **the app** executes the insert through the existing
+`connect(principal)` path — under the caller's own OBO token. `agent_actions.execute`
+dispatches on the envelope's action name to the matching handler; an unrecognised name is
+refused (400) rather than silently ignored.
 
 This is a stronger property than it looks like a workaround for: the write lands as the
 signed-in human, so `opened_by` is a genuine identity and Postgres RLS applies to the agent's
@@ -323,13 +330,15 @@ Three consequences the code enforces rather than assumes:
 - **The envelope is constructed in Python from the tool's return value, never formatted by
   the model**, and the sentinel must *start* the output item. Prose that merely mentions the
   sentinel is not an envelope.
-- **Facts are recomputed, not accepted.** `fleet_vehicles` is counted from real rows; the
-  model's own estimate is never persisted. It orders the Emerging tab, so a hallucinated
-  count would reorder the operator's page.
-- **The model is prompted to say it *requested* a signal, never that it saved one.** The
-  committed row is reported by a separate UI element — the one place entitled to claim a
-  signal exists. Verified live: the agent said *"I can't confirm it's saved or tracked yet,
-  and no signal ID has been assigned to me."*
+- **Facts are recomputed, not accepted — with one deliberate exception.** `fleet_vehicles` is
+  counted from real rows; the model's own estimate is never persisted. It orders the Emerging
+  tab, so a hallucinated count would reorder the operator's page. `watch_campaign` computes no
+  fact at all — it is a bookmark with a rationale, not an observation, so there is nothing to
+  recompute; its only server-side check is that the campaign it names actually exists.
+- **The model is prompted to say it *requested* a signal or a watch, never that it saved
+  one.** The committed row is reported by a separate UI element — the one place entitled to
+  claim either exists. Verified live: the agent said *"I can't confirm it's saved or tracked
+  yet, and no signal ID has been assigned to me."*
 
 **The agent can read the fleet's own vocabulary before it writes.** `lookup_fleet_models`
 returns the makes and models the fleet actually operates, in the registry's spelling, from

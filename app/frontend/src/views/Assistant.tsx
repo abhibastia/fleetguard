@@ -63,7 +63,8 @@ export function Assistant() {
       <h3>Assistant</h3>
       <p className="muted" style={{ marginTop: 0, fontSize: 12.5 }}>
         Searches 1.75M complaint narratives and fleet exposure, and can open a defect signal
-        for tracking. It can <em>propose</em> a service campaign; only you can approve one.
+        or watch a campaign for tracking. It can <em>propose</em> a service campaign; only
+        you can approve one.
       </p>
 
       {gated && (
@@ -88,7 +89,7 @@ export function Assistant() {
             {t.role === "assistant" ? renderMarkdownLite(t.content) : t.content}
           </div>
         ))}
-        {lastAction && (
+        {lastAction && lastAction.action === "open_defect_signal" && (
           /* Rendered from the console's committed row, never from the model's text. The
              agent is prompted to say it *requested* a signal; this is the only element on
              the page entitled to say one exists. */
@@ -114,6 +115,18 @@ export function Assistant() {
                 differently from the complaint record.
               </div>
             )}
+          </div>
+        )}
+        {lastAction && lastAction.action === "watch_campaign" && (
+          /* Same "committed row, never the model's text" framing as the defect-signal
+             receipt above — this is a distinct write action with its own shape, not a
+             variant of it (no fleet-exposure count is computed for a watch). */
+          <div className="action-receipt">
+            <strong>Campaign watched</strong>
+            <div>
+              <code>{lastAction.campaign_id}</code>
+            </div>
+            <div className="muted">watched by {lastAction.watched_by}</div>
           </div>
         )}
         {busy && (

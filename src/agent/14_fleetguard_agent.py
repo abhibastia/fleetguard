@@ -2,7 +2,7 @@
 # MAGIC %md
 # MAGIC # FleetGuard — Phase 7: the agent
 # MAGIC
-# MAGIC A `ResponsesAgent` (E-02) with six tools — five reads and one write request — logged
+# MAGIC A `ResponsesAgent` (E-02) with seven tools — five reads and two write requests — logged
 # MAGIC models-from-code, registered in Unity Catalog and deployed with `agents.deploy()`.
 # MAGIC
 # MAGIC ## Design constraints that are not negotiable
@@ -111,15 +111,16 @@ print(f"model : {MODEL_NAME}\nllm   : {LLM_ENDPOINT}\nindex : {INDEX}")
 # MAGIC    Say so plainly when you propose.
 # MAGIC 5. Complaint narratives are consumer-written and contain personal detail. Summarise
 # MAGIC    them; never quote names, addresses, phone numbers or plates.
-# MAGIC 6. `open_defect_signal` is a REQUEST, not a save. This rule governs how you DESCRIBE
-# MAGIC    the action — it is NOT a permission gate. You do not have database access; the
-# MAGIC    console performs the write and reports the result. Say "I've requested a defect
-# MAGIC    signal for ..." — never "I've saved", "I've created" or "it's now tracked". If you
-# MAGIC    claim a write that the console then fails to make, you have told the user something
-# MAGIC    false about a safety record. Do not invent a signal id; the console assigns it.
-# MAGIC 7. Being asked to open a signal IS the authorization. Do not recite rule 6's
-# MAGIC    request-versus-save mechanism back as something for the user to approve, and do not
-# MAGIC    ask for permission you have already been given. If the scope is underspecified,
+# MAGIC 6. `open_defect_signal` AND `watch_campaign` are REQUESTS, not saves. This rule governs
+# MAGIC    how you DESCRIBE either action — it is NOT a permission gate. You do not have database
+# MAGIC    access; the console performs the write and reports the result. Say "I've requested a
+# MAGIC    defect signal for ..." or "I've requested that we watch ..." — never "I've saved",
+# MAGIC    "I've created" or "it's now tracked"/"watched". If you claim a write that the console
+# MAGIC    then fails to make, you have told the user something false about a safety record. Do
+# MAGIC    not invent a signal id or watchlist id; the console assigns them.
+# MAGIC 7. Being asked to open a signal or watch a campaign IS the authorization. Do not recite
+# MAGIC    rule 6's request-versus-save mechanism back as something for the user to approve, and
+# MAGIC    do not ask for permission you have already been given. If the scope is underspecified,
 # MAGIC    call `lookup_fleet_models` to see what the fleet actually operates, act on the most
 # MAGIC    defensible reading, and STATE the assumption you made. Ask a clarifying question
 # MAGIC    only when the request is genuinely unanswerable — not when it is merely vague.
@@ -415,6 +416,28 @@ print(f"model : {MODEL_NAME}\nllm   : {LLM_ENDPOINT}\nindex : {INDEX}")
 # MAGIC     }
 # MAGIC
 # MAGIC
+# MAGIC @mlflow.trace(span_type=SpanType.TOOL)
+# MAGIC def watch_campaign(campaign_id: str, rationale: str) -> dict:
+# MAGIC     """REQUEST that a recall campaign be added to the fleet safety team's watchlist.
+# MAGIC
+# MAGIC     Distinct from propose_service_campaign (which proposes launching dispatch) and from
+# MAGIC     open_defect_signal (which tracks a component/make/model PATTERN, not a specific
+# MAGIC     campaign). This is a bookmark on one NHTSA campaign number, with a reason — nothing
+# MAGIC     more. It computes no fleet-exposure count and creates no work orders.
+# MAGIC
+# MAGIC     Same indirection as open_defect_signal and for the same reason: the serving endpoint
+# MAGIC     has no Lakebase credential, so this returns a REQUESTED envelope and the FastAPI
+# MAGIC     console performs the actual write under the requesting user's own OBO token.
+# MAGIC     """
+# MAGIC     return {
+# MAGIC         ACTION_KEY: "watch_campaign",
+# MAGIC         "status": "REQUESTED",
+# MAGIC         "params": {"campaign_id": campaign_id, "rationale": rationale},
+# MAGIC         "note": "Requested only. The console performs the write and confirms it; do not "
+# MAGIC                 "tell the user it is saved.",
+# MAGIC     }
+# MAGIC
+# MAGIC
 # MAGIC TOOLS = {
 # MAGIC     "search_complaints": search_complaints,
 # MAGIC     "lookup_fleet_exposure": lookup_fleet_exposure,
@@ -422,6 +445,7 @@ print(f"model : {MODEL_NAME}\nllm   : {LLM_ENDPOINT}\nindex : {INDEX}")
 # MAGIC     "lookup_emerging_signals": lookup_emerging_signals,
 # MAGIC     "propose_service_campaign": propose_service_campaign,
 # MAGIC     "open_defect_signal": open_defect_signal,
+# MAGIC     "watch_campaign": watch_campaign,
 # MAGIC }
 # MAGIC
 # MAGIC TOOL_SPECS = [
@@ -539,6 +563,34 @@ print(f"model : {MODEL_NAME}\nllm   : {LLM_ENDPOINT}\nindex : {INDEX}")
 # MAGIC                     },
 # MAGIC                 },
 # MAGIC                 "required": ["component", "rationale"],
+# MAGIC             },
+# MAGIC         },
+# MAGIC     },
+# MAGIC     {
+# MAGIC         "type": "function",
+# MAGIC         "function": {
+# MAGIC             "name": "watch_campaign",
+# MAGIC             "description": (
+# MAGIC                 "Request that a specific NHTSA recall campaign be added to the fleet "
+# MAGIC                 "safety team's watchlist, so they keep an eye on it. Use when a campaign "
+# MAGIC                 "is worth tracking but you are not proposing a service campaign "
+# MAGIC                 "(propose_service_campaign) and it is not a component/make/model pattern "
+# MAGIC                 "(open_defect_signal) — this is keyed on one campaign ID, not a pattern. "
+# MAGIC                 "Does not launch anything and creates no work orders."
+# MAGIC             ),
+# MAGIC             "parameters": {
+# MAGIC                 "type": "object",
+# MAGIC                 "properties": {
+# MAGIC                     "campaign_id": {
+# MAGIC                         "type": "string",
+# MAGIC                         "description": "NHTSA campaign number, e.g. '17V629000'.",
+# MAGIC                     },
+# MAGIC                     "rationale": {
+# MAGIC                         "type": "string",
+# MAGIC                         "description": "Why this campaign is worth watching.",
+# MAGIC                     },
+# MAGIC                 },
+# MAGIC                 "required": ["campaign_id", "rationale"],
 # MAGIC             },
 # MAGIC         },
 # MAGIC     },
@@ -772,6 +824,14 @@ print(f"open_defect_signal -> {act['status']}  action={act[fga.ACTION_KEY]}")
 assert act["status"] == "REQUESTED", "the agent must not claim to have performed the write"
 assert act[fga.ACTION_KEY] == "open_defect_signal", "envelope lost its action name"
 assert act["params"]["component"] == "STEERING", "envelope lost its parameters"
+
+# The second write action. Same non-negotiable: REQUESTED, never claimed as done, since this
+# tool also runs inside the serving endpoint with no Lakebase path.
+act2 = fga.watch_campaign(campaign_id="17V629000", rationale="smoke test")
+print(f"watch_campaign -> {act2['status']}  action={act2[fga.ACTION_KEY]}")
+assert act2["status"] == "REQUESTED", "the agent must not claim to have performed the write"
+assert act2[fga.ACTION_KEY] == "watch_campaign", "envelope lost its action name"
+assert act2["params"]["campaign_id"] == "17V629000", "envelope lost its parameters"
 print("\nsmoke tests passed")
 
 # COMMAND ----------
