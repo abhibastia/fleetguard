@@ -53,12 +53,14 @@ export function Home({ onNavigate }: { onNavigate: (view: string) => void }) {
   return (
     <div className="home">
       <section className="panel home-hero">
-        <h2 style={{ marginTop: 0 }}>Recall response and defect early warning, for a fleet</h2>
+        <h2 style={{ marginTop: 0 }}>Built for the fleet safety team — and the leadership above them</h2>
         <p className="muted" style={{ maxWidth: "72ch" }}>
           A fleet operator learns about a safety defect the same way a private owner does — when
-          the recall posts. FleetGuard does two things instead of one: it resolves a campaign
-          against the VIN roster and dispatches work orders under human approval, and it watches
-          complaint volume for defect ramps <em>before</em> the regulator opens an investigation.
+          the recall posts. The <strong>fleet safety team</strong> works the queue below: resolve a
+          campaign against the VIN roster, rank by consequence, dispatch work orders under human
+          approval. <strong>Safety leadership</strong> reads the two panels under this one instead —
+          the measured claim behind the early-warning half, and whether the fleet's open work is
+          actually getting closed. Same data, two jobs.
         </p>
       </section>
 
@@ -144,6 +146,25 @@ export function Home({ onNavigate }: { onNavigate: (view: string) => void }) {
             an investigation is not a recall — the tab says which is which.
           </p>
         </button>
+        <button className="panel home-path" onClick={() => onNavigate("evidence")}>
+          <h3>Evidence →</h3>
+          <p className="muted">
+            The measured backtest behind the claim above, published rather than asserted —
+            including the improvements that were tested and came back negative.
+          </p>
+        </button>
+        <a
+          className="panel home-path home-path-external"
+          href="https://dbc-7b106152-caf3.cloud.databricks.com/dashboardsv3/01f1a7257e801a2ebb71bdc18fc2113a/published"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <h3>Analytics dashboard ↗</h3>
+          <p className="muted">
+            Fleet, exposure, signals and trust across 12 datasets — the fuller rollup for safety
+            leadership. Opens in Databricks; needs its own sign-in.
+          </p>
+        </a>
       </section>
     </div>
   );

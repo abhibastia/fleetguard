@@ -38,3 +38,23 @@ resources:
         # published URL is quoted in README and STATUS; a recreated dashboard gets a new
         # dashboard_id and the old link dies.
         prevent_destroy: true
+
+      # WHO MAY SEE THIS. Same four identities as `fleetguard_console.app.yml`'s ACL, added
+      # 2026-09-14 when the console started linking to this dashboard from Home — before this,
+      # only the owner and the workspace `admins` group had any grant on it (confirmed live via
+      # `databricks permissions get dashboards <id>`), so the new link would have 403'd for
+      # every judge. Dashboards use a DIFFERENT permission vocabulary from apps/jobs — verified
+      # live via `databricks permissions get-permission-levels dashboards <id>`:
+      # CAN_READ < CAN_RUN < CAN_EDIT < CAN_MANAGE. `CAN_VIEW` (the App's lowest level) does not
+      # exist here. CAN_RUN, not CAN_READ, because the dashboard is published with
+      # `embed_credentials: false` — each viewer's own identity runs the underlying queries, so
+      # "view" without "run" would render an empty page, not a read-only one.
+      permissions:
+        - level: CAN_MANAGE
+          user_name: abhisek.bastia17@gmail.com
+        - level: CAN_RUN
+          user_name: raghavendra.yama@gmail.com
+        - level: CAN_RUN
+          user_name: sangwanrahul@icloud.com
+        - level: CAN_RUN
+          user_name: zach@zachwilson.tech
