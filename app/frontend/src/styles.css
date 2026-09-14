@@ -57,7 +57,7 @@
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 28px -14px rgba(0, 0, 0, 0.65);
   --shadow-lg: 0 4px 10px rgba(0, 0, 0, 0.35), 0 24px 48px -20px rgba(0, 0, 0, 0.7);
   --ring: 0 0 0 3px var(--accent-bg), 0 0 0 4.5px var(--accent-line);
-  --header-h: 56px;
+  --sidebar-w: 224px;
   --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
 
   /* Tells the browser to render native controls — checkboxes, scrollbars, the caret — in
@@ -188,21 +188,32 @@ a {
   border-radius: var(--r-sm);
 }
 
-/* ── header ─────────────────────────────────────────────────────────────────────────── */
+/* ── sidebar ────────────────────────────────────────────────────────────────────────── */
+/* Was a horizontal <header> with 9 tabs + brand + identity + theme toggle crammed into one
+   row — already caused a real overflow bug (document.body.scrollWidth 1096 against a 900px
+   viewport, fixed via an internal nav.tabs scroll). A fixed left rail scales better for
+   this many destinations and matches the "operator console" pattern this app already models
+   itself on. Collapses to an off-canvas drawer below 900px, this file's one existing
+   "narrow viewport" threshold (see `.row`'s stacking rule). */
 
-header {
-  position: sticky;
+.sidebar {
+  position: fixed;
   top: 0;
+  left: 0;
+  bottom: 0;
+  width: var(--sidebar-w);
   z-index: 20;
   display: flex;
-  align-items: center;
-  gap: 20px;
-  height: var(--header-h);
-  padding: 0 32px;
-  border-bottom: 1px solid var(--line);
-  background: var(--header-bg);
-  backdrop-filter: blur(10px) saturate(1.4);
-  -webkit-backdrop-filter: blur(10px) saturate(1.4);
+  flex-direction: column;
+  gap: 4px;
+  padding: 20px 14px;
+  border-right: 1px solid var(--line);
+  background: var(--surface);
+  overflow-y: auto;
+}
+
+.sidebar .brand {
+  padding: 0 8px 14px;
 }
 
 .brand {
@@ -237,60 +248,122 @@ header {
   color: var(--accent);
 }
 
-nav.tabs {
+.sidebar-nav {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 2px;
-  height: 100%;
 }
 
-nav.tabs button {
-  position: relative;
+.sidebar-nav button {
+  display: block;
+  width: 100%;
+  text-align: left;
   background: none;
   border: 1px solid transparent;
   color: var(--muted);
-  padding: 6px 13px;
+  padding: 9px 12px;
   height: auto;
   font-size: 13px;
   font-weight: 500;
   border-radius: var(--r-sm);
   cursor: pointer;
+  /* Same left-accent-bar pattern this app already uses for a clickable table row
+     (table.rows tbody tr:hover), reused here instead of the old bottom-underline — a
+     horizontal-nav idiom that doesn't translate to a vertical list. */
+  box-shadow: inset 3px 0 0 transparent;
   transition:
     color 0.15s var(--ease),
     background 0.15s var(--ease);
 }
 
-nav.tabs button:hover {
+.sidebar-nav button:hover {
   color: var(--text);
   background: var(--surface-2);
 }
 
 /* The active tab is marked with `aria-current`, so the styling and the accessibility
    information come from the same attribute and cannot drift apart. */
-nav.tabs button[aria-current="page"] {
+.sidebar-nav button[aria-current="page"] {
   color: var(--text);
   background: var(--surface-2);
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 
-nav.tabs button[aria-current="page"]::after {
-  content: "";
-  position: absolute;
-  left: 12px;
-  right: 12px;
-  bottom: -9px;
-  height: 2px;
-  background: var(--accent);
-  border-radius: 2px 2px 0 0;
+.sidebar-footer {
+  margin-top: auto;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
-header .who {
-  margin-left: auto;
+.sidebar-footer .who {
   color: var(--muted);
   font-size: 12px;
   display: flex;
   align-items: center;
   gap: 8px;
-  white-space: nowrap;
+}
+
+/* Hamburger toggle — hidden above 900px, where the sidebar is permanent chrome rather than
+   a drawer. */
+.nav-toggle {
+  display: none;
+  position: fixed;
+  top: 14px;
+  left: 14px;
+  z-index: 25;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  align-items: center;
+  justify-content: center;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.nav-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 19;
+}
+
+@media (max-width: 900px) {
+  .nav-toggle {
+    display: inline-flex;
+  }
+  .sidebar {
+    transform: translateX(-100%);
+    /* Delayed by the same duration as the transform, not instant — without this, a
+       closed-but-off-screen sidebar still holds 9 focusable buttons a keyboard/screen-reader
+       user can Tab into while invisible. Removed from the tab order exactly when fully
+       off-screen; restored immediately on open so it's focusable while sliding in. */
+    visibility: hidden;
+    transition:
+      transform 0.2s var(--ease),
+      visibility 0.2s var(--ease);
+    box-shadow: var(--shadow-lg);
+  }
+  .sidebar.open {
+    transform: translateX(0);
+    visibility: visible;
+    transition: transform 0.2s var(--ease);
+  }
+  main {
+    margin-left: 0;
+    padding-top: 64px; /* clears the fixed hamburger */
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar {
+    transition: none;
+  }
 }
 
 .who .dot {
@@ -315,7 +388,12 @@ main {
      here covers the rest. */
   padding: 32px 32px 96px;
   max-width: 1520px;
-  margin: 0 auto;
+  /* Was `margin: 0 auto`, centering in the full viewport. With a fixed-width sidebar now
+     permanently on the left, `margin-left` alone reproduces essentially the same effective
+     content width at typical sizes (at 1920px: min(1920,1520)=1520 either way) — just flush
+     against the rail instead of centered, matching how this class of app usually sits next
+     to a nav rail (not centered underneath it). */
+  margin-left: var(--sidebar-w);
   animation: rise 0.25s var(--ease) both;
 }
 
@@ -1067,33 +1145,6 @@ thead th.sortable:hover {
   }
 }
 
-/* Below ~1100px the header row itself was the overflow source, not any table or grid — `.brand`
-   and `.who` are both `white-space: nowrap` and neither shrinks, so all the squeeze fell on
-   `nav.tabs`, whose 9 buttons hit their own text-wrap floor before the row fit. Measured
-   `document.body.scrollWidth` 1096 against a 900px viewport in a UI/UX review, 2026-09-14 — the
-   page scrolled sideways and the sticky header left a dark band beside its own content. Same
-   fix shape as `.wrap` already uses for tables: let the row that can't shrink further scroll
-   instead of forcing the page to. */
-@media (max-width: 1100px) {
-  header {
-    gap: 12px;
-    padding: 0 16px;
-  }
-  nav.tabs {
-    overflow-x: auto;
-    flex-shrink: 1;
-    min-width: 0;
-  }
-  nav.tabs button {
-    white-space: nowrap;
-  }
-  header .who {
-    max-width: 130px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-}
-
 /* ── loading ────────────────────────────────────────────────────────────────────────── */
 
 /* A skeleton rather than the word "Loading" — it holds the layout, so the page does not
@@ -1182,8 +1233,6 @@ thead th.sortable:hover {
 /* ── assistant ──────────────────────────────────────────────────────────────────────── */
 
 .assistant {
-  position: sticky;
-  top: calc(var(--header-h) + 22px);
   display: flex;
   flex-direction: column;
   padding: 18px;
@@ -1250,9 +1299,12 @@ thead th.sortable:hover {
 /* The dock is `position: fixed` and never reflowed `main` — so opening it to ask about the
    page you're looking at covered that same page (measured: Home's 4th KPI tiles and the
    Analytics card sat directly under it). Widening `main`'s right inset while the dock is open
-   gives real content room to move aside instead. Scoped to viewports wide enough that this
-   doesn't just re-create the narrow-screen case the dock's own `max-width` already handles. */
-@media (min-width: 760px) {
+   gives real content room to move aside instead. Threshold moved from 760px to 1180px when
+   the sidebar landed: with the rail now permanently eating 224px, `main`'s remaining content
+   width at 1024px would have been 1024-224-448-64(padding)=288px, and at 901px just 165px —
+   unusable. Below 1180px the dock now overlays content instead, same graceful-degradation
+   this app already relied on below 760px before the sidebar existed. */
+@media (min-width: 1180px) {
   main.assistant-open {
     padding-right: 448px;
     transition: padding-right 0.15s var(--ease);

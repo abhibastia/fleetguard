@@ -135,6 +135,19 @@ function CloseIcon() {
   );
 }
 
+function MenuIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M4 6.5h16M4 12h16M4 17.5h16"
+        stroke="currentColor"
+        strokeWidth="1.9"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 /** Shows the theme you would switch *to*, which is the convention users expect from a
  *  single-button toggle — and says so in the label, because an icon alone is ambiguous. */
 function ThemeToggle() {
@@ -170,6 +183,13 @@ export function App() {
   const [assistantOpen, setAssistantOpen] = useState(false);
   const assistantFabRef = useRef<HTMLButtonElement>(null);
   const assistantDockRef = useRef<HTMLDivElement>(null);
+  // The 9-tab horizontal nav is now a permanent left sidebar, off-canvas below 900px (this
+  // app's one existing "narrow viewport" threshold). Kept as its own state/effect pair rather
+  // than merged into the assistant's — each disclosure surface owns its own open/close
+  // contract.
+  const [navOpen, setNavOpen] = useState(false);
+  const navToggleRef = useRef<HTMLButtonElement>(null);
+  const sidebarRef = useRef<HTMLElement>(null);
 
   // A floating panel with no dialog semantics: `role=null`, focus never moved into it on
   // open, and Escape did nothing — found in a UI/UX review, 2026-09-14. Move focus to the
@@ -189,6 +209,31 @@ export function App() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [assistantOpen]);
+
+  // Same disclosure contract as the assistant dock above: focus the first control on open,
+  // close on Escape. No cyclic Tab trap and no `inert`/`aria-hidden` on `<main>` — deliberately
+  // matching the assistant's own (lighter) modal contract rather than making this drawer
+  // stricter than everything else in the app.
+  useEffect(() => {
+    if (!navOpen) return;
+    const firstLink = sidebarRef.current?.querySelector<HTMLElement>("button, a");
+    firstLink?.focus();
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setNavOpen(false);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [navOpen]);
+
+  // Return focus to the hamburger on every close path (Escape, backdrop click, or picking a
+  // destination) — a drawer has more ways to dismiss than the assistant dock's single close
+  // button, so this is a separate effect rather than folded into the Escape handler above.
+  // `navToggleRef.current` is `display: none` above 900px, and `.focus()` on a display:none
+  // element is a documented no-op everywhere — safe to run unconditionally rather than
+  // gating this on viewport width in JS.
+  useEffect(() => {
+    if (!navOpen) navToggleRef.current?.focus();
+  }, [navOpen]);
 
   // Back/forward must work: a browser button that silently does nothing is worse than no
   // routing at all.
@@ -230,7 +275,20 @@ export function App() {
 
   return (
     <>
-      <header>
+      <button
+        ref={navToggleRef}
+        className="nav-toggle"
+        onClick={() => setNavOpen((v) => !v)}
+        aria-expanded={navOpen}
+        aria-controls="sidebar"
+        aria-label={navOpen ? "Close navigation" : "Open navigation"}
+      >
+        {navOpen ? <CloseIcon /> : <MenuIcon />}
+      </button>
+
+      {navOpen && <div className="nav-backdrop" onClick={() => setNavOpen(false)} />}
+
+      <aside id="sidebar" ref={sidebarRef} className={navOpen ? "sidebar open" : "sidebar"}>
         <h1 className="brand">
           <span className="brand-mark-chip">
             <Mark />
@@ -238,75 +296,104 @@ export function App() {
           FleetGuard
         </h1>
 
-        <nav className="tabs">
+        <nav className="sidebar-nav">
           <button
-            onClick={() => setView({ name: "home" })}
+            onClick={() => {
+              setView({ name: "home" });
+              setNavOpen(false);
+            }}
             aria-current={tab === "home" ? "page" : undefined}
           >
             Home
           </button>
           <button
-            onClick={() => setView({ name: "queue" })}
+            onClick={() => {
+              setView({ name: "queue" });
+              setNavOpen(false);
+            }}
             aria-current={tab === "queue" ? "page" : undefined}
           >
             Recall queue
           </button>
           <button
-            onClick={() => setView({ name: "signals" })}
+            onClick={() => {
+              setView({ name: "signals" });
+              setNavOpen(false);
+            }}
             aria-current={tab === "signals" ? "page" : undefined}
           >
             Emerging
           </button>
           <button
-            onClick={() => setView({ name: "evidence" })}
+            onClick={() => {
+              setView({ name: "evidence" });
+              setNavOpen(false);
+            }}
             aria-current={tab === "evidence" ? "page" : undefined}
           >
             Evidence
           </button>
           <button
-            onClick={() => setView({ name: "launched" })}
+            onClick={() => {
+              setView({ name: "launched" });
+              setNavOpen(false);
+            }}
             aria-current={tab === "launched" ? "page" : undefined}
           >
             Launched
           </button>
           <button
-            onClick={() => setView({ name: "work-orders" })}
+            onClick={() => {
+              setView({ name: "work-orders" });
+              setNavOpen(false);
+            }}
             aria-current={tab === "work-orders" ? "page" : undefined}
           >
             Work orders
           </button>
           <button
-            onClick={() => setView({ name: "audit-log" })}
+            onClick={() => {
+              setView({ name: "audit-log" });
+              setNavOpen(false);
+            }}
             aria-current={tab === "audit-log" ? "page" : undefined}
           >
             Audit log
           </button>
           <button
-            onClick={() => setView({ name: "depot-risk" })}
+            onClick={() => {
+              setView({ name: "depot-risk" });
+              setNavOpen(false);
+            }}
             aria-current={tab === "depot-risk" ? "page" : undefined}
           >
             Depots
           </button>
           <button
-            onClick={() => setView({ name: "trends" })}
+            onClick={() => {
+              setView({ name: "trends" });
+              setNavOpen(false);
+            }}
             aria-current={tab === "trends" ? "page" : undefined}
           >
             Trends
           </button>
         </nav>
 
-        <span className="who">
-          {/* Green means "an identity is attached to what you do here". A successful /me
-              call with no user_name is NOT that — it is the dev/static path, and showing
-              green beside "not signed in" would contradict the words next to it. */}
-          <span className={auth?.user_name || me?.user_name ? "dot" : "dot off"} />
-          {auth?.user_name ?? me?.user_name ?? "not signed in"}
-          {auth?.signed_in && !auth.may_approve && <span className="muted">· read-only</span>}
-          {me && !auth?.signed_in && <span className="muted">· {me.token_source}</span>}
-        </span>
+        <div className="sidebar-footer">
+          <span className="who">
+            {/* Green means "an identity is attached to what you do here". A successful /me
+                call with no user_name is NOT that — it is the dev/static path, and showing
+                green beside "not signed in" would contradict the words next to it. */}
+            <span className={auth?.user_name || me?.user_name ? "dot" : "dot off"} />
+            {auth?.user_name ?? me?.user_name ?? "not signed in"}
+            {auth?.signed_in && !auth.may_approve && <span className="muted">· read-only</span>}
+            {me && !auth?.signed_in && <span className="muted">· {me.token_source}</span>}
+          </span>
 
-        <ThemeToggle />
-      </header>
+          <ThemeToggle />
+        </div>
+      </aside>
 
       <main className={assistantOpen ? "assistant-open" : undefined}>
         {/* Say what is being served. A console showing point-in-time data while implying it
