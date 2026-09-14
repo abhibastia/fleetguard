@@ -1,10 +1,21 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, ApiError, type ServiceCampaign, type Technician, type WorkOrder } from "../lib/api";
 import { isOverdue } from "../lib/dates";
+import { Pager, usePagination } from "../lib/pagination";
+import { PageError } from "../lib/PageError";
 import { SearchBox, useSearch } from "../lib/search";
 import { SortIndicator, useSort } from "../lib/sort";
 
 const STATUSES = ["OPEN", "IN_PROGRESS", "COMPLETED", "CANCELLED"] as const;
+// The KPI tiles above this table already read "IN PROGRESS" in sentence case; the <select>
+// below them read the raw DB enum "IN_PROGRESS" — two labels for the same state, 200px apart.
+// Found in a UI/UX review, 2026-09-14.
+const STATUS_LABELS: Record<(typeof STATUSES)[number], string> = {
+  OPEN: "Open",
+  IN_PROGRESS: "In progress",
+  COMPLETED: "Completed",
+  CANCELLED: "Cancelled",
+};
 const UNASSIGNED = "" as const; // <select> has no null value, so "" stands in for it locally
 const STATUS_FILTER_ALL = "ALL" as const;
 const DEPOT_FILTER_ALL = "ALL" as const;
@@ -200,6 +211,7 @@ const { sorted, sortKey, sortDir, toggleSort } = useSort<WorkOrder, SortKey>(
     searched,
     (o, key) => o[key] ?? "",
   );
+  const { page, setPage, pageCount, pageRows, pageSize, totalRows } = usePagination(sorted);
 
   if (gated)
     return (
@@ -211,7 +223,23 @@ const { sorted, sortKey, sortDir, toggleSort } = useSort<WorkOrder, SortKey>(
         </p>
       </div>
     );
-  if (!orders && error) return <div className="error">{error}</div>;
+  const pageHead = (
+    <div className="page-head">
+      <h2>Work orders</h2>
+      <p>
+        Created one per exposed vehicle when a service campaign launches. Status changes here
+        are the record of whether the vehicle actually got fixed, not just dispatched.
+      </p>
+    </div>
+  );
+
+  if (!orders && error)
+    return (
+      <>
+        {pageHead}
+        <PageError title="Work orders could not be loaded." detail={error} />
+      </>
+    );
   if (!orders)
     return (
       <>
@@ -238,13 +266,7 @@ const { sorted, sortKey, sortDir, toggleSort } = useSort<WorkOrder, SortKey>(
 
   return (
     <>
-      <div className="page-head">
-        <h2>Work orders</h2>
-        <p>
-          Created one per exposed vehicle when a service campaign launches. Status changes here
-          are the record of whether the vehicle actually got fixed, not just dispatched.
-        </p>
-      </div>
+      {pageHead}
 
       {campaignFilter !== CAMPAIGN_FILTER_ALL && (
         <div className="filter-banner">
@@ -375,7 +397,7 @@ const { sorted, sortKey, sortDir, toggleSort } = useSort<WorkOrder, SortKey>(
                   </tr>
                 </thead>
                 <tbody>
-                  {sorted.map((o) => (
+                  {pageRows.map((o) => (
                     <tr key={o.wo_id}>
                       <td className="muted">{o.wo_id}</td>
                       <td>{o.service_campaign_id ?? "—"}</td>
@@ -393,10 +415,14 @@ const { sorted, sortKey, sortDir, toggleSort } = useSort<WorkOrder, SortKey>(
                         {o.completed_at ? o.completed_at.slice(0, 10) : "—"}
                       </td>
                       <td>
+                        {/* min-width so the selected technician's name doesn't clip inside a
+                            table column the browser would otherwise compress — measured
+                            "Michelle Sanch", "Barbara Sanch" in a UI/UX review, 2026-09-14. */}
                         <select
                           value={o.assigned_to ?? UNASSIGNED}
                           disabled={updating === o.wo_id}
                           onChange={(e) => changeAssignment(o, e.target.value)}
+                          style={{ minWidth: 160 }}
                         >
                           <option value={UNASSIGNED}>— Unassigned —</option>
                           {technicians
@@ -409,23 +435,33 @@ const { sorted, sortKey, sortDir, toggleSort } = useSort<WorkOrder, SortKey>(
                         </select>
                       </td>
                       <td>
+                        {/* Same clipping issue, plus the raw enum ("IN_PROGRESS") read
+                            differently from the sentence-case KPI tiles above this table —
+                            both found in the same review. */}
                         <select
                           value={o.status}
                           disabled={updating === o.wo_id}
                           onChange={(e) => changeStatus(o, e.target.value)}
+                          style={{ minWidth: 130 }}
                         >
                           {STATUSES.map((s) => (
                             <option key={s} value={s}>
-                              {s}
+                              {STATUS_LABELS[s]}
                             </option>
                           ))}
                         </select>
                       </td>
                       <td className="num">
+                        {/* type="text" + inputMode="decimal" instead of type="number" — the
+                            latter formats its displayed value against the browser/OS locale,
+                            rendering "1039.66" as "1039,66" in some locales while the same
+                            underlying value shows "$1,039.66" on the Launched tab. Display
+                            formatting is the app's decision, not the input element's; parsing
+                            still happens in commitCost, unchanged. Found in a UI/UX review,
+                            2026-09-14. */}
                         <input
-                          type="number"
-                          min={0}
-                          step={0.01}
+                          type="text"
+                          inputMode="decimal"
                           placeholder="not logged"
                           disabled={updating === o.wo_id}
                           value={costDrafts[o.wo_id] ?? (o.actual_cost ?? "")}
@@ -440,6 +476,7 @@ const { sorted, sortKey, sortDir, toggleSort } = useSort<WorkOrder, SortKey>(
                   ))}
                 </tbody>
               </table>
+              <Pager page={page} pageCount={pageCount} onChange={setPage} totalRows={totalRows} pageSize={pageSize} />
             </div>
           )}
         </>

@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, ApiError, type AuditLogEntry } from "../lib/api";
+import { Pager, usePagination } from "../lib/pagination";
+import { PageError } from "../lib/PageError";
 import { SearchBox, useSearch } from "../lib/search";
 import { SortIndicator, useSort } from "../lib/sort";
 
@@ -8,22 +10,39 @@ const ACTION_FILTER_ALL = "ALL" as const;
 
 type SortKey = "entity_type" | "action" | "created_at";
 
+// This is a human-facing compliance record, not a debug feed — internal measurement
+// artifacts (the CDF latency probe) don't belong in "every campaign launch, work-order
+// status change, (re)assignment, and cost log", and their UPPER_SNAKE entity type was also
+// the one thing breaking an otherwise-consistent lower_snake casing convention. Found in a
+// UI/UX review, 2026-09-14.
+const HIDDEN_ENTITY_TYPES = new Set(["LATENCY_PROBE"]);
+
+/** `defect_signal` → "Defect signal" — a snake_case DB value read differently from every
+ *  other label in the console. Applied to both the filter dropdowns and the table column so
+ *  the two can't say the same thing two different ways. */
+function titleCase(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, " ").toLowerCase();
+}
+
 function formatValue(v: unknown): string {
   if (v === null || v === undefined) return "—";
   if (typeof v === "object") return JSON.stringify(v);
   return String(v);
 }
 
-/** "status: OPEN → IN_PROGRESS" instead of two raw JSON blobs - a human reading a compliance
- *  record needs the change, not the storage format it happened to be logged in. */
-function describeChange(e: AuditLogEntry): string {
+/** One row per changed field, `rationale` (or any field over 60 chars) pulled out from the
+ *  rest — the old comma-joined single string ran a full free-text rationale straight into the
+ *  next field name with no separator ("...not a confirmed defect., fleet_vehicles: — → 1256").
+ *  Structured rows can't concatenate that way. Found in a UI/UX review, 2026-09-14. */
+function changeFields(e: AuditLogEntry): { key: string; before: string; after: string }[] {
   const after = e.after_state ?? {};
   const before = e.before_state ?? {};
   const keys = Object.keys(after).length > 0 ? Object.keys(after) : Object.keys(before);
-  if (keys.length === 0) return "—";
-  return keys
-    .map((k) => `${k}: ${formatValue(before[k])} → ${formatValue(after[k])}`)
-    .join(", ");
+  return keys.map((k) => ({
+    key: k,
+    before: formatValue(before[k]),
+    after: formatValue(after[k]),
+  }));
 }
 
 /**
@@ -61,23 +80,27 @@ export function AuditLog() {
 
   // Hooks run every render regardless of loading state, so filtering/sorting is computed here
   // (over `entries ?? []`) rather than after the early returns below.
-  const entityTypeOptions = useMemo(
-    () => Array.from(new Set((entries ?? []).map((e) => e.entity_type))).sort(),
+  const visible = useMemo(
+    () => (entries ?? []).filter((e) => !HIDDEN_ENTITY_TYPES.has(e.entity_type)),
     [entries],
+  );
+  const entityTypeOptions = useMemo(
+    () => Array.from(new Set(visible.map((e) => e.entity_type))).sort(),
+    [visible],
   );
   const actionOptions = useMemo(
-    () => Array.from(new Set((entries ?? []).map((e) => e.action))).sort(),
-    [entries],
+    () => Array.from(new Set(visible.map((e) => e.action))).sort(),
+    [visible],
   );
   const filtered = useMemo(() => {
-    return (entries ?? []).filter((e) => {
+    return visible.filter((e) => {
       if (entityTypeFilter !== ENTITY_TYPE_FILTER_ALL && e.entity_type !== entityTypeFilter) {
         return false;
       }
       if (actionFilter !== ACTION_FILTER_ALL && e.action !== actionFilter) return false;
       return true;
     });
-  }, [entries, entityTypeFilter, actionFilter]);
+  }, [visible, entityTypeFilter, actionFilter]);
   // Search runs after the dropdowns and before the sort, so the three compose: narrow by
   // category, then find within it, then order. 724 rows behind two selects was the specific
   // thing a reviewer could not navigate on 2026-09-10.
@@ -93,6 +116,7 @@ export function AuditLog() {
     searched,
     (e, key) => e[key],
   );
+  const { page, setPage, pageCount, pageRows, pageSize, totalRows } = usePagination(sorted);
 
   if (gated)
     return (
@@ -104,7 +128,23 @@ export function AuditLog() {
         </p>
       </div>
     );
-  if (!entries && error) return <div className="error">{error}</div>;
+  const pageHead = (
+    <div className="page-head">
+      <h2>Audit log</h2>
+      <p>
+        Every campaign launch, work-order status change, (re)assignment, and cost log —
+        attributed to a real identity, not editable after the fact.
+      </p>
+    </div>
+  );
+
+  if (!entries && error)
+    return (
+      <>
+        {pageHead}
+        <PageError title="Audit log could not be loaded." detail={error} />
+      </>
+    );
   if (!entries)
     return (
       <>
@@ -121,28 +161,26 @@ export function AuditLog() {
 
   return (
     <>
-      <div className="page-head">
-        <h2>Audit log</h2>
-        <p>
-          Every campaign launch, work-order status change, (re)assignment, and cost log —
-          attributed to a real identity, not editable after the fact.
-        </p>
-      </div>
+      {pageHead}
 
       <div className="stats">
         <div className="stat">
-          <div className="v">{entries.length}</div>
-          <div className="k">Entries (most recent {entries.length})</div>
+          <div className="v">{visible.length}</div>
+          {/* Excludes LATENCY_PROBE rows — this is the compliance-record count, not a raw
+              table row count. */}
+          <div className="k">Entries (most recent {visible.length})</div>
         </div>
         <div className="stat">
-          <div className="v">{new Set(entries.map((e) => e.actor_principal)).size}</div>
-          <div className="k">Distinct actors</div>
+          <div className="v">{new Set(visible.map((e) => e.actor_principal)).size}</div>
+          <div className="k">
+            Distinct actor{new Set(visible.map((e) => e.actor_principal)).size === 1 ? "" : "s"}
+          </div>
         </div>
       </div>
 
       {error && <div className="error">{error}</div>}
 
-      {entries.length === 0 ? (
+      {visible.length === 0 ? (
         <div className="panel">
           No audit entries yet. That is a result, not an error — nothing has been launched,
           updated, or logged so far.
@@ -157,7 +195,7 @@ export function AuditLog() {
               <option value={ENTITY_TYPE_FILTER_ALL}>All entity types</option>
               {entityTypeOptions.map((t) => (
                 <option key={t} value={t}>
-                  {t}
+                  {titleCase(t)}
                 </option>
               ))}
             </select>
@@ -211,22 +249,47 @@ export function AuditLog() {
                   </tr>
                 </thead>
                 <tbody>
-                  {sorted.map((e) => (
-                    <tr key={e.audit_id}>
-                      <td className="muted">{e.created_at.slice(0, 19).replace("T", " ")}</td>
-                      <td>{e.entity_type}</td>
-                      <td className="muted">{e.entity_id}</td>
-                      <td>
-                        <span className="tag quiet">{e.action}</span>
-                      </td>
-                      <td className="muted">{e.actor_principal}</td>
-                      <td className="muted" title={describeChange(e)}>
-                        {describeChange(e)}
-                      </td>
-                    </tr>
-                  ))}
+                  {pageRows.map((e) => {
+                    // `rationale` (or anything long enough to be free text rather than a
+                    // field value) gets its own block below the compact key:value list —
+                    // the old comma-joined string ran a 400-word rationale straight into the
+                    // next field name with no separator. Found in a UI/UX review, 2026-09-14.
+                    const fields = changeFields(e);
+                    const compact = fields.filter((f) => f.after.length <= 60 && f.before.length <= 60);
+                    const long = fields.filter((f) => f.after.length > 60 || f.before.length > 60);
+                    return (
+                      <tr key={e.audit_id}>
+                        <td className="muted">{e.created_at.slice(0, 19).replace("T", " ")}</td>
+                        <td>{titleCase(e.entity_type)}</td>
+                        <td className="muted">{e.entity_id}</td>
+                        <td>
+                          <span className="tag quiet">{titleCase(e.action)}</span>
+                        </td>
+                        <td className="muted">{e.actor_principal}</td>
+                        <td className="muted">
+                          {fields.length === 0 ? (
+                            "—"
+                          ) : (
+                            <>
+                              {compact.map((f) => (
+                                <div key={f.key}>
+                                  {f.key}: {f.before} → {f.after}
+                                </div>
+                              ))}
+                              {long.map((f) => (
+                                <div key={f.key} style={{ marginTop: compact.length ? 4 : 0 }}>
+                                  <strong>{f.key}:</strong> {f.after}
+                                </div>
+                              ))}
+                            </>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
+              <Pager page={page} pageCount={pageCount} onChange={setPage} totalRows={totalRows} pageSize={pageSize} />
             </div>
           )}
         </>

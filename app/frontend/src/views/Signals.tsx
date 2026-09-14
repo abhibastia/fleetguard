@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api, ApiError, type SignalSummary } from "../lib/api";
+import { PageError } from "../lib/PageError";
 import { SearchBox, useSearch } from "../lib/search";
 
 /**
@@ -27,6 +28,15 @@ export function Signals() {
   } = useSearch(
     data?.signals ?? [],
     (s) => `${s.make ?? ""} ${s.model ?? ""} ${s.component} ${s.series_key ?? ""}`,
+  );
+  // The KPI tile reads "6 affecting your fleet" while the default table mixed those 6 in
+  // among 44 with FLEET: 0 — a fleet-safety-team reader had to hunt for the rows the tile
+  // itself said mattered. Sorted here, not left to whatever order the backend happens to
+  // return, so this table can't drift out of sync with its own headline again. Found in a
+  // UI/UX review, 2026-09-14.
+  const ordered = useMemo(
+    () => [...visible].sort((a, b) => b.fleet_vehicles - a.fleet_vehicles),
+    [visible],
   );
 
   useEffect(() => {
@@ -60,7 +70,24 @@ export function Signals() {
         </p>
       </div>
     );
-  if (error) return <div className="error">{error}</div>;
+  const pageHead = (
+    <div className="page-head">
+      <h2>Emerging defects</h2>
+      <p>
+        Series with a sustained complaint anomaly —{" "}
+        <strong>z ≥ 3.0 for ≥2 consecutive months</strong> against their own trailing year — that
+        NHTSA has <em>not</em> recalled. The same detector the Evidence tab measures.
+      </p>
+    </div>
+  );
+
+  if (error)
+    return (
+      <>
+        {pageHead}
+        <PageError title="Emerging defects could not be loaded." detail={error} />
+      </>
+    );
   if (!data)
     return (
       <>
@@ -78,14 +105,7 @@ export function Signals() {
 
   return (
     <>
-      <div className="page-head">
-        <h2>Emerging defects</h2>
-        <p>
-          Series with a sustained complaint anomaly —{" "}
-          <strong>z ≥ 3.0 for ≥2 consecutive months</strong> against their own trailing year — that
-          NHTSA has <em>not</em> recalled. The same detector the Evidence tab measures.
-        </p>
-      </div>
+      {pageHead}
 
       <div className="stats">
         <div className={data.fleet_relevant > 0 ? "stat is-danger" : "stat"}>
@@ -100,13 +120,15 @@ export function Signals() {
           <div className="v">{data.total}</div>
           <div className="k">Detected · 12 months</div>
         </div>
-        <div className="stat">
-          <div className="v" style={{ fontSize: 17, paddingTop: 5 }}>
-            {data.as_of_month ?? "—"}
-          </div>
-          <div className="k">Data through</div>
-        </div>
       </div>
+      {/* Was a 4th .stats tile — a date isn't a count, and it rendered visibly smaller than
+          its neighbours, breaking the row's read as "a set of KPIs". Found in a UI/UX review,
+          2026-09-14. */}
+      {data.as_of_month && (
+        <p className="muted" style={{ marginTop: -10, marginBottom: 16, fontSize: 12.5 }}>
+          Data through {data.as_of_month}.
+        </p>
+      )}
 
       <div className="filter-row">
         <SearchBox
@@ -127,13 +149,27 @@ export function Signals() {
         </label>
       </div>
 
-      {visible.length === 0 ? (
+      {ordered.length === 0 ? (
         <div className="panel">
           No signals match the current search or filter. That is a result, not an error — the
           detector ran and found nothing.
         </div>
       ) : (
         <div className="wrap">
+          {/* Four badge vocabularies (QUIET/LIVE/AGENT/VARIANT) with nothing on the page
+              explaining any of them — found in a UI/UX review, 2026-09-14. Each badge below
+              already carries (or now carries) a `title` tooltip; this is the always-visible
+              version of the same information for anyone not hovering. */}
+          <p className="muted footnote" style={{ marginBottom: 10 }}>
+            <span className="tag live" style={{ marginRight: 4 }}>LIVE</span> anomaly reaches the
+            latest month ·{" "}
+            <span className="tag quiet" style={{ marginRight: 4 }}>QUIET</span> anomaly has
+            stopped ·{" "}
+            <span className="tag agent" style={{ marginRight: 4 }}>AGENT</span> opened by the
+            assistant, no detector run ·{" "}
+            <span className="tag quiet" style={{ marginRight: 4 }}>VARIANT</span> fleet count
+            matched across a model-name spelling difference, not an exact name.
+          </p>
           <table>
             <thead>
               <tr>
@@ -147,7 +183,7 @@ export function Signals() {
               </tr>
             </thead>
             <tbody>
-              {visible.map((s) => (
+              {ordered.map((s) => (
                 <tr key={s.signal_id}>
                   <td>
                     <strong>
@@ -159,15 +195,27 @@ export function Signals() {
                         rendering NULL is_live as "QUIET" would have claimed a measurement
                         that was never taken. */}
                     {s.source === "AGENT" ? (
-                      <span className="tag agent" style={{ marginLeft: 8 }}>
+                      <span
+                        className="tag agent"
+                        style={{ marginLeft: 8 }}
+                        title="Opened by the assistant from complaint evidence — no detector run behind it."
+                      >
                         AGENT
                       </span>
                     ) : s.is_live ? (
-                      <span className="tag live" style={{ marginLeft: 8 }}>
+                      <span
+                        className="tag live"
+                        style={{ marginLeft: 8 }}
+                        title="This anomaly run reaches the latest month of data — still firing."
+                      >
                         LIVE
                       </span>
                     ) : (
-                      <span className="tag quiet" style={{ marginLeft: 8 }}>
+                      <span
+                        className="tag quiet"
+                        style={{ marginLeft: 8 }}
+                        title="This anomaly run ended before the latest month — no longer firing."
+                      >
                         QUIET
                       </span>
                     )}
@@ -189,7 +237,13 @@ export function Signals() {
                       An em-dash reads as "not measured"; a 0 would read as "measured, and
                       found nothing". */}
                   <td className="num">
-                    {s.max_z != null ? s.max_z.toFixed(1) : <span className="muted">—</span>}
+                    {s.max_z != null ? (
+                      s.max_z.toFixed(1)
+                    ) : (
+                      <span className="muted" title="Agent-opened signals don't run the z-score detector, so there's no score to show — not a measurement of zero.">
+                        —
+                      </span>
+                    )}
                   </td>
                   <td className="num">{s.complaint_count}</td>
                   {/* Harm share is triage context. It plays no part in whether a signal fires —

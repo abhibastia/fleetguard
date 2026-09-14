@@ -55,7 +55,13 @@ export function Evidence() {
         </p>
       </div>
 
-      <div className="stats">
+      {/* Capped to match .prose (760px) — the shared .stats class spans the full 1376px
+          column everywhere else it's used, but every other element on this page (the prose
+          paragraphs, this table, the stated-limits lists) is deliberately capped for
+          readability. Left uncapped, .stats bracketed the narrow content in two full-width
+          bands with a large empty right margin down the page. Found in a UI/UX review,
+          2026-09-14. */}
+      <div className="stats prose">
         <div className="stat is-ok">
           <div className="v">{real.median_lead_days}d</div>
           <div className="k">Median lead, real arm</div>
@@ -169,7 +175,7 @@ export function Evidence() {
         </p>
       </div>
 
-      <div className="stats">
+      <div className="stats prose">
         <div className="stat">
           <div className="v">{(data.model_b.precision * 100).toFixed(1)}%</div>
           <div className="k">Precision</div>

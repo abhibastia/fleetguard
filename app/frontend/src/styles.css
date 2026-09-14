@@ -308,7 +308,12 @@ header .who {
 }
 
 main {
-  padding: 32px 32px 72px;
+  /* Bottom padding gives the fixed FAB (52px tall, 22px offset — ~74px footprint) somewhere
+     to sit once real content ends. A UI/UX review measured a table's trailing rows sitting
+     directly under the FAB via elementsFromPoint; the paginated tables added the same review
+     cycle (Work orders, Audit log) shorten the pages this bites on most, and the extra margin
+     here covers the rest. */
+  padding: 32px 32px 96px;
   max-width: 1520px;
   margin: 0 auto;
   animation: rise 0.25s var(--ease) both;
@@ -480,6 +485,26 @@ button:disabled {
   opacity: 0.45;
   cursor: not-allowed;
   box-shadow: none;
+}
+
+/* A blanket `opacity: 0.45` on the console's single most consequential control — "Approve —
+   N work orders" — composited dark-red text over a dimmed dark-red fill on a dark panel to
+   roughly 3:1 contrast in dark theme (measured in a UI/UX review, 2026-09-14; light theme's
+   white-on-red read fine, which is why this went unnoticed). An approver should be able to
+   read what they're about to enable before it's enabled. Dim the fill, keep the text legible,
+   rather than dimming both together. */
+button.primary:disabled,
+button.danger:disabled {
+  opacity: 1;
+  color: var(--muted);
+}
+button.primary:disabled {
+  background: color-mix(in srgb, var(--accent) 35%, var(--surface-2));
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--surface-2));
+}
+button.danger:disabled {
+  background: color-mix(in srgb, var(--danger) 35%, var(--surface-2));
+  border-color: color-mix(in srgb, var(--danger) 35%, var(--surface-2));
 }
 
 .crumb {
@@ -724,6 +749,21 @@ thead th.sortable:hover {
   min-width: 140px;
 }
 
+/* Below a paginated table. Added alongside `lib/pagination.tsx` after a UI/UX review found
+   Work orders and Audit log rendering fully unpaginated (22,600px / 64,700px pages). */
+.pager {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: center;
+  margin-top: 14px;
+  font-size: 13px;
+}
+.pager button {
+  padding: 6px 12px;
+}
+
 /* Search box — the same affordance on every table, so finding a row works the same way
    wherever you are. Added 2026-09-10 after a reviewer could not navigate 724 audit rows
    behind two dropdowns. */
@@ -895,9 +935,13 @@ thead th.sortable:hover {
   color: var(--muted);
 }
 
+/* Was --faint at 12px — measured 3.17:1 (light) / 4.09:1 (dark), both below WCAG AA's 4.5:1.
+   This class carries the console's most interpretive copy (the signal-vs-recall distinction,
+   cost caveats), so the least legible text was doing the most work. --muted measures 5.92/7.5,
+   both passing. Found in a UI/UX review, 2026-09-14. */
 .footnote {
-  color: var(--faint);
-  font-size: 12px;
+  color: var(--muted);
+  font-size: 13px;
   max-width: 78ch;
   line-height: 1.6;
 }
@@ -1023,6 +1067,33 @@ thead th.sortable:hover {
   }
 }
 
+/* Below ~1100px the header row itself was the overflow source, not any table or grid — `.brand`
+   and `.who` are both `white-space: nowrap` and neither shrinks, so all the squeeze fell on
+   `nav.tabs`, whose 9 buttons hit their own text-wrap floor before the row fit. Measured
+   `document.body.scrollWidth` 1096 against a 900px viewport in a UI/UX review, 2026-09-14 — the
+   page scrolled sideways and the sticky header left a dark band beside its own content. Same
+   fix shape as `.wrap` already uses for tables: let the row that can't shrink further scroll
+   instead of forcing the page to. */
+@media (max-width: 1100px) {
+  header {
+    gap: 12px;
+    padding: 0 16px;
+  }
+  nav.tabs {
+    overflow-x: auto;
+    flex-shrink: 1;
+    min-width: 0;
+  }
+  nav.tabs button {
+    white-space: nowrap;
+  }
+  header .who {
+    max-width: 130px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
 /* ── loading ────────────────────────────────────────────────────────────────────────── */
 
 /* A skeleton rather than the word "Loading" — it holds the layout, so the page does not
@@ -1127,7 +1198,14 @@ thead th.sortable:hover {
     transform 0.15s var(--ease),
     box-shadow 0.15s var(--ease);
 }
+/* Without an explicit background here, the generic `button:hover:not(:disabled)` rule
+   (higher specificity than a plain class, once combined with :hover and :not()) wins and
+   repaints this to --surface-2/--surface-3 on hover — a dark grey background under
+   --on-accent's dark navy icon, on ANY hover, not just the open/close-icon state. Found in a
+   UI/UX review (2026-09-14) as "the close X is low-contrast" — the actual bug is broader:
+   it happens to the chat icon too, every time the button is hovered. */
 .assistant-fab:hover {
+  background: var(--accent-hover);
   transform: translateY(-1px);
 }
 .assistant-fab svg {
@@ -1146,6 +1224,23 @@ thead th.sortable:hover {
   border-radius: var(--r);
   box-shadow: var(--shadow-lg);
   overflow: hidden;
+}
+
+/* The dock is `position: fixed` and never reflowed `main` — so opening it to ask about the
+   page you're looking at covered that same page (measured: Home's 4th KPI tiles and the
+   Analytics card sat directly under it). Widening `main`'s right inset while the dock is open
+   gives real content room to move aside instead. Scoped to viewports wide enough that this
+   doesn't just re-create the narrow-screen case the dock's own `max-width` already handles. */
+@media (min-width: 760px) {
+  main.assistant-open {
+    padding-right: 448px;
+    transition: padding-right 0.15s var(--ease);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  main.assistant-open {
+    transition: none;
+  }
 }
 .assistant-dock .assistant {
   position: static;
@@ -1340,10 +1435,20 @@ thead th.sortable:hover {
   margin-bottom: 8px;
 }
 
+/* Two explicit states (2 or 4 columns), not `auto-fit` — auto-fit put three cards on one row
+   and orphaned the fourth alone on its own at 1280 and 1366px, the two most common laptop
+   widths (needs ~1392px of content box to fit 4×320px cards; measured in a UI/UX review,
+   2026-09-14, confirmed not a one-off preview artifact). 2×2 never orphans a 4th card the way
+   an odd-numbered auto-fit wrap can. */
 .home-paths {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: repeat(2, 1fr);
   gap: 16px;
+}
+@media (min-width: 1400px) {
+  .home-paths {
+    grid-template-columns: repeat(4, 1fr);
+  }
 }
 
 /* The two entry points are buttons, not cards with a link buried inside: the whole surface is
@@ -1385,6 +1490,11 @@ thead th.sortable:hover {
 .home-path-external {
   display: block;
   text-decoration: none;
+  /* Same family as the internal cards, visibly a different destination — a dashed border was
+     enough on its own in review to read as "leaves the app" without the "↗" heading glyph and
+     "Opens in Databricks" copy having to do all the work alone. Found in a UI/UX review,
+     2026-09-14: side by side with the internal cards it was otherwise indistinguishable. */
+  border-style: dashed;
 }
 
 /* An inline button that reads as a link — used for "See the evidence →" inside a paragraph,

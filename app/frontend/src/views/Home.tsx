@@ -25,17 +25,26 @@ export function Home({ onNavigate }: { onNavigate: (view: string) => void }) {
   const [queue, setQueue] = useState<QueueItem[] | null>(null);
   const [signals, setSignals] = useState<SignalSummary | null>(null);
   const [depots, setDepots] = useState<DepotRisk[] | null>(null);
+  // Distinct from "the four states are still null" — that's ALSO true for a millisecond on
+  // every normal load, before any request has had a chance to return. Without this, the
+  // "not available" message rendered as a false failure on every cold visit (reproduced at
+  // 350ms in a UI/UX review, 2026-09-14) because it read absence-so-far as absence-forever.
+  const [settled, setSettled] = useState(false);
 
   useEffect(() => {
     let live = true;
     // Evidence is the only one that must succeed; it needs no session. The rest are allowed to
     // fail — a signed-out visitor gets the argument without the operational state, rather than
     // an error page. `.catch(() => null)` is deliberate here and not swallowing a real bug:
-    // these exact 401/403s are the documented signed-out behaviour of those routes.
-    api.evidence().then((e) => live && setEvidence(e)).catch(() => null);
-    api.queue(50).then((q) => live && setQueue(q)).catch(() => null);
-    api.signals().then((s) => live && setSignals(s)).catch(() => null);
-    api.depotRisk().then((d) => live && setDepots(d)).catch(() => null);
+    // these exact 401/403s are the documented signed-out behaviour of those routes. Each
+    // promise below therefore always *resolves* (never rejects), so `Promise.all` — not
+    // `allSettled` — is enough to know when every attempt has finished, one way or another.
+    Promise.all([
+      api.evidence().then((e) => live && setEvidence(e)).catch(() => null),
+      api.queue(50).then((q) => live && setQueue(q)).catch(() => null),
+      api.signals().then((s) => live && setSignals(s)).catch(() => null),
+      api.depotRisk().then((d) => live && setDepots(d)).catch(() => null),
+    ]).then(() => live && setSettled(true));
     return () => {
       live = false;
     };
@@ -45,16 +54,18 @@ export function Home({ onNavigate }: { onNavigate: (view: string) => void }) {
   const exposed = queue?.reduce((n, q) => n + q.vehicles_exposed, 0) ?? null;
   const overdue = depots?.reduce((n, d) => n + d.overdue_work_orders, 0) ?? null;
   const outstanding = depots?.reduce((n, d) => n + d.outstanding_work_orders, 0) ?? null;
-  // Every fleet read failed. Both surfaces attach identity outside this app, so this is
-  // not "you are signed out" — it is a token the backend could not use, or a backend that
-  // is not answering. Say that, rather than offering a sign-in that does not exist here.
-  const fleetUnavailable = queue === null && depots === null && signals === null;
+  // Every fleet read failed, and every fetch has actually had a chance to. Both surfaces
+  // attach identity outside this app, so this is not "you are signed out" — it is a token
+  // the backend could not use, or a backend that is not answering. Say that, rather than
+  // offering a sign-in that does not exist here, and rather than saying anything at all
+  // before the requests have even settled.
+  const fleetUnavailable = settled && queue === null && depots === null && signals === null;
 
   return (
     <div className="home">
       <section className="panel home-hero">
         <h2 style={{ marginTop: 0 }}>Built for the fleet safety team — and the leadership above them</h2>
-        <p className="muted" style={{ maxWidth: "72ch" }}>
+        <p className="muted" style={{ maxWidth: "88ch" }}>
           A fleet operator learns about a safety defect the same way a private owner does — when
           the recall posts. The <strong>fleet safety team</strong> works the queue below: resolve a
           campaign against the VIN roster, rank by consequence, dispatch work orders under human
@@ -64,21 +75,25 @@ export function Home({ onNavigate }: { onNavigate: (view: string) => void }) {
         </p>
       </section>
 
-      {evidence && (
+      {evidence ? (
         <section className="panel">
           <h3 style={{ marginTop: 0 }}>The measured claim</h3>
           <div className="stats">
             <div className="stat">
-              <div className="v">{evidence.real.rate_pct}%</div>
+              {/* Matches Evidence.tsx's own formatting (toFixed(1), raw p-value with ≈) —
+                  this page and Evidence.tsx used to render the same numbers two different
+                  ways (16% vs 16.0%, "p 0.009" vs "p ≈ 0.0087"), reading as two different
+                  measurements one click apart. Found in a UI/UX review, 2026-09-14. */}
+              <div className="v">{evidence.real.rate_pct.toFixed(1)}%</div>
               <div className="k">Detected before NHTSA acted</div>
             </div>
             <div className="stat">
-              <div className="v">{evidence.placebo.rate_pct}%</div>
+              <div className="v">{evidence.placebo.rate_pct.toFixed(1)}%</div>
               <div className="k">Placebo control</div>
             </div>
             <div className="stat">
               <div className="v">{evidence.lift.toFixed(2)}×</div>
-              <div className="k">Lift · p {evidence.p_value.toFixed(3)}</div>
+              <div className="k">Lift · p ≈ {evidence.p_value}</div>
             </div>
             <div className="stat">
               <div className="v">{evidence.real.median_lead_days}</div>
@@ -93,14 +108,43 @@ export function Home({ onNavigate }: { onNavigate: (view: string) => void }) {
             </button>
           </p>
         </section>
+      ) : settled ? (
+        <section className="panel">
+          <h3 style={{ marginTop: 0 }}>The measured claim</h3>
+          <p className="muted" style={{ marginBottom: 0 }}>
+            The measured result could not be loaded right now — it is normally served
+            unauthenticated, so this points at the backend rather than your session.
+          </p>
+        </section>
+      ) : (
+        <section className="panel">
+          <h3 style={{ marginTop: 0 }}>The measured claim</h3>
+          <div className="stats">
+            {[0, 1, 2, 3].map((i) => (
+              <div className="stat" key={i}>
+                <div className="skeleton tall" style={{ marginBottom: 0 }} />
+              </div>
+            ))}
+          </div>
+        </section>
       )}
 
-      {fleetUnavailable ? (
+      {!settled ? (
+        <section className="panel">
+          <h3 style={{ marginTop: 0 }}>Live fleet state</h3>
+          <div className="stats">
+            {[0, 1, 2, 3].map((i) => (
+              <div className="stat" key={i}>
+                <div className="skeleton tall" style={{ marginBottom: 0 }} />
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : fleetUnavailable ? (
         <section className="panel">
           <h3 style={{ marginTop: 0 }}>Live fleet state</h3>
           <p className="muted" style={{ marginBottom: 0 }}>
-            Live fleet data is not available right now. The measured result above is served
-            from the application itself and needs no fleet connection.
+            Live fleet data is not available right now.
           </p>
         </section>
       ) : (
@@ -124,9 +168,14 @@ export function Home({ onNavigate }: { onNavigate: (view: string) => void }) {
               <div className="k">Overdue work orders</div>
             </div>
           </div>
+          {/* Guarded on `depots` alone, not on `outstanding` — the two are never
+              independently null (outstanding is derived from depots), but the old version
+              rendered the fragment "across — depots." with no subject when depots failed
+              while queue/signals succeeded. Found in a UI/UX review, 2026-09-14. */}
           <p className="muted" style={{ marginBottom: 0 }}>
-            {outstanding !== null && `${outstanding.toLocaleString()} work orders still outstanding `}
-            across {depots?.length ?? "—"} depots.
+            {depots !== null
+              ? `${outstanding!.toLocaleString()} work orders still outstanding across ${depots.length} depots.`
+              : "Depot rollup unavailable right now."}
           </p>
         </section>
       )}
