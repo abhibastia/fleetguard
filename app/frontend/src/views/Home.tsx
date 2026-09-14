@@ -66,12 +66,15 @@ export function Home({ onNavigate }: { onNavigate: (view: string) => void }) {
       <section className="panel home-hero">
         <h2 style={{ marginTop: 0 }}>Built for the fleet safety team — and the leadership above them</h2>
         <p className="muted" style={{ maxWidth: "88ch" }}>
-          A fleet operator learns about a safety defect the same way a private owner does — when
-          the recall posts. The <strong>fleet safety team</strong> works the queue below: resolve a
-          campaign against the VIN roster, rank by consequence, dispatch work orders under human
-          approval. <strong>Safety leadership</strong> reads the two panels under this one instead —
-          the measured claim behind the early-warning half, and whether the fleet's open work is
-          actually getting closed. Same data, two jobs.
+          FleetGuard resolves an NHTSA recall against your fleet's VIN roster in seconds, and
+          watches complaint volume for the same defect patterns <em>before</em> the regulator
+          opens a formal investigation — two capabilities most fleets only get after the fact.
+          The <strong>fleet safety team</strong> works the queue below: scope a campaign, rank by
+          consequence, dispatch work orders under human approval — every action attributed and
+          audited. <strong>Safety leadership</strong> reads the two panels under this one instead
+          — the measured evidence behind the early-warning half, and whether the fleet's open
+          work is actually getting closed. Same NHTSA data and Databricks pipeline underneath,
+          two different jobs.
         </p>
       </section>
 

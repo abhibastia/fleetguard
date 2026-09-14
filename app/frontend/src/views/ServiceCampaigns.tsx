@@ -28,6 +28,9 @@ export function ServiceCampaigns({ onOpen }: { onOpen: (serviceCampaignId: strin
   const [error, setError] = useState<string | null>(null);
   const [gated, setGated] = useState(false);
   const [progressFilter, setProgressFilter] = useState<string>(PROGRESS_FILTER_ALL);
+  // The depot breakdown was capped at 10 with a static "+N further depots" note and no way
+  // to actually see the rest — found in follow-up feedback after the cap was added.
+  const [showAllDepots, setShowAllDepots] = useState(false);
 
   useEffect(() => {
     let stale = false;
@@ -132,6 +135,7 @@ const { sorted, sortKey, sortDir, toggleSort } = useSort<ServiceCampaign, SortKe
   ).length;
   const totalActualCost = campaigns.reduce((n, c) => n + c.total_actual_cost, 0);
   const totalCosted = campaigns.reduce((n, c) => n + c.costed_count, 0);
+  const costedDepots = breakdown?.by_depot.filter((row) => row.total_actual_cost > 0) ?? [];
 
   return (
     <>
@@ -298,7 +302,7 @@ const { sorted, sortKey, sortDir, toggleSort } = useSort<ServiceCampaign, SortKe
       ) : (
         breakdown &&
         (breakdown.by_component.length > 0 || breakdown.by_depot.length > 0) && (
-          <div className="split" style={{ marginTop: 16 }}>
+          <div className="cost-split" style={{ marginTop: 16 }}>
             {/* Bare tables with no heading and no .panel — the one break from this console's
                 "everything sits in a card" rule. Found in the same review. */}
             <div className="panel">
@@ -338,22 +342,21 @@ const { sorted, sortKey, sortDir, toggleSort } = useSort<ServiceCampaign, SortKe
                     </tr>
                   </thead>
                   <tbody>
-                    {/* Capped at 10 — an uncapped 57-row depot table is what buried the
-                        campaign list below the fold in the first place (see above). Same
-                        "+N further" pattern Campaign.tsx already uses for its own depot list,
-                        rather than a new truncation convention. */}
-                    {breakdown.by_depot
-                      .filter((row) => row.total_actual_cost > 0)
-                      .slice(0, 10)
-                      .map((row) => (
-                        <tr key={row.key}>
-                          <td>{row.key}</td>
-                          <td className="num">${row.total_actual_cost.toLocaleString()}</td>
-                          <td className="num muted">
-                            {row.costed_count}/{row.total_work_orders}
-                          </td>
-                        </tr>
-                      ))}
+                    {/* Capped at 10 by default — an uncapped 57-row depot table is what buried
+                        the campaign list below the fold in the first place (see above). Unlike
+                        Campaign.tsx's own "+N further" depot list (a search box, since a depot
+                        manager's first question is "is MY depot here"), this list is small
+                        enough that a plain show-all toggle is the right amount of interaction —
+                        no need for a second search box on the same page. */}
+                    {(showAllDepots ? costedDepots : costedDepots.slice(0, 10)).map((row) => (
+                      <tr key={row.key}>
+                        <td>{row.key}</td>
+                        <td className="num">${row.total_actual_cost.toLocaleString()}</td>
+                        <td className="num muted">
+                          {row.costed_count}/{row.total_work_orders}
+                        </td>
+                      </tr>
+                    ))}
                     {breakdown.by_depot.every((row) => row.total_actual_cost === 0) && (
                       <tr>
                         <td colSpan={3} className="muted">
@@ -363,11 +366,16 @@ const { sorted, sortKey, sortDir, toggleSort } = useSort<ServiceCampaign, SortKe
                     )}
                   </tbody>
                 </table>
-                {breakdown.by_depot.filter((row) => row.total_actual_cost > 0).length > 10 && (
-                  <p className="muted" style={{ margin: "10px 0 0" }}>
-                    +{breakdown.by_depot.filter((row) => row.total_actual_cost > 0).length - 10}{" "}
-                    further depots with logged costs
-                  </p>
+                {costedDepots.length > 10 && (
+                  <button
+                    className="linklike"
+                    style={{ marginTop: 10 }}
+                    onClick={() => setShowAllDepots((v) => !v)}
+                  >
+                    {showAllDepots
+                      ? "Show fewer ←"
+                      : `+${costedDepots.length - 10} further depots — show all →`}
+                  </button>
                 )}
               </div>
             </div>

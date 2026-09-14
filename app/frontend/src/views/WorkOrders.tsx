@@ -402,7 +402,10 @@ const { sorted, sortKey, sortDir, toggleSort } = useSort<WorkOrder, SortKey>(
                       <td className="muted">{o.wo_id}</td>
                       <td>{o.service_campaign_id ?? "—"}</td>
                       <td>{o.vin}</td>
-                      <td>{o.depot_id}</td>
+                      {/* nowrap so a short id like "DEP-001" can't be squeezed onto two
+                          lines by the wider Assigned-to/Status select columns next to it —
+                          the table already scrolls horizontally (.wrap) if it needs to. */}
+                      <td style={{ whiteSpace: "nowrap" }}>{o.depot_id}</td>
                       <td className="muted">
                         {o.due_date ?? "—"}
                         {isOverdue(o) && (

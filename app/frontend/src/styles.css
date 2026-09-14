@@ -1165,6 +1165,20 @@ thead th.sortable:hover {
   }
 }
 
+/* Two PEER tables (Launched's "By component"/"By depot"), not a wide-column-plus-assistant
+   layout — `.split`'s 1.8:1 ratio made them uneven widths for no reason, read as a layout bug
+   rather than a design choice. Equal columns, same narrow-viewport stack as `.split`. */
+.cost-split {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+@media (max-width: 1000px) {
+  .cost-split {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ── assistant ──────────────────────────────────────────────────────────────────────── */
 
 .assistant {
@@ -1219,7 +1233,14 @@ thead th.sortable:hover {
   bottom: 86px;
   width: 400px;
   max-width: calc(100vw - 32px);
-  max-height: min(72vh, 680px);
+  max-height: min(85vh, 820px);
+  /* `max-height` alone doesn't make a box taller than its content needs — with only the
+     intro text and composer, the dock rendered at ~470px regardless of the cap above, which
+     is the actual "looks smaller than it should" complaint. `min-height` forces real height
+     even when a conversation is empty; `.turns` (flex: 1, in the nested rule below) absorbs
+     the extra space. Capped by the same min(vh, px) shape as max-height so a short viewport
+     still fits it. Kept in sync with the duplicate on `.assistant-dock .assistant` below. */
+  min-height: min(70vh, 640px);
   z-index: 29;
   border-radius: var(--r);
   box-shadow: var(--shadow-lg);
@@ -1246,7 +1267,8 @@ thead th.sortable:hover {
   position: static;
   top: auto;
   height: 100%;
-  max-height: min(72vh, 680px);
+  max-height: min(85vh, 820px);
+  min-height: min(70vh, 640px);
 }
 .assistant-dock .assistant .turns {
   max-height: none;
