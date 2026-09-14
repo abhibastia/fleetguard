@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, ApiError, type RecallTrend as RecallTrendData } from "../lib/api";
 import { BarChart, type BarChartDatum } from "../lib/BarChart";
+import { PageError } from "../lib/PageError";
 
 /**
  * Historical trend — every other view in this console answers "what's true right now"; this
@@ -49,7 +50,16 @@ export function Trends() {
         </p>
       </div>
     );
-  if (!data && error) return <div className="error">{error}</div>;
+  if (!data && error)
+    return (
+      <>
+        <div className="page-head">
+          <h2>Recall trend</h2>
+          <p>Fleet-relevant recall campaigns by year.</p>
+        </div>
+        <PageError title="Recall trend could not be loaded." detail={error} />
+      </>
+    );
   if (!data)
     return (
       <>
@@ -88,7 +98,7 @@ export function Trends() {
     !(latestDate.getUTCMonth() === 11 && latestDate.getUTCDate() === 31);
   const partialNote =
     latestDate && isPartialYear(latest.year)
-      ? `Data runs through ${latest_issued_at}, not year-end — the shorter ${latest.year} bar reflects an incomplete year, not fewer recalls.`
+      ? `Data runs through ${latest_issued_at}, not year-end — the shorter ${latest.year} bar (marked *) reflects an incomplete year, not fewer recalls.`
       : null;
 
   const campaignData: BarChartDatum[] = points.map((p) => ({

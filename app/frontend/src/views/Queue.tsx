@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, ApiError, type QueueItem } from "../lib/api";
+import { PageError } from "../lib/PageError";
 import { SearchBox, useSearch } from "../lib/search";
 import { SortIndicator, useSort } from "../lib/sort";
 
@@ -66,7 +67,23 @@ const { sorted, sortKey, sortDir, toggleSort } = useSort<QueueItem, SortKey>(
         </p>
       </div>
     );
-  if (error) return <div className="error">{error}</div>;
+  const pageHead = (
+    <div className="page-head">
+      <h2>Recall queue</h2>
+      <p>
+        Open campaigns matched to fleet vehicles, ordered by consequence before volume — a
+        do-not-drive defect outranks a larger label recall.
+      </p>
+    </div>
+  );
+
+  if (error)
+    return (
+      <>
+        {pageHead}
+        <PageError title="Recall queue could not be loaded." detail={error} />
+      </>
+    );
 
   if (!items)
     return (
@@ -95,20 +112,19 @@ const { sorted, sortKey, sortDir, toggleSort } = useSort<QueueItem, SortKey>(
 
   return (
     <>
-      <div className="page-head">
-        <h2>Recall queue</h2>
-        <p>
-          Open campaigns matched to fleet vehicles, ordered by consequence before volume — a
-          do-not-drive defect outranks a larger label recall.
-        </p>
-      </div>
+      {pageHead}
 
       <div className="stats">
         <div className={urgent > 0 ? "stat is-danger" : "stat"}>
           <div className="v">{urgent}</div>
           <div className="k">Immediate action</div>
           {items.length > 0 && (
-            <div className="stat-bar" title={`${urgent} of ${items.length} campaigns`}>
+            <div
+              className="stat-bar"
+              role="img"
+              aria-label={`${urgent} of ${items.length} campaigns need immediate action`}
+              title={`${urgent} of ${items.length} campaigns`}
+            >
               <div
                 className="stat-bar-fill"
                 style={{ width: `${(urgent / items.length) * 100}%` }}

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, ApiError, type DepotRisk as DepotRiskRow } from "../lib/api";
+import { PageError } from "../lib/PageError";
 import { SearchBox, useSearch } from "../lib/search";
 import { SortIndicator, useSort } from "../lib/sort";
 
@@ -93,7 +94,16 @@ const { sorted, sortKey, sortDir, toggleSort } = useSort<DepotRiskRow, SortKey>(
         </p>
       </div>
     );
-  if (!depots && error) return <div className="error">{error}</div>;
+  if (!depots && error)
+    return (
+      <>
+        <div className="page-head">
+          <h2>Depot risk</h2>
+          <p>Depots ranked by vehicles currently exposed to a Park It or Do Not Drive campaign.</p>
+        </div>
+        <PageError title="Depot risk could not be loaded." detail={error} />
+      </>
+    );
   if (!depots)
     return (
       <>
@@ -132,7 +142,15 @@ const { sorted, sortKey, sortDir, toggleSort } = useSort<DepotRiskRow, SortKey>(
           <div className="v">{highRiskCount}</div>
           <div className="k">High risk (&ge;5% of fleet urgent)</div>
           {depots.length > 0 && (
-            <div className="stat-bar" title={`${highRiskCount} of ${depots.length} depots`}>
+            // `title` alone isn't reliably surfaced by screen readers, and at a few px tall
+            // this bar is easy to miss visually too — an explicit aria-label carries the same
+            // "N of M" the tooltip does. Found in a UI/UX review, 2026-09-14.
+            <div
+              className="stat-bar"
+              role="img"
+              aria-label={`${highRiskCount} of ${depots.length} depots at high risk`}
+              title={`${highRiskCount} of ${depots.length} depots`}
+            >
               <div
                 className="stat-bar-fill"
                 style={{ width: `${(highRiskCount / depots.length) * 100}%` }}
@@ -233,7 +251,7 @@ const { sorted, sortKey, sortDir, toggleSort } = useSort<DepotRiskRow, SortKey>(
                       className="num sortable"
                       onClick={() => toggleSort("outstanding_work_orders")}
                     >
-                      Outstanding WOs
+                      Outstanding work orders
                       <SortIndicator
                         columnKey="outstanding_work_orders"
                         sortKey={sortKey}
@@ -241,7 +259,7 @@ const { sorted, sortKey, sortDir, toggleSort } = useSort<DepotRiskRow, SortKey>(
                       />
                     </th>
                     <th className="num sortable" onClick={() => toggleSort("overdue_work_orders")}>
-                      Overdue WOs
+                      Overdue work orders
                       <SortIndicator
                         columnKey="overdue_work_orders"
                         sortKey={sortKey}

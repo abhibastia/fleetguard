@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, ApiError, type CostBreakdown, type Evidence, type ServiceCampaign } from "../lib/api";
+import { PageError } from "../lib/PageError";
 import { SearchBox, useSearch } from "../lib/search";
 import { SortIndicator, useSort } from "../lib/sort";
 
@@ -23,6 +24,7 @@ export function ServiceCampaigns({ onOpen }: { onOpen: (serviceCampaignId: strin
   const [campaigns, setCampaigns] = useState<ServiceCampaign[] | null>(null);
   const [evidence, setEvidence] = useState<Evidence | null>(null);
   const [breakdown, setBreakdown] = useState<CostBreakdown | null>(null);
+  const [breakdownError, setBreakdownError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [gated, setGated] = useState(false);
   const [progressFilter, setProgressFilter] = useState<string>(PROGRESS_FILTER_ALL);
@@ -48,13 +50,18 @@ export function ServiceCampaigns({ onOpen }: { onOpen: (serviceCampaignId: strin
         if (!stale) setEvidence(d);
       })
       .catch(() => {});
-    // Same reasoning: a breakdown failure shouldn't block the campaign table below it.
+    // Same reasoning: a breakdown failure shouldn't block the campaign table below it — but
+    // unlike the evidence fetch, a failure here used to disappear silently (both tables just
+    // vanished, indistinguishable from "no costs logged yet"). Found in a UI/UX review,
+    // 2026-09-14.
     api
       .costBreakdown()
       .then((d) => {
         if (!stale) setBreakdown(d);
       })
-      .catch(() => {});
+      .catch((e: ApiError) => {
+        if (!stale) setBreakdownError(e.message);
+      });
     return () => {
       stale = true;
     };
@@ -93,7 +100,16 @@ const { sorted, sortKey, sortDir, toggleSort } = useSort<ServiceCampaign, SortKe
         </p>
       </div>
     );
-  if (!campaigns && error) return <div className="error">{error}</div>;
+  if (!campaigns && error)
+    return (
+      <>
+        <div className="page-head">
+          <h2>Launched campaigns</h2>
+          <p>Every service campaign an approver has launched, most recent first.</p>
+        </div>
+        <PageError title="Launched campaigns could not be loaded." detail={error} />
+      </>
+    );
   if (!campaigns)
     return (
       <>
@@ -146,95 +162,13 @@ const { sorted, sortKey, sortDir, toggleSort } = useSort<ServiceCampaign, SortKe
         </div>
       </div>
 
-      <div className="panel prose" style={{ marginTop: 4, marginBottom: 20 }}>
-        <h3 style={{ marginTop: 0 }}>Cost of early action — logged, not assumed</h3>
-        {evidence && (
-          <p>
-            FleetGuard's detection signal fires a median{" "}
-            <strong>{evidence.real.median_lead_days} days</strong> before NHTSA would typically
-            open a formal investigation into a defect pattern (measured across{" "}
-            {evidence.real.n} investigations since 2010 — see <strong>Evidence</strong>). That is
-            lead time your fleet can spend on proactive service instead of reactive, urgent
-            repairs once a recall lands.
-          </p>
-        )}
-        <p>
-          <strong>${totalActualCost.toLocaleString()}</strong> in repair cost has been logged
-          across <strong>{totalCosted}</strong> of {totalCompleted.toLocaleString()} completed
-          work orders ({totalVehicles.toLocaleString()} dispatched in total). No blended average
-          is applied here — a steering-rack repair and a brake job cost different amounts, so
-          the numbers below are broken down by what was actually being fixed and where.
-        </p>
-        {totalCompleted > totalCosted && (
-          <p className="footnote" style={{ marginBottom: 0 }}>
-            {totalCompleted - totalCosted} completed work order
-            {totalCompleted - totalCosted === 1 ? "" : "s"} have no cost logged yet — the totals
-            above reflect only what has been entered, not an estimate for the rest. Log a cost on
-            the <strong>Work orders</strong> tab to fill this in.
-          </p>
-        )}
-      </div>
-
-      {breakdown && (breakdown.by_component.length > 0 || breakdown.by_depot.length > 0) && (
-        <div className="split" style={{ marginBottom: 20 }}>
-          <div className="wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Component</th>
-                  <th className="num">Logged cost</th>
-                  <th className="num">Coverage</th>
-                </tr>
-              </thead>
-              <tbody>
-                {breakdown.by_component.map((row) => (
-                  <tr key={row.key}>
-                    <td>{row.key}</td>
-                    <td className="num">${row.total_actual_cost.toLocaleString()}</td>
-                    <td className="num muted">
-                      {row.costed_count}/{row.total_work_orders}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Depot</th>
-                  <th className="num">Logged cost</th>
-                  <th className="num">Coverage</th>
-                </tr>
-              </thead>
-              <tbody>
-                {breakdown.by_depot
-                  .filter((row) => row.total_actual_cost > 0)
-                  .map((row) => (
-                    <tr key={row.key}>
-                      <td>{row.key}</td>
-                      <td className="num">${row.total_actual_cost.toLocaleString()}</td>
-                      <td className="num muted">
-                        {row.costed_count}/{row.total_work_orders}
-                      </td>
-                    </tr>
-                  ))}
-                {breakdown.by_depot.every((row) => row.total_actual_cost === 0) && (
-                  <tr>
-                    <td colSpan={3} className="muted">
-                      No logged costs yet at any depot.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
       {error && <div className="error">{error}</div>}
 
+      {/* The actual subject of a tab titled "Launched campaigns" used to render LAST, after
+          an uncapped 57-row depot cost table pushed the page to ~3,500px — a fleet-safety-team
+          member checking on a campaign they just dispatched had to scroll past all of it first.
+          Found in a UI/UX review, 2026-09-14: the cost breakdown is supporting detail, not the
+          lede, so it now follows the campaign list instead of preceding it. */}
       {campaigns.length === 0 ? (
         <div className="panel">
           No service campaigns launched yet. That is a result, not an error — nothing has been
@@ -326,6 +260,119 @@ const { sorted, sortKey, sortDir, toggleSort } = useSort<ServiceCampaign, SortKe
             </div>
           )}
         </>
+      )}
+
+      <div className="panel prose" style={{ marginTop: 20 }}>
+        <h3 style={{ marginTop: 0 }}>Cost of early action — logged, not assumed</h3>
+        {evidence && (
+          <p>
+            FleetGuard's detection signal fires a median{" "}
+            <strong>{evidence.real.median_lead_days} days</strong> before NHTSA would typically
+            open a formal investigation into a defect pattern (measured across{" "}
+            {evidence.real.n} investigations since 2010 — see <strong>Evidence</strong>). That is
+            lead time your fleet can spend on proactive service instead of reactive, urgent
+            repairs once a recall lands.
+          </p>
+        )}
+        <p>
+          <strong>${totalActualCost.toLocaleString()}</strong> in repair cost has been logged
+          across <strong>{totalCosted}</strong> of {totalCompleted.toLocaleString()} completed
+          work orders ({totalVehicles.toLocaleString()} dispatched in total). No blended average
+          is applied here — a steering-rack repair and a brake job cost different amounts, so
+          the tables below are broken down by what was actually being fixed and where.
+        </p>
+        {totalCompleted > totalCosted && (
+          <p className="footnote" style={{ marginBottom: 0 }}>
+            {totalCompleted - totalCosted} completed work order
+            {totalCompleted - totalCosted === 1 ? "" : "s"} have no cost logged yet — the totals
+            above reflect only what has been entered, not an estimate for the rest. Log a cost on
+            the <strong>Work orders</strong> tab to fill this in.
+          </p>
+        )}
+      </div>
+
+      {breakdownError ? (
+        // A failed breakdown fetch used to just make both tables vanish, indistinguishable
+        // from "nothing logged yet" — found in a UI/UX review, 2026-09-14.
+        <PageError title="Cost breakdown could not be loaded." detail={breakdownError} />
+      ) : (
+        breakdown &&
+        (breakdown.by_component.length > 0 || breakdown.by_depot.length > 0) && (
+          <div className="split" style={{ marginTop: 16 }}>
+            {/* Bare tables with no heading and no .panel — the one break from this console's
+                "everything sits in a card" rule. Found in the same review. */}
+            <div className="panel">
+              <h3 style={{ marginTop: 0 }}>By component</h3>
+              <div className="wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Component</th>
+                      <th className="num">Logged cost</th>
+                      <th className="num">Coverage</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {breakdown.by_component.map((row) => (
+                      <tr key={row.key}>
+                        <td>{row.key}</td>
+                        <td className="num">${row.total_actual_cost.toLocaleString()}</td>
+                        <td className="num muted">
+                          {row.costed_count}/{row.total_work_orders}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div className="panel">
+              <h3 style={{ marginTop: 0 }}>By depot</h3>
+              <div className="wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Depot</th>
+                      <th className="num">Logged cost</th>
+                      <th className="num">Coverage</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {/* Capped at 10 — an uncapped 57-row depot table is what buried the
+                        campaign list below the fold in the first place (see above). Same
+                        "+N further" pattern Campaign.tsx already uses for its own depot list,
+                        rather than a new truncation convention. */}
+                    {breakdown.by_depot
+                      .filter((row) => row.total_actual_cost > 0)
+                      .slice(0, 10)
+                      .map((row) => (
+                        <tr key={row.key}>
+                          <td>{row.key}</td>
+                          <td className="num">${row.total_actual_cost.toLocaleString()}</td>
+                          <td className="num muted">
+                            {row.costed_count}/{row.total_work_orders}
+                          </td>
+                        </tr>
+                      ))}
+                    {breakdown.by_depot.every((row) => row.total_actual_cost === 0) && (
+                      <tr>
+                        <td colSpan={3} className="muted">
+                          No logged costs yet at any depot.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+                {breakdown.by_depot.filter((row) => row.total_actual_cost > 0).length > 10 && (
+                  <p className="muted" style={{ margin: "10px 0 0" }}>
+                    +{breakdown.by_depot.filter((row) => row.total_actual_cost > 0).length - 10}{" "}
+                    further depots with logged costs
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )
       )}
     </>
   );

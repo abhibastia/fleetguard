@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, ApiError, type ApprovalResult, type CampaignDetail } from "../lib/api";
+import { PageError } from "../lib/PageError";
 import { SearchBox, useSearch } from "../lib/search";
 import { ApprovalConfirmation } from "./ApprovalConfirmation";
 
@@ -14,6 +15,7 @@ import { ApprovalConfirmation } from "./ApprovalConfirmation";
 export function Campaign({ id, onBack }: { id: string; onBack: () => void }) {
   const [c, setC] = useState<CampaignDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [gated, setGated] = useState(false);
   const [title, setTitle] = useState("");
   const [rationale, setRationale] = useState("");
   const [busy, setBusy] = useState(false);
@@ -28,6 +30,7 @@ export function Campaign({ id, onBack }: { id: string; onBack: () => void }) {
     // tracing what happens on a *second* id, not just verifying the first one worked.
     setC(null);
     setError(null);
+    setGated(false);
     setResult(null);
     setBusy(false);
     setRationale("");
@@ -46,7 +49,13 @@ export function Campaign({ id, onBack }: { id: string; onBack: () => void }) {
         setTitle(`${d.park_it ? "Park It — " : ""}${d.component ?? id} remediation`);
       })
       .catch((e: ApiError) => {
-        if (!stale) setError(e.message);
+        if (stale) return;
+        // Every other view in this console distinguishes "not signed in" from "actually
+        // broken" — Campaign.tsx never did, so a 401 here (reachable straight from the Queue
+        // row click) rendered the same bare error bar as a real backend failure. Found in a
+        // UI/UX review, 2026-09-14.
+        if (e.status === 401) setGated(true);
+        else setError(e.message);
       });
     return () => {
       stale = true;
@@ -90,7 +99,17 @@ export function Campaign({ id, onBack }: { id: string; onBack: () => void }) {
   const searching = query.trim() !== "";
   const shownDepots = searching ? matchedDepots : depots.slice(0, 12);
 
-  if (error && !c) return <div className="error">{error}</div>;
+  if (gated && !c)
+    return (
+      <div className="panel">
+        <h3 style={{ marginTop: 0 }}>Sign-in required</h3>
+        <p className="muted" style={{ marginBottom: 0 }}>
+          Campaign detail is read under your Databricks identity. This public deployment has no
+          sign-in — the <strong>Evidence</strong> tab needs no session.
+        </p>
+      </div>
+    );
+  if (error && !c) return <PageError title="Campaign detail could not be loaded." detail={error} />;
   if (!c)
     return (
       <>
@@ -195,8 +214,18 @@ export function Campaign({ id, onBack }: { id: string; onBack: () => void }) {
             </div>
           ) : (
             <>
-              <label htmlFor="t">Title</label>
-              <input id="t" value={title} onChange={(e) => setTitle(e.target.value)} />
+              <label htmlFor="t">Title — written into the audit log permanently</label>
+              {/* A single-line <input> clipped its own generated value ("...RACK AND PINION
+                  reme|") in this 350px sidebar — measured scrollWidth 355 vs clientWidth 310.
+                  A textarea wraps instead of scrolling sideways, so the exact string an
+                  approver is about to commit stays fully visible. Found in a UI/UX review,
+                  2026-09-14. */}
+              <textarea
+                id="t"
+                rows={2}
+                value={title}
+                onChange={(e) => setTitle(e.target.value.replace(/\n/g, " "))}
+              />
 
               <label htmlFor="r">Rationale — recorded in the audit log</label>
               <textarea

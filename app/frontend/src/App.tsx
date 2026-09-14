@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, type AuthStatus, type Health, type Me } from "./lib/api";
 import { applyTheme, currentTheme, type Theme } from "./lib/theme";
 import { AuditLog } from "./views/AuditLog";
@@ -168,6 +168,27 @@ export function App() {
   // reachable from every tab instead; closed by default so it never fires an API call until
   // someone actually wants it.
   const [assistantOpen, setAssistantOpen] = useState(false);
+  const assistantFabRef = useRef<HTMLButtonElement>(null);
+  const assistantDockRef = useRef<HTMLDivElement>(null);
+
+  // A floating panel with no dialog semantics: `role=null`, focus never moved into it on
+  // open, and Escape did nothing — found in a UI/UX review, 2026-09-14. Move focus to the
+  // dock's first focusable control on open, close on Escape, and return focus to the FAB
+  // that opened it (the standard disclosure-widget contract, not just an a11y nicety — the
+  // dock has no other way to close via keyboard).
+  useEffect(() => {
+    if (!assistantOpen) return;
+    const firstField = assistantDockRef.current?.querySelector<HTMLElement>("input, textarea, button");
+    firstField?.focus();
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setAssistantOpen(false);
+        assistantFabRef.current?.focus();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [assistantOpen]);
 
   // Back/forward must work: a browser button that silently does nothing is worse than no
   // routing at all.
@@ -287,7 +308,7 @@ export function App() {
         <ThemeToggle />
       </header>
 
-      <main>
+      <main className={assistantOpen ? "assistant-open" : undefined}>
         {/* Say what is being served. A console showing point-in-time data while implying it
             is live is the interface version of reporting a failed query as "no results". */}
         {health?.data_mode === "snapshot" && view.name !== "evidence" && (
@@ -352,6 +373,7 @@ export function App() {
       {(
         <>
           <button
+            ref={assistantFabRef}
             className="assistant-fab"
             onClick={() => setAssistantOpen((v) => !v)}
             aria-expanded={assistantOpen}
@@ -361,7 +383,7 @@ export function App() {
             {assistantOpen ? <CloseIcon /> : <ChatIcon />}
           </button>
           {assistantOpen && (
-            <div className="assistant-dock">
+            <div ref={assistantDockRef} className="assistant-dock" role="dialog" aria-label="Assistant">
               <Assistant />
             </div>
           )}
