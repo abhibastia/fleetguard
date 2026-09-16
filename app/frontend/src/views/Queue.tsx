@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
-import { api, ApiError, type QueueItem } from "../lib/api";
+import { useMemo, useState } from "react";
+import { api, type QueueItem } from "../lib/api";
 import { PageError } from "../lib/PageError";
 import { SearchBox, useSearch } from "../lib/search";
 import { SortIndicator, useSort } from "../lib/sort";
+import { useFetch } from "../lib/useFetch";
 
 const SEVERITY_FILTER_ALL = "ALL" as const;
 const SEVERITY_FILTER_URGENT = "URGENT" as const;
@@ -20,17 +21,8 @@ type SortKey = "vehicles_exposed" | "depots_affected";
  * since the tags already carry more information than a re-sortable rank would.
  */
 export function Queue({ onOpen }: { onOpen: (id: string) => void }) {
-  const [items, setItems] = useState<QueueItem[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [gated, setGated] = useState(false);
+  const { data: items, error, gated } = useFetch(() => api.queue(), []);
   const [severityFilter, setSeverityFilter] = useState<string>(SEVERITY_FILTER_ALL);
-
-  useEffect(() => {
-    api
-      .queue()
-      .then(setItems)
-      .catch((e: ApiError) => (e.status === 401 ? setGated(true) : setError(e.message)));
-  }, []);
 
   const filtered = useMemo(() => {
     return (items ?? []).filter((i) => {

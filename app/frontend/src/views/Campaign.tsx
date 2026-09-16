@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { api, ApiError, type ApprovalResult, type CampaignDetail } from "../lib/api";
+import { api, ApiError, type ApprovalResult } from "../lib/api";
 import { PageError } from "../lib/PageError";
 import { SearchBox, useSearch } from "../lib/search";
+import { useFetch } from "../lib/useFetch";
 import { ApprovalConfirmation } from "./ApprovalConfirmation";
 
 /**
@@ -13,58 +14,43 @@ import { ApprovalConfirmation } from "./ApprovalConfirmation";
  * authenticated session by the backend, never sent from here.
  */
 export function Campaign({ id, onBack }: { id: string; onBack: () => void }) {
-  const [c, setC] = useState<CampaignDetail | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [gated, setGated] = useState(false);
   const [title, setTitle] = useState("");
   const [rationale, setRationale] = useState("");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<ApprovalResult | null>(null);
+  const [approveError, setApproveError] = useState<string | null>(null);
+
+  // Every other view in this console distinguishes "not signed in" from "actually broken" —
+  // Campaign.tsx never did, so a 401 here (reachable straight from the Queue row click)
+  // rendered the same bare error bar as a real backend failure. Found in a UI/UX review,
+  // 2026-09-14. `useFetch` gives this to every view uniformly now.
+  const {
+    data: c,
+    error,
+    gated,
+  } = useFetch(
+    () => api.campaign(id),
+    [id],
+    (d) => setTitle(`${d.park_it ? "Park It — " : ""}${d.component ?? id} remediation`),
+  );
 
   useEffect(() => {
-    // Reset every piece of per-campaign state before the new fetch, not just `c`. This
-    // component stays mounted across an id change — reachable via browser back/forward, or
-    // a pasted link, while already viewing a campaign — and without this reset, approving
-    // campaign A and then navigating directly to campaign B would show B's fresh exposure
-    // data underneath A's stale "approved" success panel. Found in the 2026-09-02 review by
-    // tracing what happens on a *second* id, not just verifying the first one worked.
-    setC(null);
-    setError(null);
-    setGated(false);
+    // Reset the *approval* state on every id change, separately from useFetch's own reset of
+    // `c`/`error`/`gated` above. This component stays mounted across an id change — reachable
+    // via browser back/forward, or a pasted link, while already viewing a campaign — and
+    // without this, approving campaign A and then navigating directly to campaign B would show
+    // B's fresh exposure data underneath A's stale "approved" success panel. Found in the
+    // 2026-09-02 review by tracing what happens on a *second* id, not just verifying the first
+    // one worked.
     setResult(null);
     setBusy(false);
     setRationale("");
-
-    // Guards against the sibling race: if this fetch resolves AFTER the id has changed
-    // again (slow network, rapid navigation), the response is for a campaign that is no
-    // longer showing — applying it would silently overwrite whatever loaded in the
-    // meantime. `api.campaign` takes no AbortSignal, so this is the standard cheap
-    // alternative: check relevance before committing the result to state.
-    let stale = false;
-    api
-      .campaign(id)
-      .then((d) => {
-        if (stale) return;
-        setC(d);
-        setTitle(`${d.park_it ? "Park It — " : ""}${d.component ?? id} remediation`);
-      })
-      .catch((e: ApiError) => {
-        if (stale) return;
-        // Every other view in this console distinguishes "not signed in" from "actually
-        // broken" — Campaign.tsx never did, so a 401 here (reachable straight from the Queue
-        // row click) rendered the same bare error bar as a real backend failure. Found in a
-        // UI/UX review, 2026-09-14.
-        if (e.status === 401) setGated(true);
-        else setError(e.message);
-      });
-    return () => {
-      stale = true;
-    };
+    setApproveError(null);
   }, [id]);
 
   async function approve() {
     setBusy(true);
-    setError(null);
+    setApproveError(null);
     try {
       setResult(
         await api.approve(id, {
@@ -74,7 +60,7 @@ export function Campaign({ id, onBack }: { id: string; onBack: () => void }) {
         }),
       );
     } catch (e) {
-      setError((e as ApiError).message);
+      setApproveError((e as ApiError).message);
     } finally {
       setBusy(false);
     }
@@ -236,9 +222,9 @@ export function Campaign({ id, onBack }: { id: string; onBack: () => void }) {
                 placeholder="Why this campaign is being launched now"
               />
 
-              {error && (
+              {approveError && (
                 <div className="error" style={{ marginTop: 12 }}>
-                  {error}
+                  {approveError}
                 </div>
               )}
 

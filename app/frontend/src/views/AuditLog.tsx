@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
-import { api, ApiError, type AuditLogEntry } from "../lib/api";
+import { useMemo, useState } from "react";
+import { api, type AuditLogEntry } from "../lib/api";
 import { Pager, usePagination } from "../lib/pagination";
 import { PageError } from "../lib/PageError";
 import { SearchBox, useSearch } from "../lib/search";
 import { SortIndicator, useSort } from "../lib/sort";
+import { useFetch } from "../lib/useFetch";
 
 const ENTITY_TYPE_FILTER_ALL = "ALL" as const;
 const ACTION_FILTER_ALL = "ALL" as const;
@@ -52,31 +53,12 @@ function changeFields(e: AuditLogEntry): { key: string; before: string; after: s
  * live query into the console.
  */
 export function AuditLog() {
-  const [entries, setEntries] = useState<AuditLogEntry[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [gated, setGated] = useState(false);
+  // 1000, not the 200 default: the log is already 724 rows and a search that can only see
+  // the most recent 200 is worse than no search — it returns "no matches" for an entry
+  // that exists. The backend caps at 2000, so this stays bounded.
+  const { data: entries, error, gated } = useFetch(() => api.auditLog(1000), []);
   const [entityTypeFilter, setEntityTypeFilter] = useState<string>(ENTITY_TYPE_FILTER_ALL);
   const [actionFilter, setActionFilter] = useState<string>(ACTION_FILTER_ALL);
-
-  useEffect(() => {
-    let stale = false;
-    api
-      // 1000, not the 200 default: the log is already 724 rows and a search that can only see
-      // the most recent 200 is worse than no search — it returns "no matches" for an entry
-      // that exists. The backend caps at 2000, so this stays bounded.
-      .auditLog(1000)
-      .then((d) => {
-        if (!stale) setEntries(d);
-      })
-      .catch((e: ApiError) => {
-        if (stale) return;
-        if (e.status === 401) setGated(true);
-        else setError(e.message);
-      });
-    return () => {
-      stale = true;
-    };
-  }, []);
 
   // Hooks run every render regardless of loading state, so filtering/sorting is computed here
   // (over `entries ?? []`) rather than after the early returns below.

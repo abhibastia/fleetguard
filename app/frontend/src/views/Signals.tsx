@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
-import { api, ApiError, type SignalSummary } from "../lib/api";
+import { useMemo, useState } from "react";
+import { api } from "../lib/api";
 import { PageError } from "../lib/PageError";
 import { SearchBox, useSearch } from "../lib/search";
+import { useFetch } from "../lib/useFetch";
 
 /**
  * Emerging defect signals — the proactive half, and the half the project's argument rests on.
@@ -14,10 +15,8 @@ import { SearchBox, useSearch } from "../lib/search";
  * itself, makes a quiet week indistinguishable from a broken query.
  */
 export function Signals() {
-  const [data, setData] = useState<SignalSummary | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [gated, setGated] = useState(false);
   const [fleetOnly, setFleetOnly] = useState(false);
+  const { data, error, gated } = useFetch(() => api.signals(fleetOnly), [fleetOnly]);
 
   // Search over the fetched page. `fleetOnly` is a server-side query param (it refetches), so
   // this filters what came back rather than duplicating that switch client-side.
@@ -38,26 +37,6 @@ export function Signals() {
     () => [...visible].sort((a, b) => b.fleet_vehicles - a.fleet_vehicles),
     [visible],
   );
-
-  useEffect(() => {
-    // Same guard as views/Campaign.tsx's fetch, same reason: toggling the checkbox twice
-    // quickly can let the first (now-stale) response resolve after the second, silently
-    // replacing the correctly-filtered view with the wrong one.
-    let stale = false;
-    api
-      .signals(fleetOnly)
-      .then((d) => {
-        if (!stale) setData(d);
-      })
-      .catch((e: ApiError) => {
-        if (stale) return;
-        if (e.status === 401) setGated(true);
-        else setError(e.message);
-      });
-    return () => {
-      stale = true;
-    };
-  }, [fleetOnly]);
 
   if (gated)
     return (

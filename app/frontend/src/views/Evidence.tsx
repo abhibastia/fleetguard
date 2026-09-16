@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { api, ApiError, type Evidence as EvidenceData } from "../lib/api";
+import { api } from "../lib/api";
+import { useFetch } from "../lib/useFetch";
 
 /**
  * The measured backtest, stated with its control arm.
@@ -13,15 +13,7 @@ import { api, ApiError, type Evidence as EvidenceData } from "../lib/api";
  * column is not optional and the limits sit beside the headline rather than in a footnote.
  */
 export function Evidence() {
-  const [data, setData] = useState<EvidenceData | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    api
-      .evidence()
-      .then(setData)
-      .catch((e: ApiError) => setError(e.message));
-  }, []);
+  const { data, error } = useFetch(() => api.evidence(), []);
 
   // Never render zeros on failure — a blank result table would read as "the method found
   // nothing" rather than "the numbers failed to load".
