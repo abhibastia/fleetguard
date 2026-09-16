@@ -482,6 +482,56 @@ unit tests alongside `vin.py` and `chunking.py` — no workspace required.
 
 ---
 
+### E-16 · `AUTO CDC INTO` for the CDF-to-gold job — **DEFERRED, scoped 2026-09-16**
+
+**Status: DEFERRED — feasible, not worth doing now.** `src/lakebase/21_cdf_to_gold_facts.py`
+is the only stage past bronze/silver that isn't in the LDP pipeline (`resources/
+bronze_silver.pipeline.yml`); it hand-rolls "current state from an append-only change-event
+log" with `ROW_NUMBER() OVER (PARTITION BY <key> ORDER BY _sort_by DESC)`, which is exactly
+what Lakeflow Declarative Pipelines' `AUTO CDC INTO` (formerly `APPLY CHANGES INTO`, still
+supported) is built for.
+
+**The mapping is real, syntax verified against current Databricks docs, not memory:**
+```sql
+CREATE OR REFRESH STREAMING TABLE gold_agent_action;
+
+CREATE FLOW agent_action_cdc AS AUTO CDC INTO gold_agent_action
+FROM STREAM(stg_agent_action_cdc)   -- view: WHERE _pg_change_type <> 'update_preimage'
+KEYS (action_id)
+APPLY AS DELETE WHEN _pg_change_type = 'delete'
+SEQUENCE BY _sort_by
+STORED AS SCD TYPE 1;
+```
+repeated for `gold_defect_signal_current`/`signal_id`. Streaming directly off a plain
+external Delta table (the CDF history tables in `bootcamp_cdc`, not a DLT-produced table) via
+`STREAM()` is confirmed supported by Databricks' own tutorial for this exact pattern.
+
+**Two reasons this isn't a clean swap, not schedule alone:**
+1. **`table_update` is a Jobs-only trigger** (confirmed against the Databricks blog
+   announcement for it) — pipelines have no native equivalent, so a wrapping Job stays
+   either way, just `pipeline_task` instead of `notebook_task`. The 60 s-floor/`ANY_UPDATED`
+   config from I-081 carries over unchanged; the measured 2.5–4.5 min end-to-end figure would
+   likely hold as an order of magnitude, but the 54–56 s job-duration component would change
+   and needs re-measuring, not assumed.
+2. **The I-080 regression guard would be lost.** The current job's live runtime assertions
+   (`live_keys + deleted_keys == distinct_keys`, the "superseded pattern still over-counts"
+   check) are the exact self-test that caught the original tombstone-ranking bug this job
+   exists to avoid repeating. `AUTO CDC INTO`'s ranking is opaque engine internals — that
+   guard either gets dropped or has to be rebuilt as a separate downstream validation step.
+   There's also one open question docs don't settle either way: whether `AUTO CDC INTO`'s own
+   out-of-order handling would tolerate raw `update_preimage` rows without the staging-view
+   pre-filter, or whether that filter is load-bearing the same way it is today — untestable
+   from documentation alone, needs a live pipeline run.
+
+**Why deferred rather than rejected.** The win (removing ~15 lines of hand-rolled SQL) is
+real but modest, and the cost is trading working, already-debugged logic for something that
+needs its own live verification pass before it's trusted as much as the current code —
+poor value two weeks from submission. Revisit if `21_cdf_to_gold_facts.py` needs to change
+for another reason anyway (e.g. a third synced table) — the migration and the required live
+verification are cheaper done together than in isolation.
+
+---
+
 ## Tier 3 — genuinely additive; only if Phases 6–8 land early
 
 ### E-15 · TSBs as a corroborating signal for Model A — **MEASURED AND REJECTED 2026-09-09**
