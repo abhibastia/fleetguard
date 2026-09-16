@@ -5,6 +5,7 @@ import { Pager, usePagination } from "../lib/pagination";
 import { PageError } from "../lib/PageError";
 import { SearchBox, useSearch } from "../lib/search";
 import { SortIndicator, useSort } from "../lib/sort";
+import { useFetch } from "../lib/useFetch";
 
 const STATUSES = ["OPEN", "IN_PROGRESS", "COMPLETED", "CANCELLED"] as const;
 // The KPI tiles above this table already read "IN PROGRESS" in sentence case; the <select>
@@ -48,11 +49,9 @@ export function WorkOrders({
   serviceCampaignId?: string;
   onClearFilter?: () => void;
 }) {
-  const [orders, setOrders] = useState<WorkOrder[] | null>(null);
   const [technicians, setTechnicians] = useState<Technician[]>([]);
   const [campaigns, setCampaigns] = useState<ServiceCampaign[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [gated, setGated] = useState(false);
+  const [updateError, setUpdateError] = useState<string | null>(null);
   const [updating, setUpdating] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>(STATUS_FILTER_ALL);
   const [depotFilter, setDepotFilter] = useState<string>(DEPOT_FILTER_ALL);
@@ -72,27 +71,19 @@ export function WorkOrders({
     setCampaignFilter(serviceCampaignId ?? CAMPAIGN_FILTER_ALL);
   }, [serviceCampaignId]);
 
-  useEffect(() => {
-    let stale = false;
-    setOrders(null);
-    api
-      .workOrders({
-        serviceCampaignId:
-          campaignFilter !== CAMPAIGN_FILTER_ALL ? campaignFilter : undefined,
+  const {
+    data: orders,
+    error,
+    gated,
+    setData: setOrders,
+  } = useFetch(
+    () =>
+      api.workOrders({
+        serviceCampaignId: campaignFilter !== CAMPAIGN_FILTER_ALL ? campaignFilter : undefined,
         limit: WORK_ORDER_FETCH_LIMIT,
-      })
-      .then((d) => {
-        if (!stale) setOrders(d);
-      })
-      .catch((e: ApiError) => {
-        if (stale) return;
-        if (e.status === 401) setGated(true);
-        else setError(e.message);
-      });
-    return () => {
-      stale = true;
-    };
-  }, [campaignFilter]);
+      }),
+    [campaignFilter],
+  );
 
   useEffect(() => {
     let stale = false;
@@ -130,12 +121,12 @@ export function WorkOrders({
 
   async function changeStatus(wo: WorkOrder, newStatus: string) {
     setUpdating(wo.wo_id);
-    setError(null);
+    setUpdateError(null);
     try {
       const updated = await api.updateWorkOrder(wo.wo_id, { status: newStatus });
       setOrders((prev) => prev?.map((o) => (o.wo_id === updated.wo_id ? updated : o)) ?? prev);
     } catch (e) {
-      setError((e as ApiError).message);
+      setUpdateError((e as ApiError).message);
     } finally {
       setUpdating(null);
     }
@@ -143,7 +134,7 @@ export function WorkOrders({
 
   async function changeAssignment(wo: WorkOrder, technicianId: string) {
     setUpdating(wo.wo_id);
-    setError(null);
+    setUpdateError(null);
     try {
       // technicianId === UNASSIGNED ("") means the "— Unassigned —" option was picked - send
       // an explicit null, not an omitted field, so the backend records a real unassign rather
@@ -152,7 +143,7 @@ export function WorkOrders({
       const updated = await api.updateWorkOrder(wo.wo_id, body);
       setOrders((prev) => prev?.map((o) => (o.wo_id === updated.wo_id ? updated : o)) ?? prev);
     } catch (e) {
-      setError((e as ApiError).message);
+      setUpdateError((e as ApiError).message);
     } finally {
       setUpdating(null);
     }
@@ -164,12 +155,12 @@ export function WorkOrders({
     const trimmed = draft.trim();
     const parsed = trimmed === "" ? null : Number(trimmed);
     if (parsed !== null && (Number.isNaN(parsed) || parsed < 0)) {
-      setError(`"${draft}" is not a valid cost`);
+      setUpdateError(`"${draft}" is not a valid cost`);
       return;
     }
     if (parsed === (wo.actual_cost ?? null)) return; // unchanged - no PATCH needed
     setUpdating(wo.wo_id);
-    setError(null);
+    setUpdateError(null);
     try {
       const updated = await api.updateWorkOrder(wo.wo_id, { actual_cost: parsed });
       setOrders((prev) => prev?.map((o) => (o.wo_id === updated.wo_id ? updated : o)) ?? prev);
@@ -179,7 +170,7 @@ export function WorkOrders({
         return next;
       });
     } catch (e) {
-      setError((e as ApiError).message);
+      setUpdateError((e as ApiError).message);
     } finally {
       setUpdating(null);
     }
@@ -304,7 +295,7 @@ const { sorted, sortKey, sortDir, toggleSort } = useSort<WorkOrder, SortKey>(
         </div>
       </div>
 
-      {error && <div className="error">{error}</div>}
+      {updateError && <div className="error">{updateError}</div>}
 
       {orders.length === WORK_ORDER_FETCH_LIMIT && (
         <div className="panel muted" style={{ marginBottom: 12 }}>

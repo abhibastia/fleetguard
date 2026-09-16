@@ -3,6 +3,7 @@ import { api, ApiError, type CostBreakdown, type Evidence, type ServiceCampaign 
 import { PageError } from "../lib/PageError";
 import { SearchBox, useSearch } from "../lib/search";
 import { SortIndicator, useSort } from "../lib/sort";
+import { useFetch } from "../lib/useFetch";
 
 const PROGRESS_FILTER_ALL = "ALL" as const;
 const PROGRESS_FILTER_OUTSTANDING = "OUTSTANDING" as const;
@@ -21,12 +22,10 @@ type SortKey = "vehicle_count" | "completed_count" | "approved_at" | "total_actu
  * tracking existed.
  */
 export function ServiceCampaigns({ onOpen }: { onOpen: (serviceCampaignId: string) => void }) {
-  const [campaigns, setCampaigns] = useState<ServiceCampaign[] | null>(null);
+  const { data: campaigns, error, gated } = useFetch(() => api.serviceCampaigns(), []);
   const [evidence, setEvidence] = useState<Evidence | null>(null);
   const [breakdown, setBreakdown] = useState<CostBreakdown | null>(null);
   const [breakdownError, setBreakdownError] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [gated, setGated] = useState(false);
   const [progressFilter, setProgressFilter] = useState<string>(PROGRESS_FILTER_ALL);
   // The depot breakdown was capped at 10 with a static "+N further depots" note and no way
   // to actually see the rest — found in follow-up feedback after the cap was added.
@@ -34,16 +33,6 @@ export function ServiceCampaigns({ onOpen }: { onOpen: (serviceCampaignId: strin
 
   useEffect(() => {
     let stale = false;
-    api
-      .serviceCampaigns()
-      .then((d) => {
-        if (!stale) setCampaigns(d);
-      })
-      .catch((e: ApiError) => {
-        if (stale) return;
-        if (e.status === 401) setGated(true);
-        else setError(e.message);
-      });
     // The measured lead-time figure is public (it's the Evidence page's own headline number)
     // — if this fails, the panel below just omits the lead-time line rather than failing the
     // whole page, since it's context, not the point of this view.

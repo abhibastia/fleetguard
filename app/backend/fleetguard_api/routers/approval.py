@@ -247,7 +247,13 @@ class ServiceCampaignOut(BaseModel):
 
 @router.get("/service-campaigns", response_model=list[ServiceCampaignOut], tags=["approval"])
 def list_service_campaigns(
-    principal: CurrentPrincipal, limit: int = Query(50, ge=1, le=200)
+    # le=500, not 200: WorkOrders.tsx calls this with limit=500 to populate its campaign
+    # filter dropdown with every launched campaign, not just the most recent page — matching
+    # the same 500 ceiling routers/work_orders.py already uses for the same reason. A tighter
+    # bound here 422s that legitimate caller (found live, browser-testing the useFetch
+    # refactor, 2026-09-17) rather than protecting anything the original finding cared about.
+    principal: CurrentPrincipal,
+    limit: int = Query(50, ge=1, le=500),
 ) -> list[ServiceCampaignOut]:
     """Recently launched service campaigns, with a per-status work-order breakdown.
 

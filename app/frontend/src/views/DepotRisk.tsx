@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
-import { api, ApiError, type DepotRisk as DepotRiskRow } from "../lib/api";
+import { useMemo, useState } from "react";
+import { api, type DepotRisk as DepotRiskRow } from "../lib/api";
 import { PageError } from "../lib/PageError";
 import { SearchBox, useSearch } from "../lib/search";
 import { SortIndicator, useSort } from "../lib/sort";
+import { useFetch } from "../lib/useFetch";
 
 const REGION_FILTER_ALL = "ALL" as const;
 
@@ -35,28 +36,9 @@ function riskTier(d: DepotRiskRow): "high" | "medium" | "none" {
  * shortcut taken, and it's a plain ratio (urgent vehicles ÷ fleet size), not a hidden formula.
  */
 export function DepotRisk() {
-  const [depots, setDepots] = useState<DepotRiskRow[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [gated, setGated] = useState(false);
+  const { data: depots, error, gated } = useFetch(() => api.depotRisk(), []);
   const [regionFilter, setRegionFilter] = useState<string>(REGION_FILTER_ALL);
   const [overdueOnly, setOverdueOnly] = useState(false);
-
-  useEffect(() => {
-    let stale = false;
-    api
-      .depotRisk()
-      .then((d) => {
-        if (!stale) setDepots(d);
-      })
-      .catch((e: ApiError) => {
-        if (stale) return;
-        if (e.status === 401) setGated(true);
-        else setError(e.message);
-      });
-    return () => {
-      stale = true;
-    };
-  }, []);
 
   // Hooks run every render regardless of loading state, so filtering/sorting is computed here
   // (over `depots ?? []`) rather than after the early returns below.

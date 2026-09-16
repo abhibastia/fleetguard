@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
-import { api, ApiError, type RecallTrend as RecallTrendData } from "../lib/api";
+import { api } from "../lib/api";
 import { BarChart, type BarChartDatum } from "../lib/BarChart";
 import { PageError } from "../lib/PageError";
+import { useFetch } from "../lib/useFetch";
 
 /**
  * Historical trend — every other view in this console answers "what's true right now"; this
@@ -19,26 +19,7 @@ import { PageError } from "../lib/PageError";
  * over." Same discipline as the rest of this app never implying a completeness it doesn't have.
  */
 export function Trends() {
-  const [data, setData] = useState<RecallTrendData | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [gated, setGated] = useState(false);
-
-  useEffect(() => {
-    let stale = false;
-    api
-      .recallTrend()
-      .then((d) => {
-        if (!stale) setData(d);
-      })
-      .catch((e: ApiError) => {
-        if (stale) return;
-        if (e.status === 401) setGated(true);
-        else setError(e.message);
-      });
-    return () => {
-      stale = true;
-    };
-  }, []);
+  const { data, error, gated } = useFetch(() => api.recallTrend(), []);
 
   if (gated)
     return (
