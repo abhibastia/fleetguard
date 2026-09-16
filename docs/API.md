@@ -35,7 +35,7 @@ below.
 
 | Method | Path | Purpose |
 |---|---|---|
-| POST | `/api/campaigns/{campaign_id}/service-campaign` | Launch a service campaign: writes the campaign, one work order per exposed vehicle, and an audit row, all in one transaction. Gated by `FLEETGUARD_APPROVERS`; the agent has no path here (§7.1). |
+| POST | `/api/campaigns/{campaign_id}/service-campaign` | Launch a service campaign: writes the campaign, one work order per exposed vehicle, and an audit row, all in one transaction. Gated by `FLEETGUARD_APPROVERS`; the agent has no path here (§7.1, full dispatch walkthrough §7.3). |
 | GET | `/api/service-campaigns` | Recently launched service campaigns with a per-status work-order breakdown. |
 
 ## Work orders — closing the loop past "approve"
@@ -50,7 +50,7 @@ below.
 
 | Method | Path | Purpose |
 |---|---|---|
-| POST | `/api/chat` | Proxies a question to the deployed `ResponsesAgent` under the caller's own token, and executes any write the agent requested (`open_defect_signal`, `watch_campaign`) — see `agent_actions.py` and `docs/ARCHITECTURE.md` §7.1 for why the model itself never writes. |
+| POST | `/api/chat` | Proxies a question to the deployed `ResponsesAgent` under the caller's own token, and executes any write the agent requested (`open_defect_signal`, `watch_campaign`) — see `agent_actions.py` and `docs/ARCHITECTURE.md` §7.1 for why the model itself never writes (tool reference: §7.2). |
 | GET | `/api/watchlist` | Campaigns flagged via the agent's `watch_campaign` action — a plain read over what the write path committed. |
 
 ## Signals — the proactive half

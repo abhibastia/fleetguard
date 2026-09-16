@@ -29,7 +29,14 @@ Prepared as a production architecture specification.
 > promise that lead time would be *"validated against held-out historical recalls"* rather
 > than asserted was kept — including where the validation returned an unwelcome answer.
 
-**Diagrams:** [`fleetguard_e2e.html`](fleetguard_e2e.html) / [`.png`](fleetguard_e2e.png) (system architecture) · [`fleetguard_identity.html`](fleetguard_identity.html) / [`.png`](fleetguard_identity.png) (identity & authorisation) — self-contained HTML so they diff in review rather than drifting silently as binaries, PNG alongside for anything that only reads images. **These are frozen at 2026-08-31 like the rest of this document.** For the as-built equivalents, see [`fleetguard_e2e_current.html`](fleetguard_e2e_current.html) / [`.png`](fleetguard_e2e_current.png) and [`fleetguard_identity_current.html`](fleetguard_identity_current.html) / [`.png`](fleetguard_identity_current.png), which track `ARCHITECTURE.md`.
+**Diagrams:** the frozen 2026-08-31 diagram files this section originally linked
+(`fleetguard_e2e.html`/`.png`, `fleetguard_identity.html`/`.png`) were retired
+2026-09-16 — the repo now keeps only the current diagrams. For the as-built system
+architecture and identity/authorisation diagrams, see
+[`fleetguard_e2e_current.html`](fleetguard_e2e_current.html) /
+[`.png`](fleetguard_e2e_current.png) and
+[`fleetguard_identity_current.html`](fleetguard_identity_current.html) /
+[`.png`](fleetguard_identity_current.png), which track `ARCHITECTURE.md`.
 
 ---
 
@@ -284,7 +291,7 @@ Override rate is the system's trust metric. It measures whether operators actual
 
 ## 5. Identity & Authorisation
 
-The Databricks App is the primary operator surface, and platform-managed identity is a large part of why. Four token paths, four principals, no shared credentials, no long-lived database passwords. See `fleetguard_identity.html`.
+The Databricks App is the primary operator surface, and platform-managed identity is a large part of why. Four token paths, four principals, no shared credentials, no long-lived database passwords. The frozen `fleetguard_identity.html` this line originally pointed to was retired 2026-09-16; the as-built equivalent, `fleetguard_identity_current.html`, no longer depicts Path D below since Render was removed (see `../STATUS.md`).
 
 Paths A, B and C below are the steady state. A fourth — **Path D**, the user-to-machine OAuth flow the Render-phase console needs while it sits outside the Databricks Apps ingress — is set out in §8.7, because it exists only until the App takes over. It is drawn alongside the others in the identity diagram.
 

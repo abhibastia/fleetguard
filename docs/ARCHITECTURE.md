@@ -1,6 +1,6 @@
 # FleetGuard — architecture
 
-**Living document. Must be true now.** Last reconciled against the workspace: **2026-09-01**.
+**Living document. Must be true now.** Last reconciled against the workspace: **2026-09-15**.
 
 Companion documents, each with one job:
 
@@ -92,6 +92,8 @@ metastore. Catalog creation is unavailable, so **medallion layers are table-name
 - Row counts are entity-vs-row traps: 154,367 investigation *rows* are 5,344
   *investigations*. Never quote a row count when you mean entities.
 
+The Postgres operational schema built from this data is in §4.6.
+
 ---
 
 ## 4. Pipeline
@@ -159,17 +161,61 @@ retrieval passes 10/10, and near-duplicate retrieval is a non-issue (10/10 disti
 
 ### 4.5 Operational store — Lakebase + CDF
 
-11 Postgres tables, `fleetguard_<entity>`, every one `REPLICA IDENTITY FULL` (a hard CDF
-prerequisite — without it the WAL carries only the key and `update_preimage` is useless).
+**11 core tables** (`fleetguard_<entity>`, 1:1 with proposal §4.4) plus **3 added since**
+(`fleetguard_depot_assignment`, `fleetguard_technician`, `fleetguard_watchlist`) — **14 total**,
+every one `REPLICA IDENTITY FULL` (a hard CDF prerequisite — without it the WAL carries only
+the key and `update_preimage` is useless). Full column-level reference: §4.6.
 
 CDF replicates to `bootcamp_students.bootcamp_cdc` as `lb_fleetguard_<entity>_history`. All
-11 exist with exact names and **no `_1` collision suffixes**.
+14 exist with exact names and **no `_1` collision suffixes**.
 
 - **CDF replicates DDL**, so destinations appear at `CREATE TABLE`, not on first write.
 - **Capture latency: 7.1–15.6 s** (n=3, all true measurements). State it as a range
   consistent with a ~15 s flush; size demos against the **15.6 s worst case**.
 - CDF configuration is **UI-only** — no CLI, no API, not a bundle resource. It is a manual
   runbook step in any rebuild.
+
+### 4.6 Data model reference
+
+Column-level detail for the 14 tables introduced in §4.5, grouped by role. Gold-layer row
+counts stay owned by §4.3 — linked here, not restated. Postgres schema fragments in §8a
+(RLS policy, `fleetguard_vehicle`/`fleetguard_depot_assignment`) are summarized here too.
+
+**Fleet roster & depots**
+
+| Table | Key columns | Notes |
+|---|---|---|
+| `fleetguard_vehicle` | `vin` PK, `depot_id`, `segment`, `make`/`model`/`model_year`, `body_class`, `gvwr_class`, `status` | The fleet's own 20,000-VIN roster (gold-derived: §4.3) |
+| `fleetguard_depot` | `depot_id` PK, `depot_name`, `region`, `city`, `state`, `manager_principal` | 60 depots, seeded from `gold_fleet_depot` |
+| `fleetguard_depot_assignment` | `postgres_role` PK, `depot_id` | Drives RLS on `fleetguard_vehicle` (§8a) — a role with no row here is unrestricted (fail-open by construction) |
+| `fleetguard_technician` | `technician_id` PK, `name`, `depot_id`, `active` | Backs `fleetguard_work_order.assigned_to` with a real roster instead of free text |
+
+**Signals & campaigns**
+
+| Table | Key columns | Notes |
+|---|---|---|
+| `fleetguard_defect_signal` | `signal_id` PK, `cluster_id`, `component`, `make`/`model`/`model_year_min/max`, `confidence`, `severity_score`, `status` | Model A output (§5) |
+| `fleetguard_recall_campaign` | `campaign_id` PK, `nhtsa_number`, `component`, `make`/`model`/`model_year`, `do_not_drive`, `park_it`, `issued_at`, `source` | Reactive side, from flat file or live API |
+| `fleetguard_vehicle_exposure` | `exposure_id` PK, `vin`, `campaign_id`, `signal_id`, `match_basis`, `match_confidence` | The join driving the work queue — `match_basis` is `EXACT` or `MODEL_VARIANT` (§7's deterministic guarantee is `EXACT`-only) |
+| `fleetguard_watchlist` | `watchlist_id` PK, `campaign_id`, `rationale`, `watched_by`, `status` | Backs the agent's `watch_campaign` tool (§7.2) |
+
+**The gated write path**
+
+| Table | Key columns | Notes |
+|---|---|---|
+| `fleetguard_service_campaign` | `service_campaign_id` PK, `campaign_id`/`signal_id`, `title`, `vehicle_count`, `status`, `approved_by`/`approved_at` | Created by `approve_campaign` (§7.3), never by the agent |
+| `fleetguard_work_order` | `wo_id` PK, `service_campaign_id`, `vin`, `depot_id`, `assigned_to`, `status` | One row per exposed vehicle, same transaction as its service campaign (§7.3) |
+| `fleetguard_agent_action` | `action_id` PK, `tool`, `tool_input`/`tool_output` (JSONB), `actor_principal`, `on_behalf_of`, `requires_approval`, `trace_id` | Every agent tool call, read or write (§7.1) |
+| `fleetguard_audit_log` | `audit_id` PK, `entity_type`/`entity_id`, `action`, `actor_principal`, `before_state`/`after_state` (JSONB) | Append-only, written alongside the service-campaign/work-order transaction (§7.3) |
+
+**Present in schema, not currently wired to the app** — created and CDF-enabled, but no
+router or agent tool reads or writes them as of this reconciliation (confirmed by grep
+across `app/backend/fleetguard_api/` and `src/agent/`):
+
+| Table | Key columns | Notes |
+|---|---|---|
+| `fleetguard_approval` | `approval_id` PK, `action_id`, `service_campaign_id`, `decision` (`APPROVE`/`REJECT`), `decided_by` | Superseded in practice — the live approval flow (§7.3) records its decision directly on `fleetguard_service_campaign`/`fleetguard_audit_log` instead |
+| `fleetguard_public_summary` | `metric_key` PK, `metric_value`, `metric_text`, `unit` | Built for an unauthenticated read surface (proposal §5.2); the current Evidence tab (README) sources from the published backtest result instead |
 
 ---
 
@@ -354,6 +400,78 @@ Verified end to end 2026-09-08: user question → complaint retrieval → agent 
 envelope → app executes under OBO → Lakebase insert (+ audit row + `fleetguard_agent_action`,
 one transaction) → CDF → `bootcamp_cdc.lb_fleetguard_defect_signal_history` → Emerging tab.
 
+```mermaid
+flowchart LR
+    A[User question] --> B[search_complaints retrieval]
+    B --> C[Agent decides:<br/>open_defect_signal]
+    C --> D["Action envelope<br/>(__FLEETGUARD_ACTION__)"]
+    D --> E[Console executes<br/>under caller's OBO token]
+    E --> F["Lakebase insert:<br/>defect_signal + audit_log + agent_action<br/>(one transaction)"]
+    F --> G[CDF capture<br/>7.1-15.6s]
+    G --> H[lb_fleetguard_defect_signal_history]
+    H --> I[Emerging tab]
+```
+
+### 7.2 Agent tool reference
+
+Seven tools, five read and two write. Purpose text is drawn from each tool's own docstring
+in `src/agent/14_fleetguard_agent.py`; re-check against that file if it changes.
+
+| Tool | Type | Backing table / index | Purpose |
+|---|---|---|---|
+| `search_complaints` | read | `complaint_chunk_idx` (AI Search) | Hybrid search over 1.75M complaint-narrative chunks, deduped by `complaint_id` |
+| `lookup_fleet_exposure` | read | `gold_fleet_exposure` | Fleet vehicles a campaign touches, by match tier (`EXACT`/`MODEL_VARIANT`) — §7's deterministic guarantee is `EXACT`-only |
+| `lookup_fleet_models` | read | `gold_fleet_vehicle` | What the fleet actually operates, in the fleet's own (vPIC) spelling — closes the NHTSA-vs-vPIC vocabulary gap (I-030) at the source |
+| `lookup_emerging_signals` | read | `gold_emerging_signal` | Defect ramps this system detected that NHTSA hasn't acted on; returns totals alongside rows so the result can't be over-read as fleet-wide |
+| `propose_service_campaign` | read | (calls `lookup_fleet_exposure` internally) | Returns a `PROPOSED_AWAITING_HUMAN_APPROVAL` object only — the agent holds no grant on `fleetguard_work_order` |
+| `open_defect_signal` | **write** | `fleetguard_defect_signal` (via console, OBO) | Returns a `REQUESTED` action envelope; the console executes the insert under the caller's own identity (§7.1) |
+| `watch_campaign` | **write** | `fleetguard_watchlist` (via console, OBO) | Bookmarks one campaign number with a rationale; same indirection as `open_defect_signal`, and for the same reason (no Lakebase credential on the serving endpoint) |
+
+Both writes share the `ACTION_KEY`/`ACTION_SENTINEL` mechanism narrated in §7.1: the tool
+returns an envelope, never performs the write itself. §7.2 is a reference only — the
+mechanism, its guarantees, and its verification are owned by §7.1, not repeated here.
+
+### 7.3 The approval / dispatch write path, end to end
+
+This is the *other* write path — human-gated recall dispatch, distinct from §7.1's
+agent-direct writes. The agent's `propose_service_campaign` (§7.2) can surface a proposal in
+chat, but it computes exposure read-only and holds no grant on `fleetguard_work_order`; every
+actual dispatch happens through this sequence instead.
+
+1. An operator views `/api/queue` (`queue.py`) — campaigns ranked by fleet exposure.
+2. Optionally, the agent's read-only proposal (step above) surfaces the same campaign in chat.
+3. An approver — checked against the `FLEETGUARD_APPROVERS` allowlist via `may_approve()`
+   (`approval.py`) — calls `POST /api/campaigns/{campaign_id}/service-campaign`. Two refusals
+   happen before any write: an unattributed caller (403) and a non-approver (403).
+4. `approve_campaign` writes the service campaign, one work order per exposed vehicle, and an
+   audit row — **all in one transaction** (per the module's own docstring): a half-launched
+   campaign is not a state this path can leave behind.
+5. Lakebase CDF captures the commit in the same **7.1–15.6 s** measured elsewhere (§4.5, §9)
+   and replicates it to `bootcamp_cdc.lb_fleetguard_*_history`.
+6. The `fleetguard-cdf-to-gold` job (`src/lakebase/21_cdf_to_gold_facts.py`,
+   `trigger.table_update`) derives current-state gold facts from the append-only history
+   tables — ranking then dropping tombstoned keys rather than filtering deletes
+   pre-window (I-080), the correction recorded in that job's own header comment.
+7. `/api/work-orders` and `/api/queue` reflect the new state on next read.
+
+```mermaid
+flowchart TD
+    A[Operator: /api/queue] --> B{Approver decision}
+    Agent["Agent: propose_service_campaign<br/>(read-only, no write grant)"] -. optional .-> B
+    B -->|approve| C["POST /campaigns/{id}/service-campaign"]
+    C --> D{FLEETGUARD_APPROVERS<br/>allowlist check}
+    D -->|refused| X[403]
+    D -->|allowed| E["One transaction:<br/>service_campaign + work_orders + audit_log"]
+    E --> F[CDF capture 7.1-15.6s]
+    F --> G[lb_fleetguard_*_history]
+    G --> H["fleetguard-cdf-to-gold job<br/>(table_update trigger)"]
+    H --> I[Gold facts]
+    I --> A
+```
+
+CDF latency, the transaction-atomicity guarantee, and the I-080 tombstone-ranking rule are
+each established in full at §4.5/§9.1/the job file itself — cited here, not re-derived.
+
 ---
 
 ## 8. Non-goals
@@ -487,6 +605,7 @@ have allowed by default. The policy is additive and fail-open through
 existed; an assignment restricts to that depot, enforced below the application. Proved under
 real toggled states — including the join through `fleetguard_vehicle_exposure` the console
 actually reads — not trusted on configuration alone (`src/lakebase/15_enable_depot_rls.py`).
+Column-level schema for `fleetguard_vehicle`/`fleetguard_depot_assignment`: §4.6.
 **Nobody is currently enrolled**, so every live caller is on the fail-open path in practice;
 the mechanism is real, the enrollment is the remaining work, and both halves of that
 sentence are said on purpose.

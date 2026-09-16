@@ -391,7 +391,7 @@ loses its integrity; a living doc that doesn't get edited becomes a lie.
 | `ISSUES.md` | Every problem hit, root cause, resolution. **Silent failures flagged.** | Append-only |
 | `../PLAN.md` | Phase sequencing and definitions of done | Living |
 | `../CLAUDE.md` | Verified facts that must not be re-derived | Living |
-| `fleetguard_e2e.html` / `fleetguard_identity.html` | Diagrams (editable, diffable) | Living |
+| `fleetguard_e2e_current.html` / `fleetguard_identity_current.html` | Diagrams (editable, diffable) | Living |
 
 The proposal is **not** updated to match findings. Its header tabulates the known
 contradictions with measured results — that gap is the record of what the build taught us,
