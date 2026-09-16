@@ -80,21 +80,15 @@ above, sourced from the same measurement.
   list, including this console's own REST API, in [`docs/API.md`](docs/API.md).
 - **Semantic retrieval**: Databricks AI Search over 1.7M+ complaint narrative chunks,
   hybrid (BM25 + embedding) search.
-- **A registered, deployed agent** (Agent Framework, Model Serving): seven tools —
-  five read (complaint search, fleet exposure, fleet vocabulary lookup, emerging-signal
-  lookup, campaign proposal) and two real writes (`open_defect_signal`, `watch_campaign` —
-  both executed by the app under the caller's own identity, never by the model) — traced
-  with MLflow, evaluated
-  against a held-out golden set built from NHTSA's own recall text.
+- **A registered, deployed agent** (Agent Framework, Model Serving), traced with MLflow and
+  evaluated against a held-out golden set built from NHTSA's own recall text. Two of its seven
+  tools write — always executed by the app under the caller's own identity, never by the
+  model. Full tool reference: `docs/ARCHITECTURE.md` §7.2; write-path mechanics: §7.1.
 - **Lakebase Postgres** as the operational store for fleet state (vehicles, depots, service
-  campaigns, work orders, audit log). Change Data Feed replicates every write into Unity
-  Catalog — **measured 7.1–15.6 s for the capture itself**; the derived gold facts follow a
-  `table_update` job, taking **2.5–4.5 minutes end to end** (two live cycles). The two numbers
-  are kept apart deliberately: quoting the capture latency for the whole chain would overstate
-  it by an order of magnitude. Postgres Row-Level Security enforces depot-scoped reads below
-  the application, not just in it — proved live, with two honest limits: no principal is
-  enrolled by default, so it is fail-open until someone is, and a reviewer holding
-  `bypassrls` will not see it apply to their own session (`docs/DEMO.md` §5).
+  campaigns, work orders, audit log), with Change Data Feed replicating every write into Unity
+  Catalog and Postgres Row-Level Security enforcing depot-scoped reads below the application.
+  Schema reference: `docs/ARCHITECTURE.md` §4.6; CDF mechanics and latency: §4.5; RLS and its
+  honest limits: §8a.
 - **A FastAPI + React console**, one service for API and UI, running unchanged on Databricks
   Apps and on a local server behind a single auth seam (`app/backend/fleetguard_api/auth/`).
 
@@ -134,13 +128,11 @@ databricks apps start fleetguard-console --profile abhi           # if stopped, 
 databricks bundle run fleetguard_console -t prod --profile abhi   # ← ships the code
 ```
 
-`bundle deploy` alone prints `Deployment complete!` and creates **no app deployment** — the
-running app keeps serving what it last deployed. See `docs/ISSUES.md` I-097.
+`bundle deploy` alone does not ship the App's code — see `docs/ARCHITECTURE.md` §9.1 (I-097).
 
 Deploying stays a deliberate manual act: it restarts the App under whoever is using it, so CI
-runs tests and lint only and holds no workspace credentials. Four things the bundle does *not*
-cover — Lakebase CDF (UI-only), the AI Search endpoint and index, the agent serving endpoint,
-and the `evidence_metrics` metric view — are documented in `docs/ARCHITECTURE.md`.
+runs tests and lint only and holds no workspace credentials. What the bundle does and does not
+cover is documented in full in `docs/ARCHITECTURE.md` §9.1.
 
 Editing a workspace object by hand (`jobs reset`, `apps update`, the UI) is silently undone by
 the next deploy.
