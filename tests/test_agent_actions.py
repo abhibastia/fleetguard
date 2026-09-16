@@ -72,6 +72,15 @@ def _live_mode(monkeypatch):
     monkeypatch.setattr(agent_actions.snapshot, "is_snapshot", lambda: False)
 
 
+@pytest.fixture(autouse=True)
+def _approver(monkeypatch):
+    """Both write actions are gated by the same FLEETGUARD_APPROVERS allowlist as
+    approve_campaign / the work-order PATCH — see test_non_approver_is_refused_before_any_
+    database_work in TestRefusals and TestWatchCampaign for the gate itself. USER must be on
+    the allowlist for every other test in this file to exercise what it says it does."""
+    monkeypatch.setenv("FLEETGUARD_APPROVERS", "ops@example.com")
+
+
 def _counts(exact: int = 1256, variant: int | None = None, make: int | None = None) -> dict:
     """The tiered fleet lookup returns all three counts in one row; the tier is chosen in
     Python. `variant` defaults to `exact` because a variant match is a superset of an exact
@@ -127,6 +136,21 @@ class TestRefusals:
         with pytest.raises(HTTPException) as exc:
             execute(ANON, VALID)
         assert exc.value.status_code == 403
+
+    def test_non_approver_is_refused_before_any_database_work(self, monkeypatch):
+        """Same allowlist as approve_campaign / the work-order PATCH — an observation-only
+        write is not a free pass just because it isn't a dispatch. A signed-in identity not on
+        FLEETGUARD_APPROVERS must be refused before connect() is ever reached."""
+        monkeypatch.setenv("FLEETGUARD_APPROVERS", "someone-else@example.com")
+
+        def explode(*a, **k):
+            raise AssertionError("connect() must not be reached for a non-approver")
+
+        monkeypatch.setattr(agent_actions, "connect", explode)
+        with pytest.raises(HTTPException) as exc:
+            execute(USER, VALID)
+        assert exc.value.status_code == 403
+        assert "not an approver" in exc.value.detail
 
     def test_snapshot_mode_refuses_rather_than_faking(self, monkeypatch):
         """A snapshot deployment has no credential. Returning a plausible signal_id for a row
@@ -368,6 +392,18 @@ class TestWatchCampaign:
         with pytest.raises(HTTPException) as exc:
             execute(ANON, VALID_WATCH)
         assert exc.value.status_code == 403
+
+    def test_non_approver_is_refused_before_any_database_work(self, monkeypatch):
+        monkeypatch.setenv("FLEETGUARD_APPROVERS", "someone-else@example.com")
+
+        def explode(*a, **k):
+            raise AssertionError("connect() must not be reached for a non-approver")
+
+        monkeypatch.setattr(agent_actions, "connect", explode)
+        with pytest.raises(HTTPException) as exc:
+            execute(USER, VALID_WATCH)
+        assert exc.value.status_code == 403
+        assert "not an approver" in exc.value.detail
 
     def test_snapshot_mode_refuses_rather_than_faking(self, monkeypatch):
         monkeypatch.setattr(agent_actions.snapshot, "is_snapshot", lambda: True)

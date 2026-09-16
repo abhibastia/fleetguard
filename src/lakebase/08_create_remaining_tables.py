@@ -175,6 +175,14 @@ DDL = {
             trace_id           TEXT,
             created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
         )""",
+    # UNUSED as of 2026-09-16 (full-repo review finding): no router or
+    # agent tool reads or writes this table — the live approval flow records its decision
+    # directly on fleetguard_service_campaign/fleetguard_audit_log instead (routers/
+    # approval.py). Left in the DDL rather than dropped: the table already exists live with
+    # this script's own idempotency guarantee (CREATE TABLE IF NOT EXISTS), and removing the
+    # entry here would desync this script's own "ten"/"eleven" counts throughout without
+    # actually cleaning anything up in the workspace. Consider a real DROP TABLE (a separate,
+    # deliberate migration) rather than editing this file further.
     "fleetguard_approval": f"""
         CREATE TABLE IF NOT EXISTS {S}.fleetguard_approval (
             approval_id        BIGSERIAL PRIMARY KEY,
@@ -201,6 +209,10 @@ DDL = {
     # ---- unauthenticated read surface (§5.2) --------------------------------
     # Pre-aggregated and masked so the public principal never touches a base table,
     # and the external page never waits on a SQL Warehouse cold start.
+    #
+    # UNUSED as of 2026-09-16, same finding as fleetguard_approval above: the Evidence tab
+    # (README, docs/API.md's /api/evidence) sources from the published backtest result
+    # instead of this table. Left in place for the same reason.
     "fleetguard_public_summary": f"""
         CREATE TABLE IF NOT EXISTS {S}.fleetguard_public_summary (
             metric_key         TEXT PRIMARY KEY,

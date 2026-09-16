@@ -56,6 +56,12 @@ print(f"connected to {PG_DB} as {owner}")
 
 # COMMAND ----------
 
+# Hard guard — this notebook may only ever touch objects it owns by name (shared schema).
+_TABLES_TOUCHED = ("fleetguard_watchlist",)
+assert all(t.startswith("fleetguard_") for t in _TABLES_TOUCHED), "refusing: non-project table name"
+
+# COMMAND ----------
+
 with conn.cursor() as cur:
     cur.execute(f"""
         CREATE TABLE IF NOT EXISTS {PG_SCHEMA}.fleetguard_watchlist (

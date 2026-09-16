@@ -14,6 +14,7 @@ survives with the enforcement point moved from Unity Catalog to Postgres.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 import threading
@@ -103,7 +104,12 @@ def _workspace_client(principal: Principal) -> WorkspaceClient:
 
 
 def _credential(principal: Principal) -> _CachedCredential:
-    key = principal.user_name or principal.token[-16:]
+    # Keyed on a digest of the token itself, not just the claimed username. A cache hit must
+    # prove possession of the same token that earned the entry — keying on user_name alone
+    # meant any request carrying that username got a live Lakebase session on a hit without
+    # _workspace_client (the call that actually validates the token) ever running.
+    token_digest = hashlib.sha256(principal.token.encode()).hexdigest()
+    key = f"{principal.user_name or ''}:{token_digest}"
     with _lock:
         hit = _cache.get(key)
         if hit and not hit.stale:

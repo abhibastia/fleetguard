@@ -59,6 +59,12 @@ print(f"connected to {PG_DB} as {owner}")
 
 # COMMAND ----------
 
+# Hard guard — this notebook may only ever touch objects it owns by name (shared schema).
+_TABLES_TOUCHED = ("fleetguard_depot_assignment", "fleetguard_vehicle")
+assert all(t.startswith("fleetguard_") for t in _TABLES_TOUCHED), "refusing: non-project table name"
+
+# COMMAND ----------
+
 # MAGIC %md
 # MAGIC ## The assignment table and the policy
 # MAGIC

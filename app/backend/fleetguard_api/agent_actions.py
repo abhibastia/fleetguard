@@ -24,6 +24,14 @@ Both writes are an **observation, not a dispatch**. Opening a defect signal reco
 worth tracking"; watching a campaign records "keep an eye on this". Neither creates a work
 order, and the agent still has no route to `fleetguard_work_order` — launching a campaign stays
 behind the `FLEETGUARD_APPROVERS` gate.
+
+**Gated by the same allowlist regardless.** Being "an observation, not a dispatch" bounds the
+blast radius of a bad write, it doesn't make the write harmless: an unauthorised signal still
+lands on the operator's Emerging tab ranked by a real (if attacker-chosen) `make`/`model`, and
+an unauthorised watch still shows up on the fleet team's list. Both execute paths call
+`authz.may_approve` before touching the database, same as `approve_campaign` and the work-order
+PATCH — so the safety property does not depend on `FLEETGUARD_APPROVERS` and the app's own
+`CAN_MANAGE` grantees happening to be the same people.
 """
 
 from __future__ import annotations
@@ -35,7 +43,7 @@ from datetime import datetime
 from fastapi import HTTPException, status
 from pydantic import BaseModel, Field, field_validator
 
-from . import snapshot
+from . import authz, snapshot
 from .auth.tokens import Principal
 from .db import PG_SCHEMA, UniqueViolation, connect, rows_to_dicts
 
@@ -154,6 +162,16 @@ def _execute_open_defect_signal(
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
             "opening a defect signal requires an identified user; this token carries no identity",
+        )
+
+    if not authz.may_approve(actor):
+        # Same gate as approve_campaign / the work-order PATCH. This write is an observation,
+        # not a dispatch, but it still lands on the operator's Emerging tab with an
+        # attacker-chosen make/model/rationale if left ungated — the blast radius is smaller
+        # than a dispatch, not zero.
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            f"{actor} is signed in but not an approver on this deployment.",
         )
 
     if snapshot.is_snapshot():
@@ -318,6 +336,13 @@ def _execute_watch_campaign(
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
             "watching a campaign requires an identified user; this token carries no identity",
+        )
+
+    if not authz.may_approve(actor):
+        # Same gate as _execute_open_defect_signal / approve_campaign.
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            f"{actor} is signed in but not an approver on this deployment.",
         )
 
     if snapshot.is_snapshot():

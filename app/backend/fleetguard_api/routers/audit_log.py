@@ -29,6 +29,19 @@ from ..deps import CurrentPrincipal
 
 router = APIRouter(tags=["audit-log"])
 
+# Leading characters a spreadsheet app (Excel, Sheets, LibreOffice) treats as a formula
+# trigger rather than literal text — the OWASP CSV Injection set. Several columns here
+# ultimately trace back to LLM- or user-supplied text (rationale, title, via after_state),
+# so this is applied to every string cell rather than reasoned about per-column.
+_FORMULA_PREFIXES = ("=", "+", "-", "@")
+
+
+def _csv_safe(value: str) -> str:
+    """A leading apostrophe is rendered as literal text by every major spreadsheet app rather
+    than evaluated — the standard mitigation for CSV formula injection on untrusted export."""
+    return f"'{value}" if value.startswith(_FORMULA_PREFIXES) else value
+
+
 AUDIT_LOG_SELECT = """
     SELECT audit_id, entity_type, entity_id, action, actor_principal,
            before_state, after_state, created_at
@@ -122,12 +135,12 @@ def export_audit_log_csv(
         writer.writerow(
             [
                 r["audit_id"],
-                r["entity_type"],
-                r["entity_id"],
-                r["action"],
-                r["actor_principal"],
-                json.dumps(r["before_state"]) if r["before_state"] is not None else "",
-                json.dumps(r["after_state"]) if r["after_state"] is not None else "",
+                _csv_safe(r["entity_type"]),
+                _csv_safe(r["entity_id"]),
+                _csv_safe(r["action"]),
+                _csv_safe(r["actor_principal"]),
+                _csv_safe(json.dumps(r["before_state"])) if r["before_state"] is not None else "",
+                _csv_safe(json.dumps(r["after_state"])) if r["after_state"] is not None else "",
                 r["created_at"].isoformat(),
             ]
         )

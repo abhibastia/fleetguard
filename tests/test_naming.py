@@ -19,8 +19,8 @@ from fleetguard.naming import (
 
 
 class TestTableInventory:
-    def test_eleven_tables_matching_proposal_section_4_4(self):
-        assert len(LAKEBASE_TABLES) == 11
+    def test_twelve_current_operational_tables(self):
+        assert len(LAKEBASE_TABLES) == 12
 
     def test_all_carry_the_project_prefix(self):
         assert all(t.startswith(PREFIX) for t in LAKEBASE_TABLES)

@@ -43,7 +43,11 @@ AGENT_TIMEOUT_S = 120.0
 
 class ChatTurn(BaseModel):
     role: str = Field(pattern="^(user|assistant)$")
-    content: str
+    # Bounded for the same reason `messages` is capped at 20: unbounded content means up to 20
+    # arbitrarily large strings forwarded to a billed serving endpoint on a 120s timeout. 8000
+    # chars is generous for a real question — far above anything a human types — while ruling
+    # out that shape of request.
+    content: str = Field(max_length=8000)
 
 
 class ChatRequest(BaseModel):

@@ -198,7 +198,33 @@ REBUILD = [
         "gold_lead_time_v3, gold_lead_time_v3_summary",
         "Recomputes BOTH groupings on the same data — never compare v3 against the published v2.",
     ),
+    (
+        15,
+        "fleetguard-model-b-golden-set",
+        "src/fleet/05_build_model_b_golden_set.py",
+        "gold_model_b_golden_set",
+        "Needs the fleet registry (step 3) and silver recalls (step 2). Real labelled pairs only — E-08 rules out synthetic labels here.",
+    ),
+    (
+        16,
+        "fleetguard-emerging-signals",
+        "src/backtest/10_emerging_signals.py",
+        "gold_emerging_signal",
+        "Same rule as step 14, run live instead of historically — the Emerging tab's source. Thresholds must stay identical to v3 or the published 16.0%/11.1% no longer describes what's on screen.",
+    ),
+    (
+        17,
+        "fleetguard-cdf-to-gold",
+        "src/lakebase/21_cdf_to_gold_facts.py",
+        "gold_agent_action, gold_defect_signal_current, ops_cdf_fact_refresh",
+        "Needs steps 7-8 done and at least one live Lakebase write (an approval or an agent action) to have anything to derive. table_update-triggered in production, not scheduled.",
+    ),
 ]
+
+# gold_backtest_cluster (src/backtest/06_hdbscan_clusters.py) is deliberately NOT in EXPECTED
+# below. HDBSCAN was abandoned (85% noise, I-048) and the table has no bundle job — a rebuild
+# via the steps above can never produce it, so expecting it would make this verifier
+# permanently report a "missing" object nothing here is meant to create.
 
 w = max(len(r[1]) for r in REBUILD)
 for n, producer, path, creates, note in REBUILD:
@@ -250,6 +276,11 @@ EXPECTED = {
     "gold_backtest_subcluster": 13,
     "gold_lead_time_v3": 14,
     "gold_lead_time_v3_summary": 14,
+    "gold_model_b_golden_set": 15,
+    "gold_emerging_signal": 16,
+    "gold_agent_action": 17,
+    "gold_defect_signal_current": 17,
+    "ops_cdf_fact_refresh": 17,
     "ops_ingest_watermark": 0,  # created above
 }
 

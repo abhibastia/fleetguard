@@ -14,7 +14,7 @@ import json
 import uuid
 from datetime import date, datetime, timedelta
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
 from .. import snapshot
@@ -247,7 +247,7 @@ class ServiceCampaignOut(BaseModel):
 
 @router.get("/service-campaigns", response_model=list[ServiceCampaignOut], tags=["approval"])
 def list_service_campaigns(
-    principal: CurrentPrincipal, limit: int = 50
+    principal: CurrentPrincipal, limit: int = Query(50, ge=1, le=200)
 ) -> list[ServiceCampaignOut]:
     """Recently launched service campaigns, with a per-status work-order breakdown.
 
