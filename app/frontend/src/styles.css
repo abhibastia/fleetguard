@@ -754,9 +754,18 @@ thead th.sortable:hover {
 .bar-chart-wrap {
   position: relative;
 }
+/* `aspect-ratio`, not a fixed `height` — a fixed 240px height only looks right at the
+   ~1200-1460px full-width panels this was first built for (BarChart.tsx's own comment: 5:1
+   chosen to match that width). Evidence.tsx's 380px sidebar usage exposed the bug: `width:
+   100%` shrank to 380px while `height` stayed pinned at 240px, so the SVG's default
+   `preserveAspectRatio="xMidYMid meet"` letterboxed the 1200x240 (5:1) content down to fit
+   the narrow width and centered it — bars floating in a mostly-empty box, found in a
+   screenshot review, 2026-09-17. Matching the CSS box's own ratio to the SVG's logical 5:1
+   viewBox (BarChart.tsx's VIEW_W/VIEW_H) makes every container the SVG is actually drawn to
+   scale, not just letterboxed within, at any width. */
 .bar-chart {
   width: 100%;
-  height: 240px;
+  aspect-ratio: 5 / 1;
   display: block;
 }
 .bar-chart-tooltip {
