@@ -21,6 +21,7 @@ import threading
 import time
 from dataclasses import dataclass
 
+import certifi
 from databricks.sdk import WorkspaceClient
 
 from .auth.tokens import Principal
@@ -142,7 +143,15 @@ def connect(principal: Principal, *, autocommit: bool = True):
         user=cred.user,
         password=cred.token,
         dbname=PG_DB,
-        sslmode="require",
+        sslmode="verify-full",
+        # `sslrootcert="system"` was tried first and fails on this endpoint (measured
+        # 2026-09-17: "SSL error: certificate verify failed" even though the endpoint's
+        # Let's Encrypt chain verifies fine via `openssl s_client` and the system trust
+        # store) — psycopg[binary]'s vendored libpq does not reliably consult the OS trust
+        # store the way `openssl s_client` does. `certifi`'s bundled CA file verifies
+        # correctly and is portable across the local macOS dev path and the Databricks Apps
+        # runtime, unlike a platform-specific trust-store lookup.
+        sslrootcert=certifi.where(),
         autocommit=autocommit,
         connect_timeout=15,
     )
