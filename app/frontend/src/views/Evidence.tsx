@@ -1,4 +1,5 @@
 import { api } from "../lib/api";
+import { BarChart } from "../lib/BarChart";
 import { useFetch } from "../lib/useFetch";
 
 /**
@@ -37,126 +38,163 @@ export function Evidence() {
 
   return (
     <>
-      <div className="page-head">
-        <h2>When it fires, how much head start does it give?</h2>
-        <p>
-          Measured against every ODI investigation opened since 2010, with a volume-matched control
-          arm. It does not catch most investigations — see the rate below — but the ones it does
-          catch, it catches early: a median {real.median_lead_days} days before NHTSA opens the
-          case. The gap between the arms is the evidence — the real arm alone is not.
-        </p>
-      </div>
+      <div className="row">
+        <div className="grow">
+          <div className="page-head">
+            <p className="k" style={{ marginBottom: 4 }}>
+              Model A — anomaly detector
+            </p>
+            <h2>When it fires, how much head start does it give?</h2>
+            <p>
+              Measured against every ODI investigation opened since 2010, with a volume-matched
+              control arm. It does not catch most investigations — see the rate below — but the
+              ones it does catch, it catches early: a median {real.median_lead_days} days before
+              NHTSA opens the case. The gap between the arms is the evidence — the real arm alone
+              is not.
+            </p>
+          </div>
 
-      {/* Capped to match .prose (760px) — the shared .stats class spans the full 1376px
-          column everywhere else it's used, but every other element on this page (the prose
-          paragraphs, this table, the stated-limits lists) is deliberately capped for
-          readability. Left uncapped, .stats bracketed the narrow content in two full-width
-          bands with a large empty right margin down the page. Found in a UI/UX review,
-          2026-09-14. */}
-      <div className="stats prose">
-        <div className="stat is-ok">
-          <div className="v">{real.median_lead_days}d</div>
-          <div className="k">Median lead, real arm</div>
+          {/* Capped to match .prose (760px) — the shared .stats class spans the full width
+              everywhere else it's used, but every other element on this page (the prose
+              paragraphs, this table, the stated-limits lists) is deliberately capped for
+              readability. Left uncapped, .stats bracketed the narrow content in two full-width
+              bands with a large empty right margin down the page. Found in a UI/UX review,
+              2026-09-14 — the sidebar chart alongside this column (not a wider .stats) is what
+              now uses that reclaimed width instead. */}
+          <div className="stats prose">
+            <div className="stat is-ok">
+              <div className="v">{real.median_lead_days}d</div>
+              <div className="k">Median lead, real arm</div>
+            </div>
+            <div className="stat">
+              <div className="v">{real.rate_pct.toFixed(1)}%</div>
+              <div className="k">Detected · real arm</div>
+            </div>
+            <div className="stat">
+              <div className="v">{placebo.rate_pct.toFixed(1)}%</div>
+              <div className="k">Detected · placebo</div>
+            </div>
+            <div className="stat">
+              <div className="v">{data.lift}×</div>
+              <div className="k">Lift over placebo</div>
+            </div>
+          </div>
+
+          <div className="wrap">
+            <table className="prose">
+              <thead>
+                <tr>
+                  <th>Arm</th>
+                  <th className="num">Investigations</th>
+                  <th className="num">Detected</th>
+                  <th className="num">Rate</th>
+                  <th className="num">Median lead</th>
+                </tr>
+              </thead>
+              <tbody>
+                {/* Tinted to echo the is-ok accent on the median-lead stat tile above — this
+                    row is that tile's detail, not a third independent restatement. */}
+                <tr className="is-highlight">
+                  <td>
+                    <strong>Real</strong> <span className="muted">— investigated series</span>
+                  </td>
+                  <td className="num">{real.n}</td>
+                  <td className="num">{real.detected}</td>
+                  <td className="num">
+                    <strong>{real.rate_pct.toFixed(1)}%</strong>
+                  </td>
+                  <td className="num">
+                    <strong>{real.median_lead_days} days</strong>
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    Placebo <span className="muted">— volume-matched control</span>
+                  </td>
+                  <td className="num">{placebo.n}</td>
+                  <td className="num">{placebo.detected}</td>
+                  <td className="num">{placebo.rate_pct.toFixed(1)}%</td>
+                  <td className="num">{placebo.median_lead_days} days</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div className="panel prose" style={{ marginTop: 20 }}>
+            <p style={{ marginTop: 0 }}>
+              The <em>shape</em> is the evidence: real detections cluster near the investigation
+              open date ({real.median_lead_days} days out) while control detections scatter
+              toward the window midpoint ({placebo.median_lead_days} days) — the pattern a
+              detector tracking a genuine defect ramp produces, not one firing on background
+              noise.
+            </p>
+            <p className="muted" style={{ marginBottom: 0 }}>
+              <strong>{data.lift}× lift</strong>, two-proportion z ≈ {data.z},{" "}
+              <strong>p ≈ {data.p_value}</strong> — statistically real. But lift describes how
+              much more often it fires than chance, not how often it fires at all; the rate below
+              is what answers that.
+            </p>
+          </div>
+
+          <h3>Stated limits</h3>
+          <ul className="muted prose">
+            <li>
+              <strong>It misses roughly five of every six investigations</strong> —{" "}
+              {real.detected} of {real.n} detected. This is an early, narrow edge on a minority of
+              cases, not a general early-warning net over the fleet.
+            </li>
+            <li>
+              The control fires at {placebo.rate_pct.toFixed(1)}%, so most individual detections
+              would have occurred on a busy series with no defect. Any single alert should be read
+              that way — the lead time is trustworthy in aggregate, not vehicle-by-vehicle.
+            </li>
+            <li>
+              It predicts that an <strong>investigation will open</strong> — not that a recall
+              will be issued, and not which VINs are affected.
+            </li>
+            <li>
+              Adding semantic clustering was tested and <strong>made detection worse</strong>{" "}
+              (11.2%, with zero extra lead time). That negative result is published rather than
+              buried.
+            </li>
+          </ul>
+
+          {/* Provenance, not decoration: a claimed measurement that cannot be traced to a query
+              is indistinguishable from a claimed measurement that was typed in. */}
+          <p className="footnote">
+            Source: <code>{data.source_table}</code> · lift and z recomputed from the arm counts ·
+            snapshot generated {data.generated_at}
+          </p>
         </div>
-        <div className="stat">
-          <div className="v">{data.lift}×</div>
-          <div className="k">Lift over placebo</div>
-        </div>
-        <div className="stat">
-          <div className="v">{real.rate_pct.toFixed(1)}%</div>
-          <div className="k">Detected · real arm</div>
-        </div>
-        <div className="stat">
-          <div className="v">{placebo.rate_pct.toFixed(1)}%</div>
-          <div className="k">Detected · placebo</div>
+
+        <div className="panel" style={{ width: 380, flexShrink: 0 }}>
+          <h3 style={{ marginTop: 0 }}>Real vs placebo</h3>
+          <p className="muted footnote" style={{ marginTop: 0 }}>
+            Detection rate, matched-volume control arm.
+          </p>
+          <BarChart
+            data={[
+              {
+                label: "Real",
+                value: real.rate_pct,
+                title: `Real arm: ${real.rate_pct.toFixed(1)}% detected`,
+              },
+              {
+                label: "Placebo",
+                value: placebo.rate_pct,
+                title: `Placebo: ${placebo.rate_pct.toFixed(1)}% detected`,
+              },
+            ]}
+          />
         </div>
       </div>
-
-      <div className="wrap">
-        <table className="prose">
-          <thead>
-            <tr>
-              <th>Arm</th>
-              <th className="num">Investigations</th>
-              <th className="num">Detected</th>
-              <th className="num">Rate</th>
-              <th className="num">Median lead</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>
-                <strong>Real</strong> <span className="muted">— investigated series</span>
-              </td>
-              <td className="num">{real.n}</td>
-              <td className="num">{real.detected}</td>
-              <td className="num">
-                <strong>{real.rate_pct.toFixed(1)}%</strong>
-              </td>
-              <td className="num">
-                <strong>{real.median_lead_days} days</strong>
-              </td>
-            </tr>
-            <tr>
-              <td>
-                Placebo <span className="muted">— volume-matched control</span>
-              </td>
-              <td className="num">{placebo.n}</td>
-              <td className="num">{placebo.detected}</td>
-              <td className="num">{placebo.rate_pct.toFixed(1)}%</td>
-              <td className="num">{placebo.median_lead_days} days</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div className="panel prose" style={{ marginTop: 20 }}>
-        <p style={{ marginTop: 0 }}>
-          The <em>shape</em> is the evidence: real detections cluster near the investigation open
-          date ({real.median_lead_days} days out) while control detections scatter toward the
-          window midpoint ({placebo.median_lead_days} days) — the pattern a detector tracking a
-          genuine defect ramp produces, not one firing on background noise.
-        </p>
-        <p className="muted" style={{ marginBottom: 0 }}>
-          <strong>{data.lift}× lift</strong>, two-proportion z ≈ {data.z},{" "}
-          <strong>p ≈ {data.p_value}</strong> — statistically real. But lift describes how much
-          more often it fires than chance, not how often it fires at all; the rate below is what
-          answers that.
-        </p>
-      </div>
-
-      <h3>Stated limits</h3>
-      <ul className="muted prose">
-        <li>
-          <strong>It misses roughly five of every six investigations</strong> —{" "}
-          {real.detected} of {real.n} detected. This is an early, narrow edge on a minority of
-          cases, not a general early-warning net over the fleet.
-        </li>
-        <li>
-          The control fires at {placebo.rate_pct.toFixed(1)}%, so most individual detections would
-          have occurred on a busy series with no defect. Any single alert should be read that way —
-          the lead time is trustworthy in aggregate, not vehicle-by-vehicle.
-        </li>
-        <li>
-          It predicts that an <strong>investigation will open</strong> — not that a recall will be
-          issued, and not which VINs are affected.
-        </li>
-        <li>
-          Adding semantic clustering was tested and <strong>made detection worse</strong> (11.2%,
-          with zero extra lead time). That negative result is published rather than buried.
-        </li>
-      </ul>
-
-      {/* Provenance, not decoration: a claimed measurement that cannot be traced to a query
-          is indistinguishable from a claimed measurement that was typed in. */}
-      <p className="footnote">
-        Source: <code>{data.source_table}</code> · lift and z recomputed from the arm counts ·
-        snapshot generated {data.generated_at}
-      </p>
 
       <hr className="divider" />
 
       <div className="page-head">
+        <p className="k" style={{ marginBottom: 4 }}>
+          Model B — fuzzy match confidence
+        </p>
         <h2>Model B — how confident is a fuzzy match?</h2>
         <p>
           Exact make/model/year matching resolves only 91 of 163 fleet combinations. The rest —

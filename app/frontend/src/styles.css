@@ -459,11 +459,18 @@ h3 {
   line-height: 1.15;
 }
 
-.stat .k {
+/* Split from `.stat .k` (2026-09-17) so the same small-caps label style can be reused as a
+   standalone section eyebrow (Evidence.tsx's "Model A"/"Model B" labels) — confirmed every
+   existing `className="k"` in the codebase sits inside a `.stat`, so this split changes
+   nothing about how any of them render; `margin-top` stays scoped to that context since it
+   only makes sense sitting under a `.v` number. */
+.k {
   color: var(--muted);
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.07em;
+}
+.stat .k {
   margin-top: 4px;
 }
 
@@ -696,6 +703,13 @@ tbody tr:nth-child(even) {
 
 tbody tr:hover {
   background: var(--surface-2);
+}
+
+/* Evidence.tsx's Real row — echoes the is-ok accent already on the median-lead stat tile
+   above it, so the table reads as "here's the detail behind that headline number" rather
+   than a third independent restatement of the same figure. */
+tbody tr.is-highlight {
+  background: var(--ok-bg);
 }
 
 /* Only tables whose rows navigate somewhere get the pointer, and the accent rail that says
