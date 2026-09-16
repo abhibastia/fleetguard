@@ -650,83 +650,114 @@ than discovering it mid-demo.
 
 ## Picking this up tomorrow
 
-### START HERE — state as of end of 2026-09-14
+### START HERE — state as of end of 2026-09-17
 
-**Everything below is on `main` now** (`aabc770`), all five branches squash-merged, working
-tree clean. Six PRs since the last cold-start note:
+**Everything below is on `main`** (`d0a7ab2` as of the last merge, one more PR — #17, the
+`BarChart` fix below — landing in the same session this note was written). Working tree
+clean before that PR. Six PRs plus one small standalone commit since the last cold-start note
+(2026-09-14):
 
-1. **`watch_campaign` (#6, `e2933b1`)** — a second agent write action: flags an NHTSA recall
-   campaign for the fleet safety team, distinct from `open_defect_signal`'s
-   component/make/model pattern. New `fleetguard_watchlist` Lakebase table (partial unique
-   index on `(campaign_id, watched_by) WHERE status='ACTIVE'`), `GET /watchlist` console
-   endpoint, agent tool + widened system prompt, unit tests all passing. **Backend/Lakebase
-   side verified live against the `abhi` Postgres project (savepoint-based tests). The agent
-   half is not** — see the dedicated section below, this is the headline caveat for the whole
-   session.
-2. **Persona framing + AI/BI dashboard connection (#7, `02e90df`)** — Home.tsx now states the
-   two consumers (fleet safety team vs. safety leadership) and what each gets from the page;
-   the previously-orphaned dashboard is now linked from Home and the 3 judges were granted
-   `CAN_RUN` on it (`resources/fleetguard_overview.dashboard.yml`).
-3. **New `ui-ux-reviewer` subagent** (`83f8c43`) — Playwright-driven, screenshots both themes
-   against a live local server, checked into `.claude/agents/`.
-4. **32 findings from that agent's first review, all fixed (#8, `3130769`)** — spans ~15
-   frontend files: pagination on Work Orders/Audit Log, shared `PageError` retry component on
-   8 views, badge/legend/accessibility fixes, the Home.tsx loading-vs-failure race (see its own
-   comment block in the file).
-5. **4 follow-up polish items (#9, `8b38a8e`)** — assistant dock was capped by `max-height`
-   alone, which does nothing when content is shorter than the cap; fixed with a paired
-   `min-height`. Work Orders depot column no longer wraps. Launched tab depot/component split
-   is equal-width with an expandable "N further depots" list. Home hero copy tightened.
-6. **Horizontal top nav → vertical left sidebar (#10, `aabc770`)** — pure presentation change,
-   no routing touched. Collapses to a hamburger + slide-in drawer below 900px, with a real
-   focus-management/Escape-close contract and a `visibility` delay so off-screen drawer buttons
-   leave the tab order. Also fixed a threshold this refactor would otherwise have broken:
-   `main.assistant-open`'s padding-right rule moved from `min-width:760px` to `min-width:1180px`
-   because the permanent 224px rail would otherwise squeeze content to ~165–288px with the
-   dock open in that range.
+1. **Documentation overhaul (#11)** — `ARCHITECTURE.md` gained §4.6 (a consolidated Lakebase
+   schema reference — and in writing it, found and corrected a stale claim: "11 Postgres
+   tables" was actually **14**, three added since without the doc catching up), §7.2 (agent
+   tool reference table, all 7 tools), and §7.3 (the human-approval/dispatch write path, end
+   to end, with this repo's **first two Mermaid diagrams**). README trimmed of duplicated
+   stats/figures now linked instead of restated. Old non-`_current` diagram files retired;
+   the frozen proposal's two links to them patched (mechanical only — file paths, not content
+   or verdicts, per the "never edit the frozen proposal" rule).
+2. **E-16 logged (`8466a1e`)** — scoped converting the CDF-to-gold job to `AUTO CDC INTO`;
+   feasible but deferred (loses the I-080 regression guard, no net win right now). Not built.
+3. **Free-tier fixes from a full-repo review (#12)** — a `code-security-reviewer` pass found
+   2 HIGH / 5 MEDIUM / 3 LOW findings; the 7 that needed no live workspace touch: rebuild
+   verifier's `EXPECTED` manifest was silently missing 6 tables (including the entire
+   proactive-detection surface, `gold_emerging_signal`) — fixed; Lakebase credential cache
+   was keyed on claimed identity, not a token digest, so a cache hit skipped re-validating
+   the caller — fixed; 6 DDL scripts lacked the shared-schema name guard — fixed; **the
+   agent's two writes (`open_defect_signal`, `watch_campaign`) were not gated by
+   `FLEETGUARD_APPROVERS`** — only safe in practice because the App's `CAN_MANAGE` list
+   happened to equal the approver list, nothing enforced that — now gated, same as
+   `approve_campaign`; CI now fails if the committed console bundle drifts from
+   `app/frontend/src`; `GET /api/service-campaigns`'s `limit` was unbounded — capped (see
+   #14 below for a regression this introduced); CSV export now escapes
+   formula-injection-triggering leading characters.
+4. **The other 3 findings, live-verified (#13)** — 7 previously-orphaned Lakebase migration
+   scripts (creating `fleetguard_depot`, `fleetguard_technician`, and 5 column/constraint/
+   index migrations the app already depended on live) had no bundle job, so a rebuild from
+   empty had no runnable step for any of them — wired in, run live (idempotent no-ops,
+   confirming already-correct state; `create_depot_and_verify` correctly aborted by design,
+   since the table already exists and the script refuses to clobber it). `db.py` now
+   connects with `sslmode=verify-full` instead of `require` — `sslrootcert=system` was tried
+   first and measured to **fail** on this endpoint even though the cert chain verifies fine
+   via `openssl s_client`; `certifi`'s bundled CA works and is portable, added as an explicit
+   dependency. Two missing indexes added and confirmed live
+   (`ix_fg_wo_service_campaign`, `ix_fg_audit_created`).
+5. **Shared `useFetch` hook (#14)** — collapsed the hand-rolled `useState`+`useEffect`+`catch`
+   fetch triplet out of 9 views into `lib/useFetch.ts` (unit-tested directly, no new test
+   framework added). Verified live via Playwright against the local dev server, which is
+   what caught a real regression from #12: `GET /api/service-campaigns`'s new `limit` cap
+   (200) 422'd `WorkOrders.tsx`'s legitimate `limit=500` call (populating its campaign
+   dropdown) — raised the bound to 500 to match the same ceiling `work_orders.py` already
+   uses.
+6. **UI tweaks from a screenshot review (#15)** — Home headline reworded ("and the leadership
+   above them" → "and the leadership they report to"), a "Launched / not yet launched" filter
+   added to the Recall queue, and the Assistant's static "Try: ..." example replaced with
+   three clickable prompt chips that send immediately (spanning 3 of the agent's 5 read
+   tools, not just the one example).
+7. **Evidence page layout (#16)** — reordered stat tiles (real/placebo rate pair adjacent,
+   lift last), added "Model A"/"Model B" eyebrow labels (closing a real naming gap — only
+   Section 2 was ever named), added a `BarChart` sidebar comparing real vs placebo detection
+   rate, tinted the comparison table's Real row to visually connect it to the stat tile above.
+8. **`BarChart` CSS bug found and fixed (I-102, PR #17)** — the new Evidence sidebar chart
+   (#16) exposed a real bug in the *shared* `BarChart` component, not something specific to
+   the new caller: `.bar-chart`'s CSS set a **fixed** `height: 240px` while `width: 100%` —
+   fine by coincidence at the ~1200-1460px full-width panels every existing usage
+   (`Trends.tsx`) happened to render at, badly wrong at Evidence's new 380px sidebar (bars
+   floating, letterboxed, in ~3× the vertical space they needed). Fixed to
+   `aspect-ratio: 5 / 1` (matching the SVG's own `viewBox` ratio) so the box scales correctly
+   at *any* container width. Verified live against both the existing full-width usage
+   (`Trends.tsx`, unchanged) and the new sidebar (bars now sit flush, no dead space).
 
-Also this session: stale "Mosaic AI Agent Framework" naming fixed to "Agent Framework"
-project-wide (frozen proposal untouched, per convention), `docs/API.md` added (every console
-endpoint + external API in one page), Phase 12 (a second CPSC/FSIS data connector) researched
-and **recommended against for now** — not built.
+**Headline caveat, same shape as every prior session's note: nothing above has been
+redeployed.** Verified only against `scripts/run_local_static_dev.sh` (local dev server,
+live Lakebase) and Playwright screenshots — see "No end-to-end test" below, which still
+applies word for word to this session's work, just with a longer list of un-shipped PRs
+behind it.
 
-**AI Search endpoint is still `DELETED`, not merely stopped or scaled to zero.** Last confirmed
-live 2026-09-13: `complaint_chunk_idx`'s endpoint 404s (`AI Search endpoint ... not found`), and
-`vector-search-endpoints list-endpoints` shows none belonging to this project — deleted
-2026-09-08 after ~15K DBUs that day, a deliberate billing decision (I-101), unchanged this
-session (deliberately not touched — see below). Consequence: **any** run of
-`14_fleetguard_agent.py`'s smoke-test cells fails immediately on `search_complaints` (the first
-cell), before it ever reaches the `watch_campaign` tool. Recreating the endpoint (and
-re-syncing the index) is a cost/timing call for whoever is about to demo, not something to do
-reflexively.
+**AI Search endpoint is still `DELETED`.** Re-checked live today (`vector-search-endpoints
+list-endpoints`, `serving-endpoints list`, `apps get`), not assumed: **0** fleetguard AI
+Search endpoints, agent serving endpoint `ready: NOT_READY`, App `compute_status: STOPPED` —
+all three unchanged from the last recorded state, none touched this session. Consequence
+unchanged: **any** run of `14_fleetguard_agent.py`'s smoke-test cells still fails immediately
+on `search_complaints`, before reaching any tool added since. Recreating it is a cost/timing
+call for whoever is about to demo, not something to do reflexively.
 
 #### No end-to-end test with billable resources this session — read this before assuming anything is live
 
-Everything above was verified **locally only**: the frontend against
-`scripts/run_local_static_dev.sh`, the Lakebase schema/writes with direct `psycopg`/CLI calls
-against the `abhi` Postgres project, and every screenshot via Playwright against that local
-server. None of the following happened this session, and none should be assumed working until
-they do:
+Frontend/backend work (PRs #11–#17) was verified **locally only**: against
+`scripts/run_local_static_dev.sh` (live Lakebase), direct `psycopg`/CLI calls against the
+`abhi` Postgres project, and Playwright screenshots against that local server. **This session
+is different from 2026-09-14's in one respect** — `./scripts/deploy.sh abhi prod` genuinely
+ran, more than once, for PR #13's Lakebase job-wiring work (8 new bundle jobs created and run
+live). But the App and the agent were not touched:
 
-- **The agent was never redeployed.** `watch_campaign` exists as a tool in
-  `src/agent/14_fleetguard_agent.py` and passes its unit tests, but the notebook's own
-  smoke-test cell dies on `search_complaints` before it ever reaches the new tool (I-101,
-  above) — so `watch_campaign` has never actually been *called* through the agent, not once,
-  and has never been through `mlflow.pyfunc.log_model` / `agents.deploy()`. **Whatever the
-  agent serving endpoint is running right now — restarted or not — predates this session's
-  work entirely.**
+- **The agent was never redeployed.** Nothing in `src/agent/14_fleetguard_agent.py` changed
+  this session, and the notebook's own smoke-test cell still dies on `search_complaints`
+  before reaching any tool (I-101, above) — so §7.2's tool reference (#11) describes code that
+  has been through `agents.deploy()` before, just not more recently than 2026-09-08 (v6).
+  **Whatever the agent serving endpoint is running right now predates this entire session.**
 - **The Databricks App was never redeployed.** `databricks bundle run fleetguard_console` was
-  not invoked this session, so none of PRs #6–#10 (the watchlist UI, the persona copy, the
-  32-finding fix pass, the sidebar nav) exist on the live App yet — only in the local dev
-  server. The bundle's `prod` deployment record is further behind still: the last actual
-  `deploy.sh` run predates even PR #6's merge, so `prod`'s recorded source doesn't match `main`
-  at all right now.
-- **No judge has opened the dashboard.** The `CAN_RUN` grants from PR #7 were applied via the
-  bundle's permissions block and deployed, but nobody has verified a judge's own browser
-  session can actually load the published dashboard URL.
-- **Neither the agent endpoint nor the App's running/stopped state was re-checked this
-  session.** Both are recorded below as of 2026-09-11 (`STOPPED`). Treat that as stale until
-  re-verified — this session made zero calls to `serving-endpoints get` or `apps get`.
+  not invoked this session, so none of #11–#17 (docs, the security/live-verification fixes,
+  `useFetch`, the UI tweaks, the Evidence layout, the `BarChart` fix) exist on the live App —
+  only in the local dev server and in the deployed-but-unshipped bundle source. The bundle's
+  `prod` deployment record itself **is** current as of PR #13's deploys (2026-09-17) — it is
+  specifically the App's own code that lags, because shipping it is the one deliberately
+  manual step (I-097).
+- **No judge has opened the dashboard.** Unchanged from 2026-09-14 — the `CAN_RUN` grants
+  from PR #7 were applied and deployed, but nobody has verified a judge's own browser session
+  can actually load the published dashboard URL.
+- **The agent endpoint and App state WERE re-checked this session** (unlike 2026-09-14's
+  note) — see the resource table below, re-verified live via `serving-endpoints list` and
+  `apps get` on 2026-09-17, both still in the same idle state as before.
 
 **The practical consequence: nothing in this session's work has been proven to survive contact
 with the deployed system.** The one true end-to-end path left before a demo is: restore the
@@ -755,10 +786,10 @@ reads `True` in both idle states and distinguishes nothing (I-092).
 
 | resource | state | note |
 |---|---|---|
-| AI Search `fleetguard-vs` | **DELETED** (2026-09-08, ~15K DBUs that day) | not billing; must be recreated + `complaint_chunk_idx` re-synced before any agent smoke test or demo that touches `search_complaints` (I-101) |
-| Databricks App | **STOPPED** as of 2026-09-11, not re-checked since | `databricks apps start fleetguard-console`, ~2 min. All three judges hold `CAN_MANAGE` and can start it themselves. **Also not redeployed since PR #6** — starting it today serves pre-`watch_campaign`, pre-sidebar-nav code |
-| Agent endpoint | **STOPPED** as of 2026-09-11, not re-checked since | v6, scale-to-zero on. **Also predates `watch_campaign`** — that tool has never been through `agents.deploy()` |
-| `fleetguard-cdf-to-gold` | **UNPAUSED** | event-driven only, capped at 1 run/min. Note: a hand-applied pause is now reverted by the next deploy — change the YAML instead |
+| AI Search `fleetguard-vs` | **DELETED** — re-verified live 2026-09-17 (`list-endpoints`: 0 fleetguard endpoints), originally deleted 2026-09-08, ~15K DBUs that day | not billing; must be recreated + `complaint_chunk_idx` re-synced before any agent smoke test or demo that touches `search_complaints` (I-101) |
+| Databricks App | **STOPPED** — re-verified live 2026-09-17 (`apps get`: `compute_status.state: STOPPED`) | `databricks apps start fleetguard-console`, ~2 min. All three judges hold `CAN_MANAGE` and can start it themselves. **Also not redeployed since PR #6 (2026-09-14)** — starting it today serves pre-`watch_campaign` code, and now also pre-#11-through-#17 (nothing from this session's 6 PRs has shipped to the live App either) |
+| Agent endpoint | **NOT_READY** — re-verified live 2026-09-17 (`serving-endpoints list`: `ready: NOT_READY`) | v6, scale-to-zero on. **Also predates `watch_campaign`** — that tool has never been through `agents.deploy()`, and every prompt/tool-reference change from #11's §7.2 write-up is describing code the deployed endpoint doesn't run yet |
+| `fleetguard-cdf-to-gold` | **UNPAUSED** (not re-checked today — no reason to expect it changed; nothing this session touched CDF/trigger config) | event-driven only, capped at 1 run/min. Note: a hand-applied pause is now reverted by the next deploy — change the YAML instead |
 
 #### Deployment changed today — read this before touching the workspace
 
@@ -819,12 +850,15 @@ asks for — the rubric we have grades the *proposal*, not the final artefact; a
 run**, because everything has been verified individually and **nothing in composition**, which is
 where this project's failures live. Start by restoring the agent endpoint.
 
-**That dry run now has a longer prerequisite list than it did on 2026-09-11**, because a full
-session of frontend/agent work (PRs #6–#10 above) has accumulated with zero redeploys: restore
-AI Search, restore/redeploy the agent (so `watch_campaign` is actually reachable, not just unit
-tested), `./scripts/deploy.sh abhi prod` from `main`, then `bundle run fleetguard_console`. None
-of this session's work should be described as "done" in front of a judge until that sequence has
-run at least once.
+**That dry run now has a longer prerequisite list than it did on 2026-09-11**, because two more
+full sessions of frontend/agent/docs work (PRs #6–#17 across 2026-09-14 and 2026-09-17) have
+accumulated with the App and agent still never redeployed: restore AI Search,
+restore/redeploy the agent (so `watch_campaign` — and everything #11's §7.2 documents — is
+actually reachable, not just unit tested), `./scripts/deploy.sh abhi prod` from `main` (already
+run for PR #13's Lakebase jobs, but re-run it anyway right before the dry run to pick up
+#14–#17), then `bundle run fleetguard_console` — that last step is the one nothing this session
+did at all. None of #11–#17's work should be described as "done" in front of a judge until
+that sequence has run at least once.
 
 **One fact to carry into any conversation about latency:** Velocity is **two numbers**, not one —
 CDF capture **7.1–15.6 s** (genuinely sub-minute), full chain to a gold fact **2.5–4.5 min**. The

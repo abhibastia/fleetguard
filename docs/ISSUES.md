@@ -28,6 +28,41 @@ no error and passed the obvious check.
 
 ## Tooling / process
 
+### I-102 — `BarChart`'s fixed CSS height broke its own aspect ratio in a narrower container
+*Date:* 2026-09-17 · *Status:* **resolved**
+
+**Found by** a screenshot review of the Evidence page's new sidebar chart (a `BarChart`
+comparing real vs placebo detection rate, added earlier the same session as a layout
+improvement). The chart rendered with its two bars floating in a mostly-empty box — far more
+dead space above and below than a two-bar comparison had any right to.
+
+**Root cause.** `styles.css`'s `.bar-chart` rule set `width: 100%` but a **fixed**
+`height: 240px`. `BarChart.tsx`'s SVG uses `viewBox="0 0 1200 240"` (5:1 — the component's own
+comment says this was chosen to match "this app's actual panel width, ~1200-1460px"). Every
+existing usage (`Trends.tsx`'s two charts) renders inside that same ~1200-1460px range, where
+`width: 100%` naturally computes to something close to 1200px — so the fixed 240px height
+happened to look proportionate there *by coincidence*, not because the CSS was actually
+aspect-ratio-aware. `Evidence.tsx`'s new 380px-wide sidebar exposed the gap: `width: 100%`
+computed to 380px while `height` stayed pinned at 240px, so the SVG's default
+`preserveAspectRatio="xMidYMid meet"` shrank the 1200×240 content to fit the 380px width and
+letterboxed it vertically inside the still-240px box — the bars were correctly proportioned to
+*each other*, just centered in roughly 3× more vertical space than the chart itself needed.
+
+**Resolution.** Replaced the fixed `height: 240px` with `aspect-ratio: 5 / 1` (matching
+`BarChart.tsx`'s own `VIEW_W`/`VIEW_H` ratio), so the rendered box's aspect ratio always
+matches the SVG's logical viewBox at any container width, not just the one range it happened
+to be tuned for. Verified live (Playwright against the local dev server): both existing
+full-width usages (`Trends.tsx`'s two 13-bar charts, screenshotted, render identically to
+before) and the new 380px sidebar (screenshotted, bars now sit flush at the bottom of a
+correctly-proportioned box, no dead space) after the fix. `tsc`/`vitest` stayed clean
+throughout — this is a visual regression with no type or logic surface, so neither would have
+caught it either way.
+
+**Lesson.** A component built and verified against one call site's container width can hide a
+real CSS assumption (`width` scales, `height` doesn't) that only breaks at a different width.
+The fix belongs in the shared component's CSS, not as a special case in the new caller, so the
+next narrow (or wider) usage doesn't rediscover the same bug.
+
 ### I-101 — the AI Search endpoint was deleted to cap billing, and it blocks the agent's smoke test
 *Date:* 2026-09-13 · *Status:* **watch** — deliberate, not a defect; recreate on demand
 
