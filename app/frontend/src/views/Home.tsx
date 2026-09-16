@@ -64,7 +64,7 @@ export function Home({ onNavigate }: { onNavigate: (view: string) => void }) {
   return (
     <div className="home">
       <section className="panel home-hero">
-        <h2 style={{ marginTop: 0 }}>Built for the fleet safety team — and the leadership above them</h2>
+        <h2 style={{ marginTop: 0 }}>Built for the fleet safety team — and the leadership they report to</h2>
         <p className="muted" style={{ maxWidth: "88ch" }}>
           FleetGuard resolves an NHTSA recall against your fleet's VIN roster in seconds, and
           watches complaint volume for the same defect patterns <em>before</em> the regulator
