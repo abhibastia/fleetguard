@@ -16,19 +16,27 @@ UC_SCHEMA = "bootcamp_students.fleetguard"
 
 PREFIX = "fleetguard_"
 
-#: The eleven operational tables, mapping 1:1 to proposal §4.4.
+#: The current operational tables. Started as the eleven mapping 1:1 to proposal §4.4;
+#: `fleetguard_approval` and `fleetguard_public_summary` were dropped 2026-09-16 (built,
+#: never wired to any router or agent tool — see docs/ENHANCEMENTS.md), and
+#: `fleetguard_technician`/`fleetguard_watchlist`/`fleetguard_depot_assignment` were added
+#: since as real, live tables (`src/lakebase/15_enable_depot_rls.py`,
+#: `17_create_technician_roster.py`, `22_create_watchlist_table.py`). Keep this list in sync
+#: with what's actually created — nothing today reasons about "our tables" from it, but
+#: something eventually will.
 LAKEBASE_TABLES: tuple[str, ...] = (
     "fleetguard_vehicle",
     "fleetguard_depot",
+    "fleetguard_depot_assignment",
     "fleetguard_defect_signal",
     "fleetguard_recall_campaign",
     "fleetguard_vehicle_exposure",
     "fleetguard_service_campaign",
     "fleetguard_work_order",
     "fleetguard_agent_action",
-    "fleetguard_approval",
     "fleetguard_audit_log",
-    "fleetguard_public_summary",
+    "fleetguard_technician",
+    "fleetguard_watchlist",
 )
 
 # Postgres identifiers are capped at 63 characters; the history name adds 11.

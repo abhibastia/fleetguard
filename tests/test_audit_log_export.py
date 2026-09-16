@@ -205,6 +205,34 @@ class TestCsvExport:
         assert rows[0][0] == "audit_id"
 
 
+class TestCsvFormulaInjectionGuard:
+    """`_csv_safe` — belt-and-suspenders over the JSON-wrapping protection above. That
+    protection is a side effect of `before_state`/`after_state` being JSON (always `{`-led);
+    this guard is the real one, applied to every cell, for the day any column carries raw
+    free text instead."""
+
+    def test_csv_safe_prefixes_a_leading_formula_character(self):
+        for bad in ("=cmd|'/c calc'!A1", "+SUM(A1)", "-2+3", "@SUM(A1)"):
+            assert audit_log._csv_safe(bad) == f"'{bad}"
+
+    def test_csv_safe_leaves_ordinary_text_untouched(self):
+        assert audit_log._csv_safe("LAUNCH") == "LAUNCH"
+        assert audit_log._csv_safe("") == ""
+
+    def test_a_raw_column_value_starting_with_a_formula_character_is_escaped_in_the_export(
+        self, monkeypatch
+    ):
+        hostile = {**LAUNCH_ROW, "entity_id": "=cmd|'/c calc'!A1"}
+        cur = FakeCursor({Q: [hostile]})
+        install(monkeypatch, audit_log, cur)
+
+        rows = _csv_rows(
+            export_audit_log_csv(USER, entity_type=None, entity_id=None, action=None, limit=5000)
+        )
+
+        assert rows[1][2] == "'=cmd|'/c calc'!A1"
+
+
 def test_snapshot_mode_returns_empty_without_connecting(monkeypatch):
     monkeypatch.setattr(audit_log.snapshot, "is_snapshot", lambda: True)
 

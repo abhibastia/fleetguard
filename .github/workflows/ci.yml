@@ -118,7 +118,19 @@ jobs:
       # The build is a check in its own right: the console bundle committed under
       # app/backend/fleetguard_api/console/ is what the Databricks App actually serves (no Node
       # runs on the Apps runtime), so a source change that cannot build is a change that cannot
-      # ship. This proves it compiles; it does not yet prove the committed bundle is in sync
-      # with the source — see the note in the PR/commit for why that check is not enforced yet.
+      # ship.
       - name: Build
         run: npm run build
+
+      # This proves the committed bundle is in sync with the source, not just that it compiles.
+      # Vite's output filenames are content-hashed (vite.config: build.outDir "dist"), so an
+      # unchanged source produces byte-identical output — a real drift (someone committed
+      # app/frontend/src/ changes without re-running scripts/build_console.sh) is exactly what
+      # this catches, and everything else in this workflow passes it silently otherwise.
+      - name: Verify committed console bundle matches source
+        working-directory: ${{ github.workspace }}
+        run: |
+          if ! diff -rq app/frontend/dist app/backend/fleetguard_api/console; then
+            echo "::error::app/backend/fleetguard_api/console is out of sync with app/frontend/src — run ./scripts/build_console.sh and commit the result."
+            exit 1
+          fi
