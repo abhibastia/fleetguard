@@ -1,0 +1,37 @@
+# Adds ix_fg_wo_service_campaign and ix_fg_audit_created — two query shapes the app already
+# exercises (routers/approval.py's Launched-tab join, both audit routes' default sort) that
+# were sequential-scanning without them.
+#
+# ADDED TO THE BUNDLE 2026-09-17 (full-repo review finding, LOW/MEDIUM). Idempotent
+# (`CREATE INDEX IF NOT EXISTS`).
+#
+# The `environments` block is load-bearing: for serverless jobs the dependency list lives in
+# the job, not the notebook.
+
+resources:
+  jobs:
+    add_missing_indexes:
+      name: fleetguard-add-missing-indexes
+      tasks:
+        - task_key: add_indexes
+          disabled: false
+          email_notifications: {}
+          environment_key: fgenv
+          notebook_task:
+            notebook_path: ../src/lakebase/23_add_missing_indexes.py
+            source: WORKSPACE
+          run_if: ALL_SUCCESS
+          timeout_seconds: 0
+      email_notifications: {}
+      environments:
+        - environment_key: fgenv
+          spec:
+            client: "3"
+            dependencies:
+              - psycopg[binary]
+              - databricks-sdk>=0.89.0
+      max_concurrent_runs: 1
+      queue:
+        enabled: true
+      timeout_seconds: 0
+      webhook_notifications: {}

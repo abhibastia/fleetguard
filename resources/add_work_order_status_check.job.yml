@@ -1,0 +1,38 @@
+# Adds the CHECK constraint on fleetguard_work_order.status (OPEN/IN_PROGRESS/COMPLETED/
+# CANCELLED) that routers/work_orders.py's PATCH endpoint relies on.
+#
+# ADDED TO THE BUNDLE 2026-09-17 (full-repo review finding, HIGH): never wired to any job, so
+# a rebuild from empty had no runnable step for a constraint the app already depends on in
+# production. Idempotent — the script checks pg_constraint itself before adding it, since
+# Postgres has no `ADD CONSTRAINT IF NOT EXISTS`.
+#
+# The `environments` block is load-bearing: for serverless jobs the dependency list lives in
+# the job, not the notebook.
+
+resources:
+  jobs:
+    add_work_order_status_check:
+      name: fleetguard-add-work-order-status-check
+      tasks:
+        - task_key: add_status_check
+          disabled: false
+          email_notifications: {}
+          environment_key: fgenv
+          notebook_task:
+            notebook_path: ../src/lakebase/16_add_work_order_status_check.py
+            source: WORKSPACE
+          run_if: ALL_SUCCESS
+          timeout_seconds: 0
+      email_notifications: {}
+      environments:
+        - environment_key: fgenv
+          spec:
+            client: "3"
+            dependencies:
+              - psycopg[binary]
+              - databricks-sdk>=0.89.0
+      max_concurrent_runs: 1
+      queue:
+        enabled: true
+      timeout_seconds: 0
+      webhook_notifications: {}

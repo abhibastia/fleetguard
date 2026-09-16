@@ -1,0 +1,38 @@
+# Adds ux_fg_service_campaign_active — the only real enforcement against a double-click
+# creating two service campaigns for the same recall (I-063). routers/approval.py's
+# UniqueViolation handler depends on this index existing.
+#
+# ADDED TO THE BUNDLE 2026-09-17 (full-repo review finding, HIGH): never wired to any job, so a
+# rebuild from empty had no runnable step for this — meaning a fresh workspace would silently
+# lose the double-click guard entirely. Idempotent (`CREATE UNIQUE INDEX IF NOT EXISTS`).
+#
+# The `environments` block is load-bearing: for serverless jobs the dependency list lives in
+# the job, not the notebook.
+
+resources:
+  jobs:
+    add_service_campaign_uniqueness:
+      name: fleetguard-add-service-campaign-uniqueness
+      tasks:
+        - task_key: add_uniqueness_index
+          disabled: false
+          email_notifications: {}
+          environment_key: fgenv
+          notebook_task:
+            notebook_path: ../src/lakebase/19_add_service_campaign_uniqueness.py
+            source: WORKSPACE
+          run_if: ALL_SUCCESS
+          timeout_seconds: 0
+      email_notifications: {}
+      environments:
+        - environment_key: fgenv
+          spec:
+            client: "3"
+            dependencies:
+              - psycopg[binary]
+              - databricks-sdk>=0.89.0
+      max_concurrent_runs: 1
+      queue:
+        enabled: true
+      timeout_seconds: 0
+      webhook_notifications: {}

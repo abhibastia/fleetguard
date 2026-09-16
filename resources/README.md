@@ -43,7 +43,7 @@ databricks bundle deployment bind <key> <id> --profile abhi
 | `fleetguard_console.app.yml` | The App. Owns identity, OBO scopes and the ACL; `app/backend/app.yaml` owns runtime config. Deliberately no `config:` block. |
 | `bronze_silver.pipeline.yml` | The Lakeflow pipeline, libraries globbed from `../src/pipelines/**`. |
 | `fleetguard_overview.dashboard.yml` | The AI/BI dashboard. `parent_path` is load-bearing — without it a deploy *recreates* the dashboard under a new URL. |
-| `*.job.yml` (17) | One per job. Generated from the live jobs, then repointed at `../src/`. |
+| `*.job.yml` (25) | One per job. The original 17 were generated from the live jobs and repointed at `../src/`; 8 more (2026-09-17) newly wire previously-orphaned Lakebase migration scripts that a rebuild from empty had no runnable step for. |
 
 Two job files carry configuration that existed nowhere else before this bundle and must not be
 "tidied": `cdf_to_gold.job.yml`'s `trigger.table_update` (both intervals sit on a hard 60 s

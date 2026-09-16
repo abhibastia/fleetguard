@@ -1,0 +1,46 @@
+# Creates fleetguard_depot and proves the CDF round-trip on it (Phase 5 step 1) — the
+# smallest, least consequential table, created and verified before the other ten
+# (create_remaining_tables.job.yml).
+#
+# ADDED TO THE BUNDLE 2026-09-17, correcting the same scope gap I-098 found in
+# create-remaining-tables: this script was never wired to any job, so a rebuild from empty had
+# no runnable step for it (full-repo review finding, HIGH).
+#
+# NOT idempotent by design, unlike its siblings: the script's own pre-flight check aborts with
+# `SystemExit` if fleetguard_depot already exists ("do not clobber a shared schema"), rather
+# than a `CREATE TABLE IF NOT EXISTS` no-op. That is correct for what this step proves (the
+# CDF round-trip on a fresh table) — a re-run against a workspace where it already succeeded is
+# expected to fail loudly, not silently pass.
+#
+# The `environments` block is load-bearing: for serverless jobs the dependency list lives in
+# the job, not the notebook. This notebook also reads `gold_fleet_depot` via `spark.sql`, which
+# a serverless notebook task provides without any extra configuration (confirmed: the already-
+# bundled `load_reference_from_gold.job.yml` uses `spark.sql` against gold tables the same way).
+
+resources:
+  jobs:
+    create_depot_and_verify:
+      name: fleetguard-create-depot-and-verify
+      tasks:
+        - task_key: create_depot
+          disabled: false
+          email_notifications: {}
+          environment_key: fgenv
+          notebook_task:
+            notebook_path: ../src/lakebase/06_create_depot_and_verify.py
+            source: WORKSPACE
+          run_if: ALL_SUCCESS
+          timeout_seconds: 0
+      email_notifications: {}
+      environments:
+        - environment_key: fgenv
+          spec:
+            client: "3"
+            dependencies:
+              - psycopg[binary]
+              - databricks-sdk>=0.89.0
+      max_concurrent_runs: 1
+      queue:
+        enabled: true
+      timeout_seconds: 0
+      webhook_notifications: {}

@@ -1,0 +1,37 @@
+# Adds fleetguard_defect_signal's source/opened_by/rationale columns — what distinguishes a
+# batch-detected signal from an agent-opened one (agent_actions.py, routers/signals.py).
+#
+# ADDED TO THE BUNDLE 2026-09-17 (full-repo review finding, HIGH): never wired to any job, so
+# a rebuild from empty had no runnable step for columns the app already depends on in
+# production. Idempotent (`ADD COLUMN IF NOT EXISTS`).
+#
+# The `environments` block is load-bearing: for serverless jobs the dependency list lives in
+# the job, not the notebook.
+
+resources:
+  jobs:
+    add_defect_signal_provenance:
+      name: fleetguard-add-defect-signal-provenance
+      tasks:
+        - task_key: add_provenance_columns
+          disabled: false
+          email_notifications: {}
+          environment_key: fgenv
+          notebook_task:
+            notebook_path: ../src/lakebase/20_add_defect_signal_provenance.py
+            source: WORKSPACE
+          run_if: ALL_SUCCESS
+          timeout_seconds: 0
+      email_notifications: {}
+      environments:
+        - environment_key: fgenv
+          spec:
+            client: "3"
+            dependencies:
+              - psycopg[binary]
+              - databricks-sdk>=0.89.0
+      max_concurrent_runs: 1
+      queue:
+        enabled: true
+      timeout_seconds: 0
+      webhook_notifications: {}
