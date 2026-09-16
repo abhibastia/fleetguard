@@ -2,6 +2,16 @@ import { useState } from "react";
 import { api, ApiError, type AgentActionResult, type ChatTurn } from "../lib/api";
 import { renderMarkdownLite } from "../lib/markdown";
 
+// Spans three of the agent's five read tools (fleet exposure, emerging signals, complaint
+// search) so the empty state demonstrates real breadth, not just the one example someone has
+// to already know to type. Clicking sends immediately — this used to be inert text the
+// operator had to retype or copy by hand.
+const EXAMPLE_PROMPTS = [
+  "Which fleet vehicles does recall 17V629000 affect?",
+  "What emerging defect signals are affecting our fleet right now?",
+  "Search complaints about brake failures",
+];
+
 /**
  * The agent panel — advisory, and sitting *beside* the queue rather than in front of it.
  *
@@ -18,8 +28,8 @@ export function Assistant() {
   const [gated, setGated] = useState(false);
   const [lastAction, setLastAction] = useState<AgentActionResult | null>(null);
 
-  async function send() {
-    const question = draft.trim();
+  async function send(override?: string) {
+    const question = (override ?? draft).trim();
     if (!question || busy) return;
 
     const next: ChatTurn[] = [...turns, { role: "user", content: question }];
@@ -80,9 +90,16 @@ export function Assistant() {
 
       <div className="turns">
         {turns.length === 0 && !busy && (
-          <p className="muted" style={{ fontSize: 13 }}>
-            Try: <em>“Which fleet vehicles does recall 17V629000 affect?”</em>
-          </p>
+          <div className="prompt-chips">
+            <p className="muted" style={{ fontSize: 13, marginTop: 0 }}>
+              Try one:
+            </p>
+            {EXAMPLE_PROMPTS.map((p) => (
+              <button key={p} className="prompt-chip" onClick={() => send(p)} disabled={busy}>
+                {p}
+              </button>
+            ))}
+          </div>
         )}
         {turns.map((t, i) => (
           <div key={i} className={t.role === "user" ? "turn user" : "turn agent"}>
@@ -149,7 +166,7 @@ export function Assistant() {
           onKeyDown={(e) => e.key === "Enter" && send()}
           disabled={busy}
         />
-        <button onClick={send} disabled={busy || !draft.trim()}>
+        <button onClick={() => send()} disabled={busy || !draft.trim()}>
           Ask
         </button>
       </div>

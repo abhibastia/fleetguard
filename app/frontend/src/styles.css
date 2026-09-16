@@ -1359,6 +1359,32 @@ thead th.sortable:hover {
   border-bottom-left-radius: 3px;
 }
 
+/* The empty-state example prompts — one click sends, replacing text that used to have to be
+   retyped or copied by hand. Stacked full-width rather than wrapped inline chips: these are
+   full questions, not short tags, and a wrapped pill layout let long ones truncate illegibly. */
+.prompt-chips {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.prompt-chip {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 12px;
+  font-size: 13px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text);
+  white-space: normal;
+}
+.prompt-chip:hover:not(:disabled) {
+  background: var(--surface-3);
+  border-color: var(--accent-line);
+  transform: none;
+}
+
 .ask {
   display: flex;
   gap: 8px;

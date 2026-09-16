@@ -8,6 +8,10 @@ import { useFetch } from "../lib/useFetch";
 const SEVERITY_FILTER_ALL = "ALL" as const;
 const SEVERITY_FILTER_URGENT = "URGENT" as const;
 
+const LAUNCH_FILTER_ALL = "ALL" as const;
+const LAUNCH_FILTER_LAUNCHED = "LAUNCHED" as const;
+const LAUNCH_FILTER_NOT_LAUNCHED = "NOT_LAUNCHED" as const;
+
 type SortKey = "vehicles_exposed" | "depots_affected";
 
 /**
@@ -23,13 +27,20 @@ type SortKey = "vehicles_exposed" | "depots_affected";
 export function Queue({ onOpen }: { onOpen: (id: string) => void }) {
   const { data: items, error, gated } = useFetch(() => api.queue(), []);
   const [severityFilter, setSeverityFilter] = useState<string>(SEVERITY_FILTER_ALL);
+  const [launchFilter, setLaunchFilter] = useState<string>(LAUNCH_FILTER_ALL);
 
   const filtered = useMemo(() => {
     return (items ?? []).filter((i) => {
-      if (severityFilter === SEVERITY_FILTER_URGENT) return i.park_it || i.do_not_drive;
+      if (severityFilter === SEVERITY_FILTER_URGENT && !(i.park_it || i.do_not_drive)) {
+        return false;
+      }
+      // `service_campaign_id` is non-null exactly when a LAUNCHED service campaign already
+      // exists for this recall — the same field the LAUNCHED tag in the table below reads.
+      if (launchFilter === LAUNCH_FILTER_LAUNCHED && !i.service_campaign_id) return false;
+      if (launchFilter === LAUNCH_FILTER_NOT_LAUNCHED && i.service_campaign_id) return false;
       return true;
     });
-  }, [items, severityFilter]);
+  }, [items, severityFilter, launchFilter]);
     const {
     query,
     setQuery,
@@ -146,6 +157,15 @@ const { sorted, sortKey, sortDir, toggleSort } = useSort<QueueItem, SortKey>(
         <select value={severityFilter} onChange={(e) => setSeverityFilter(e.target.value)}>
           <option value={SEVERITY_FILTER_ALL}>All campaigns</option>
           <option value={SEVERITY_FILTER_URGENT}>Immediate action only</option>
+        </select>
+        <select
+          value={launchFilter}
+          onChange={(e) => setLaunchFilter(e.target.value)}
+          aria-label="Filter by launch status"
+        >
+          <option value={LAUNCH_FILTER_ALL}>Launched or not</option>
+          <option value={LAUNCH_FILTER_LAUNCHED}>Launched only</option>
+          <option value={LAUNCH_FILTER_NOT_LAUNCHED}>Not yet launched</option>
         </select>
       </div>
 
