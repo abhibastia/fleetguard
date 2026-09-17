@@ -20,3 +20,14 @@ pytest-cov>=7.0
 # already arrives transitively through `uvicorn[standard]` above, but a test that imports it
 # directly should say so rather than depend on another package's extras not changing.
 PyYAML>=6.0
+
+# tests/pipelines/ — local-Spark unit tests of the bronze/silver LDP pipeline's SQL
+# transformation logic (src/pipelines/**/*.sql). Needs a JVM; CI's ci.yml pins one via
+# actions/setup-java. Pinned <4.0: pyspark 4.x requires Java 17 minimum with no fallback,
+# where 3.5.x runs on Java 8/11/17 — keep the wider floor (this repo's dev machine only has
+# Java 8). `spark.createDataFrame(list_of_dicts)` hits a cloudpickle/Python 3.14
+# RecursionError in this pyspark line regardless of Java version — not a Java-compatibility
+# issue, a pickle-protocol one. The test fixtures route around it entirely (a temp JSON
+# file + `spark.read.json()`, never the RDD/cloudpickle path) — see tests/pipelines/
+# conftest.py for why.
+pyspark>=3.5,<4.0

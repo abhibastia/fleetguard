@@ -71,6 +71,15 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # tests/pipelines/ runs a local Spark session (pyspark, requirements-dev.txt) to unit
+      # test the LDP pipeline's SQL transformation logic — needs a JVM, which the runner
+      # does not reliably provide on PATH without this. pyspark 3.5.x supports 8/11/17; 17
+      # is the current LTS actions/setup-java defaults toward.
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
       - uses: actions/setup-python@v7
         with:
           python-version: "3.14"

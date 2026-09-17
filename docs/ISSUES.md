@@ -28,6 +28,39 @@ no error and passed the obvious check.
 
 ## Tooling / process
 
+### I-104 — `spark.createDataFrame(list_of_dicts)` crashes under pyspark 3.5.9 + Python 3.14
+*Date:* 2026-09-17 · *Status:* **resolved (workaround)**
+
+**Found while** building `tests/pipelines/` — local-Spark unit tests for the bronze/silver
+LDP pipeline's SQL transformation logic (see §4.2 of `ARCHITECTURE.md`). The test fixture
+that registers input rows as a temp view used the obvious API,
+`spark.createDataFrame([{"a": 1}, ...])`.
+
+**Symptom.** Every call raised `_pickle.PicklingError: Could not serialize object:
+RecursionError: Stack overflow ... when serializing function reconstructor / function
+object` repeated dozens of times, regardless of row content, row count, or Java version
+(reproduced identically on Java 8). Also reproduced on the RDD-based `spark.read.json`
+overload that takes a `parallelize`d Python list, not just `createDataFrame` — same
+traceback, same root cause.
+
+**Root cause.** Both paths build an RDD from a Python list and ship a map function to the
+JVM via cloudpickle. This environment runs Python 3.14 (very new — released Oct 2025) with
+pyspark 3.5.9 (the latest 3.5.x release, which predates 3.14). pyspark 4.x supports newer
+Python but requires Java 17 minimum with no fallback, and this machine only has Java 8
+installed — not a fix available without a system-level JDK install. Not a Java-version
+issue: the same environment's plain `spark.sql("SELECT ...")` calls work fine, because they
+send a SQL string over py4j and never touch cloudpickle at all.
+
+**Resolution.** Route around the RDD/cloudpickle path entirely rather than downgrading
+Python or installing a new JDK: write test rows to a temp NDJSON file and read them back
+with `spark.read.json(path)` — a pure JVM-side file parse with no Python function crossing
+the py4j boundary. See `tests/pipelines/conftest.py`'s `register` fixture.
+
+**Lesson.** An identical stack trace across genuinely different inputs (row content, Java
+version) is a sign the failure is structural to the code *path*, not the data — worth
+testing a completely different API for the same result (`spark.read.json` vs
+`createDataFrame`) before assuming the fix is deeper (Python downgrade, new JDK) than it is.
+
 ### I-103 — `databricks experimental aitools tools query` silently mangles multi-line metric-view YAML
 *Date:* 2026-09-17 · *Status:* **resolved (workaround)**
 

@@ -123,6 +123,12 @@ against known cardinalities instead.
 
 Quality control **routes rather than drops**: failure reasons are computed once in a staging
 view and drive both the silver and quarantine predicates, so the two cannot drift.
+`tests/pipelines/` (added 2026-09-17) unit-tests this routing logic and the chunk-count math
+in `silver_complaint_chunk.sql` locally, against a local Spark session — the pipeline DDL
+itself (`STREAM(...)`, `CREATE OR REFRESH STREAMING TABLE`, `EXPECT`) is pipeline-runtime
+syntax with no local equivalent, so only the staging-view `SELECT` logic is covered this way;
+the routing invariant on the live tables (`bronze = silver + quarantine`, exactly) is still
+`tests/test_data_quality.py`'s job, live only.
 
 | Grain | Bronze | Silver | Quarantine |
 |---|---|---|---|

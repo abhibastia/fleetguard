@@ -525,7 +525,9 @@ claim you then have to keep true; rejected experiments belong in `src/` and `doc
 - `PLAN.md` is the source of truth for build sequencing and phase definitions of
   done. Keep it in sync with the proposal if either changes.
 - **CI runs on every push and PR** (`.github/workflows/ci.yml`, added 2026-09-09). Run the same
-  checks locally before committing — they take about two seconds:
+  checks locally before committing —**since `tests/pipelines/` (added 2026-09-17) starts a
+  local Spark session, this is now ~40s, not the "about two seconds" it used to be** — JVM
+  startup dominates:
   ```bash
   .venv/bin/python -m ruff check src tests app/backend scripts
   .venv/bin/python -m pytest
@@ -535,6 +537,8 @@ claim you then have to keep true; rejected experiments belong in `src/` and `doc
   `app/backend/requirements.txt` so local and CI cannot drift. CI **never touches the
   workspace** (no credentials; integration tests self-skip without `--run-integration`) and
   **never deploys** — deploying restarts the App under whoever is using it, so it stays manual.
+  **Needs a JVM** — `ci.yml` pins Temurin 17 via `actions/setup-java`; locally, whatever `java`
+  is already on `PATH` (tested against Java 8 here, works — pyspark 3.5.x supports 8/11/17).
 - **After changing anything under `app/frontend/`, run `./scripts/build_console.sh`.** The
   console bundle committed at `app/backend/fleetguard_api/console/` is what the Databricks App
   actually serves — no Node runs on the Apps runtime — so an un-rebuilt bundle ships stale UI
