@@ -29,10 +29,11 @@ export function useSearch<T>(rows: T[], getSearchText: (row: T) => string) {
 }
 
 /**
- * The matching itself, as a plain function so it is testable without a React renderer — this
- * project has no `@testing-library/react` and deliberately adds no dependency it can avoid
- * (`markdown.tsx` and `BarChart.tsx` are hand-rolled for the same reason). The hook above is a
- * thin wrapper; this is where the behaviour worth pinning lives.
+ * The matching itself, as a plain function so it is testable without a React renderer — even
+ * now that `@testing-library/react` exists in this project (added 2026-09-17 for view
+ * component tests), a pure function is still simpler to pin than a hook rendered just to
+ * assert on its return value. The hook above is a thin wrapper; this is where the behaviour
+ * worth pinning lives.
  */
 export function filterRows<T>(rows: T[], getSearchText: (row: T) => string, query: string): T[] {
   const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
