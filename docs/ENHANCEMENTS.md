@@ -597,6 +597,17 @@ duplicate that agent's job for the same user. The honest fit is an analyst perso
 asked for. Revisit by attaching a Genie space to the existing dashboard if an open-ended-analyst
 need actually appears; do not build it to demonstrate the feature.
 
+**Update 2026-09-17: Genie Ontology exists now, still doesn't change the call.** Databricks
+announced Genie Ontology at DAIS 2026 (docs.databricks.com/aws/en/genie/genie-ontology) — a
+unified semantic layer that grounds Genie One/Agents/Code in both modeled UC semantics (metric
+views, domains, glossary) and auto-inferred context from tables/dashboards/queries. It is
+**Public Preview, not GA**, so it doesn't clear this project's bar for committing to a feature
+name (see CLAUDE.md). The one thing worth carrying forward: `evidence_metrics` already being a
+governed UC metric view means that if a Genie space is ever built here, it has real modeled
+semantics to anchor an ontology to on day one, rather than starting from inferred-only context.
+Confirmed 2026-09-17: `evidence_metrics` is still the only UC metric view in the project, and
+`genie` is still unused anywhere in code (scope name only, in CLAUDE.md's vocabulary list).
+
 *Original rationale, kept:* E-11 gives Genie a defined job —
 the VP Ops analytics surface — rather than leaving it a loose platform feature, which is why
 this moves up.

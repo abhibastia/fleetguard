@@ -75,6 +75,9 @@ class _CachedCredential:
         return (time.time() - self.minted_at) > _CREDENTIAL_TTL_S
 
 
+# Entries are never evicted, only treated as stale on read (see _CachedCredential.stale) —
+# fine at current scale since token rotation is infrequent, but unbounded if that changes.
+# Add a sweep rather than assume one exists.
 _cache: dict[str, _CachedCredential] = {}
 _lock = threading.Lock()
 

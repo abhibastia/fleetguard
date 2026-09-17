@@ -379,26 +379,28 @@ need this, platform handles it):**
 **Declarative Automation Bundle — built and deployed 2026-09-10. `databricks.yml` +
 `resources/` are now the deployment mechanism.** What it owns: the App
 (`fleetguard-console`), the pipeline (`fleetguard-bronze-silver`), the AI/BI dashboard, and
-**17 of the 24 `fleetguard-*` jobs** — every job that is live or needed to rebuild from empty.
-The other 8 are deliberately excluded as dead experiments (`lead-time-backtest-v2`,
-`semantic-subdivision` and `embed-backtest-complaints` — the arm I-049 rejected —
-`hybrid-query-test`, `measure-cdf-latency`, `inspect-eval`, `build-backtest-scope`).
-**`create-remaining-tables` was wrongly excluded and was added 2026-09-11** — it creates the
-other ten Lakebase tables, so it is on the rebuild path, and the exclusion left it as the one
-job still running a hand-synced copy, 16 lines behind `main` and missing the `PSYCOPG_IMPL`
-guard (I-098). Bundle YAML is a claim you then have to keep true; rejected
-experiments belong in `src/` and `docs/ISSUES.md`.
-- **All 17 jobs + the pipeline now run bundle-uploaded source** under
+**every `fleetguard-*` job resource under `resources/`** — every job that is live or needed
+to rebuild from empty. `databricks.yml`'s `include:` is the unscoped `resources/*.yml`, so a
+job is bound the moment its `.job.yml` file exists there; **count it by running
+`ls resources/*.job.yml | wc -l` rather than trusting a number written here** — it was **17**
+at 2026-09-11 and is **25** as of 2026-09-17, having grown as new jobs were added. The bundle
+deliberately excludes **7** dead experiments, which have no `resources/*.job.yml` file at all
+and so cannot run: `lead-time-backtest-v2`, `semantic-subdivision`, `embed-backtest-complaints`
+(the arm I-049 rejected), `hybrid-query-test`, `measure-cdf-latency`, `inspect-eval`,
+`build-backtest-scope`. **`create-remaining-tables` was wrongly excluded and was added
+2026-09-11** — it creates the other ten Lakebase tables, so it is on the rebuild path, and the
+exclusion had left it as the one job still running a hand-synced copy, 16 lines behind `main`
+and missing the `PSYCOPG_IMPL` guard (I-098); it is now bound like the rest. Bundle YAML is a
+claim you then have to keep true; rejected experiments belong in `src/` and `docs/ISSUES.md`.
+- **All bound jobs + the pipeline run bundle-uploaded source** under
   `/Workspace/Users/abhisek.bastia17@gmail.com/.bundle/fleetguard/prod/files/`. The old
   hand-synced `/Workspace/Users/…/fleetguard/` tree was what drifted (I-096) and is now
   **DELETED** (2026-09-11). Checked before deleting: all 40 files existed in `git`, 26
   byte-identical and 14 repo-ahead — **nothing was unique to the workspace**. Do not recreate
   it; `bundle deploy` owns the workspace copy of `src/` now.
-  **Consequence, accepted deliberately: the 7 excluded jobs can no longer run** —
-  `build-backtest-scope`, `embed-backtest-complaints`, `hybrid-query-test`, `inspect-eval`,
-  `lead-time-backtest-v2`, `measure-cdf-latency`, `semantic-subdivision`. They were the only
-  things still reading that tree. Their code is in `src/` and unaffected; to run one again,
-  add it to the bundle rather than re-importing by hand.
+  **Consequence, accepted deliberately: the 7 excluded jobs above can no longer run.** They
+  were the only things still reading that tree. Their code is in `src/` and unaffected; to run
+  one again, add it to the bundle rather than re-importing by hand.
 - **One `prod` target, `mode: production`, and no `dev` target — on purpose.**
   `mode: development` name-prefixes every resource (`[dev abhisek] fleetguard-…`) into a
   namespace already holding ~300 jobs from ~296 other students, which breaks the
