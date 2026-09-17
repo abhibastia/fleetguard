@@ -164,6 +164,28 @@ def test_unknown_recall_still_404s_before_the_duplicate_check(monkeypatch):
     assert exc.value.status_code == 404
 
 
+def test_campaign_with_no_exposed_vehicles_in_scope_is_409(monkeypatch):
+    """A recall that exists and has no active duplicate, but whose exposure query returns
+    nothing in this caller's scope, is a 409 — nothing to do — not a silent zero-work-order
+    approval."""
+    cursor = FakeCursor(
+        {
+            "fleetguard_recall_campaign": [
+                {"campaign_id": "21V037000", "component": "BRAKES", "park_it": True}
+            ],
+            "status = 'LAUNCHED'": [],
+            "fleetguard_vehicle_exposure": [],
+        }
+    )
+    install(monkeypatch, approval, cursor)
+
+    with pytest.raises(HTTPException) as exc:
+        approve_campaign(APPROVER, "21V037000", BODY)
+
+    assert exc.value.status_code == 409
+    assert "nothing to do" in exc.value.detail
+
+
 def test_non_approver_is_refused_before_any_database_work(monkeypatch):
     """The 403 must come first — an unauthorised caller should not learn whether a recall
     exists or is already launched. Asserted by making any DB use blow up."""

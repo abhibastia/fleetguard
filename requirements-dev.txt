@@ -12,6 +12,10 @@
 pytest>=9.1
 ruff>=0.16
 
+# Coverage reporting, not run by default in CI's `pytest` invocation — opt in with:
+#   .venv/bin/python -m pytest --cov=app/backend/fleetguard_api --cov=src --cov-report=term-missing
+pytest-cov>=7.0
+
 # Used by tests/test_bundle_resources.py to parse databricks.yml and resources/*.yml. It
 # already arrives transitively through `uvicorn[standard]` above, but a test that imports it
 # directly should say so rather than depend on another package's extras not changing.
