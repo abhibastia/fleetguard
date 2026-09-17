@@ -717,7 +717,7 @@ clean before that PR. Six PRs plus one small standalone commit since the last co
    at *any* container width. Verified live against both the existing full-width usage
    (`Trends.tsx`, unchanged) and the new sidebar (bars now sit flush, no dead space).
 
-9. **Dashboard analytics expansion (`e0f1ecd`, `f703a78`, not yet pushed)** — a repo review
+9. **Dashboard analytics expansion (`e0f1ecd`, `f703a78`, pushed)** — a repo review
    surfaced that `evidence_metrics` was the dashboard's only UC metric view and 4 of 5 pages
    queried gold/silver/CDF tables with raw SQL, with several modeled tables unused anywhere
    (`gold_fleet_depot`, `fleetguard_technician`, `silver_investigation_case` detail). Added:
@@ -741,12 +741,30 @@ clean before that PR. Six PRs plus one small standalone commit since the last co
    updating the bound `fleetguard_overview` dashboard resource in place; the App was
    deliberately not restarted (unrelated to this dashboard-only change).
 
+10. **Test coverage closed: backend 94% -> 99%, frontend 0% -> 84% (`258b464`, `d94c0e3`, pushed)**
+    — asked to maximize test coverage. Backend: 12 new tests for `db.py`'s OBO/Lakebase
+    credential path (previously the weakest-tested and most security-relevant module at 64%),
+    plus the untested main query paths in `work_orders.py`/`approval.py`'s list endpoints,
+    5 `chat.py` agent-proxy error branches, and several small snapshot/health gaps — 365 passed
+    / 24 skipped, up from 301/24 (I-096's count is now stale). Frontend: zero component tests
+    existed before this (only `lib/` utilities were tested) — added `@testing-library/react`
+    + jest-dom + user-event and 140 tests across 22 files covering every view's loading/empty/
+    error/happy-path states. `@vitest/coverage-v8` had to be pinned to `^4.1.11` to match the
+    existing `vitest` version — the unpinned resolve crashed `npm install`. A stale doc comment
+    in `search.tsx` ("this project has no `@testing-library/react`") was caught and fixed in
+    the same commit, since it explained a design choice that is now half-obsolete premise, half
+    still-valid reasoning. Console bundle rebuilt (source map only, no functional diff). Two
+    lines remain deliberately uncovered: the SPA fallback route (needs a real built console
+    directory at import time) and one `chat.py` branch its own comment says "should not fire
+    today" — left as documented gaps rather than forced.
+
 **Headline caveat, same shape as every prior session's note except item 9 above: nothing else
 has been redeployed.** Verified only against `scripts/run_local_static_dev.sh` (local dev server,
-live Lakebase) and Playwright screenshots — see "No end-to-end test" below, which still
-applies word for word to PRs #11–#17, just with a longer list of un-shipped work behind it.
-Item 9's dashboard/metric-view work is the exception: it went through the live bundle deploy
-and was verified against the actual workspace, not just local dev.
+live Lakebase) and Playwright screenshots — see "No end-to-end test" below, which still applies
+word for word to PRs #11–#17, just with a longer list of un-shipped work behind it. Item 9's
+dashboard/metric-view work is the exception: it went through the live bundle deploy and was
+verified against the actual workspace, not just local dev. Item 10 (test coverage) is neither
+deployed nor deployable — it's test code only, and its own suite runs the same everywhere.
 
 **AI Search endpoint is still `DELETED`.** Re-checked live today (`vector-search-endpoints
 list-endpoints`, `serving-endpoints list`, `apps get`), not assumed: **0** fleetguard AI
