@@ -920,7 +920,7 @@ database.
 
 ## 9. Operations
 
-### 9.1 Deployment — the bundle, and the four things it does not cover
+### 9.1 Deployment — the bundle, and the five things it does not cover
 
 Since **2026-09-10** the deployable surface is a **Declarative Automation Bundle**:
 `databricks.yml` plus `resources/`. Before that, every workspace object had been created by
@@ -936,7 +936,7 @@ updates them in place and creates nothing:
 | Databricks App | `fleetguard_console` | `fleetguard-console` |
 | Pipeline | `bronze_silver` | `937b9ce4-4fbe-4493-96ad-b76317bf58db` |
 | AI/BI dashboard | `fleetguard_overview` | `01f1a7257e801a2ebb71bdc18fc2113a` |
-| Jobs | 17 keys | the 17 live / rebuild-from-empty `fleetguard-*` jobs |
+| Jobs | every `resources/*.job.yml` | the live / rebuild-from-empty `fleetguard-*` jobs (25 as of 2026-09-17 — count via `ls resources/*.job.yml \| wc -l` rather than trusting a number written here, it has grown before) |
 
 The other **7** `fleetguard-*` jobs are excluded on purpose — `lead-time-backtest-v2`,
 `semantic-subdivision` and `embed-backtest-complaints` (the semantic arm §6 measured and
@@ -986,12 +986,17 @@ to proceed until it was set.
 **Editing a bound object by hand is silently undone** by the next deploy, which re-asserts
 every bound resource from YAML.
 
-**§8.5's "a single `bundle deploy` produces a consistent environment" has four exceptions**,
+**§8.5's "a single `bundle deploy` produces a consistent environment" has five exceptions**,
 and they should be stated rather than the claim repeated: **Lakebase CDF** (UI-only, not a
 bundle resource — I-017), the **AI Search endpoint and index** (created by
 `00_create_all_objects.py`, kept manual because they are the only recurring cost), the
-**agent serving endpoint** (`agents.deploy()` in `src/agent/15_deploy_agent.py`), and the
-**`evidence_metrics` metric view** (SQL Statement REST API, I-065).
+**agent serving endpoint** (`agents.deploy()` in `src/agent/15_deploy_agent.py`), the
+**`evidence_metrics` metric view** (SQL Statement REST API, I-065), and the
+**`fleet_exposure_metrics` metric view** added 2026-09-17 (same manual path).
+The `dashboards/metric_views/*.sql` files in git are the source of truth for both; the CLI
+wrapper `databricks experimental aitools tools query` was found to mangle multi-line YAML
+arguments when deploying the second one, so use the raw `/api/2.0/sql/statements` REST API
+(`databricks api post /api/2.0/sql/statements --json <payload>`) instead.
 
 **CI does not deploy and holds no credentials.** `bundle validate` cannot run offline —
 measured with an empty config file, it fails on `default auth: cannot configure default

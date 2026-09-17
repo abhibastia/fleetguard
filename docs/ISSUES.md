@@ -28,6 +28,39 @@ no error and passed the obvious check.
 
 ## Tooling / process
 
+### I-103 — `databricks experimental aitools tools query` silently mangles multi-line metric-view YAML
+*Date:* 2026-09-17 · *Status:* **resolved (workaround)**
+
+**Found while** deploying a new UC metric view (`fleet_exposure_metrics.sql`, styled after
+`evidence_metrics.sql`) via `SQL=$(cat file); databricks experimental aitools tools query "$SQL"
+--profile abhi`, the same pattern this project has used before for `evidence_metrics`.
+
+**Symptom.** `BAD_REQUEST [METRIC_VIEW_INVALID_VIEW_DEFINITION] ... expected <block end>, but
+found '-' ... line 9, column 1: - name: Segment`, even though the embedded YAML parsed cleanly
+with `python3 -c "import yaml; yaml.safe_load(...)"` run against the exact same file locally.
+**The error was byte-identical across multiple edits** — removing all `--` characters from
+comments (in case the SQL tokenizer was treating them as line-comments inside the `$$...$$`
+dollar-quoted block), and removing a blank line between YAML list items, both produced the
+*exact same* line/column and error text, even though the file's line count and content
+genuinely changed between attempts (confirmed via `wc -l` and `md5` before each retry). A
+correct fix cannot produce an unchanged error; this was the signal the CLI wrapper, not the
+YAML, was the problem.
+
+**Resolution.** Bypassed the wrapper entirely — built the JSON payload
+(`{"warehouse_id": ..., "statement": <file contents>, "wait_timeout": "30s"}`) with Python and
+posted it directly: `databricks api post /api/2.0/sql/statements --profile abhi --json @payload.json`.
+Succeeded on the first attempt with the unmodified file. Root cause in the wrapper itself
+(`experimental aitools tools query`'s argument handling for long multi-line strings) not
+isolated further — out of scope to debug a vendored CLI subcommand — but the workaround is
+now the documented path for any *new* metric view; `evidence_metrics.sql`'s original
+successful deploy (I-065) apparently didn't hit this because it never had a comment field long
+or complex enough to trigger it, not because the wrapper is reliable for this command shape.
+
+**Lesson.** An unchanged error message across genuinely different inputs is itself a finding —
+it means the tool isn't looking at what you think it's looking at. Don't keep editing the
+suspected-bad file; switch to a lower-level tool (the raw REST API, here) to see the real
+input/output first.
+
 ### I-102 — `BarChart`'s fixed CSS height broke its own aspect ratio in a narrower container
 *Date:* 2026-09-17 · *Status:* **resolved**
 

@@ -1,6 +1,6 @@
 # FleetGuard — project status
 
-**Last updated:** 2026-09-14 · **MVP target: 7 September — MET** · **Demo: 25–30 September**
+**Last updated:** 2026-09-17 · **MVP target: 7 September — MET** · **Demo: 25–30 September**
 
 > **NO END-TO-END TEST WITH BILLABLE RESOURCES SINCE 2026-09-11.** Six PRs merged on 2026-09-14
 > (`watch_campaign`, persona/dashboard, a 32-finding UI/UX pass, follow-up polish, the sidebar
@@ -717,11 +717,36 @@ clean before that PR. Six PRs plus one small standalone commit since the last co
    at *any* container width. Verified live against both the existing full-width usage
    (`Trends.tsx`, unchanged) and the new sidebar (bars now sit flush, no dead space).
 
-**Headline caveat, same shape as every prior session's note: nothing above has been
-redeployed.** Verified only against `scripts/run_local_static_dev.sh` (local dev server,
+9. **Dashboard analytics expansion (`e0f1ecd`, `f703a78`, not yet pushed)** — a repo review
+   surfaced that `evidence_metrics` was the dashboard's only UC metric view and 4 of 5 pages
+   queried gold/silver/CDF tables with raw SQL, with several modeled tables unused anywhere
+   (`gold_fleet_depot`, `fleetguard_technician`, `silver_investigation_case` detail). Added:
+   a depot exposure-risk table and a technician-workload table (Operations), a 777-row
+   backtest-population case-detail table (Evidence), a signal-to-depot exposure table
+   (Emerging Signals), and a second metric view `fleet_exposure_metrics` (sourced from
+   `gold_fleet_exposure`), which the Overview page's 3 KPI counters now read via `MEASURE(...)`
+   instead of raw SQL — migrated values confirmed identical to the pre-migration ones live.
+   Two pre-flight checks changed the design from what was first proposed: the `assigned_to`/
+   `technician_id` join key was confirmed live (not assumed) before committing to it, and the
+   signal-exposure widget was found to be **structurally always-empty** if filtered on
+   `is_live = true` — every signal with real fleet overlap (RAM PROMASTER, RAM 2500,
+   CHEVROLET SILVERADO 1500, TOYOTA TUNDRA) is historical, while the 9 currently-live signals
+   are all consumer vehicles with zero overlap with this commercial fleet — so the filter was
+   changed to `fleet_vehicles > 0` (an existing column) instead, confirmed non-empty.
+   Also found: the CLI wrapper `databricks experimental aitools tools query` silently mangled
+   the new metric view's multi-line YAML argument on every attempt, producing an identical
+   wrong parse error regardless of what the file actually contained — worked around by using
+   the raw `/api/2.0/sql/statements` REST API for that one statement. **This is the one PR in
+   this note that WAS deployed live** — `./scripts/deploy.sh abhi prod` ran after committing,
+   updating the bound `fleetguard_overview` dashboard resource in place; the App was
+   deliberately not restarted (unrelated to this dashboard-only change).
+
+**Headline caveat, same shape as every prior session's note except item 9 above: nothing else
+has been redeployed.** Verified only against `scripts/run_local_static_dev.sh` (local dev server,
 live Lakebase) and Playwright screenshots — see "No end-to-end test" below, which still
-applies word for word to this session's work, just with a longer list of un-shipped PRs
-behind it.
+applies word for word to PRs #11–#17, just with a longer list of un-shipped work behind it.
+Item 9's dashboard/metric-view work is the exception: it went through the live bundle deploy
+and was verified against the actual workspace, not just local dev.
 
 **AI Search endpoint is still `DELETED`.** Re-checked live today (`vector-search-endpoints
 list-endpoints`, `serving-endpoints list`, `apps get`), not assumed: **0** fleetguard AI
