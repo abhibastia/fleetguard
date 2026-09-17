@@ -5,12 +5,15 @@
       "displayName": "Overview KPIs",
       "name": "ds_overview_kpis",
       "queryLines": [
-        "SELECT\n",
-        "  (SELECT COUNT(*) FROM gold_fleet_vehicle) AS fleet_size,\n",
-        "  (SELECT COUNT(DISTINCT vin) FROM gold_fleet_exposure) AS vehicles_exposed,\n",
-        "  (SELECT COUNT(DISTINCT campaign_number) FROM gold_fleet_exposure) AS open_campaigns,\n",
-        "  (SELECT COUNT(DISTINCT campaign_number) FROM gold_fleet_exposure WHERE park_it OR do_not_drive) AS urgent_campaigns"
+        "SELECT (SELECT COUNT(*) FROM gold_fleet_vehicle) AS fleet_size"
       ],
+      "schema": "fleetguard"
+    },
+    {
+      "asset_name": "bootcamp_students.fleetguard.fleet_exposure_metrics",
+      "catalog": "bootcamp_students",
+      "displayName": "Fleet exposure metrics (governed)",
+      "name": "ds_fleet_exposure_metrics",
       "schema": "fleetguard"
     },
     {
@@ -157,6 +160,42 @@
         "WITH usage AS (SELECT databricks_request_id, execution_duration_ms, status_code, SUBSTR(response, INSTR(response, 'mlflow.trace.tokenUsage'), 200) AS tu FROM fleetguard_agent_payload) SELECT a.action_id, a.tool, a.actor_principal, a.on_behalf_of, a.trace_id, u.execution_duration_ms, u.status_code, CAST(regexp_extract(u.tu, 'input_tokens[^0-9]+([0-9]+)', 1) AS INT) AS input_tokens, CAST(regexp_extract(u.tu, 'output_tokens[^0-9]+([0-9]+)', 1) AS INT) AS output_tokens, CAST(regexp_extract(u.tu, 'total_tokens[^0-9]+([0-9]+)', 1) AS INT) AS total_tokens, CASE WHEN a.trace_id IS NULL THEN 'not traced (pre E-03)' ELSE 'traced' END AS trace_state FROM gold_agent_action a LEFT JOIN usage u ON u.databricks_request_id = a.trace_id "
       ],
       "schema": "fleetguard"
+    },
+    {
+      "catalog": "bootcamp_students",
+      "displayName": "Depot exposure risk",
+      "name": "ds_depot_risk",
+      "queryLines": [
+        "SELECT d.depot_id, d.depot_name, d.region, d.city, COUNT(DISTINCT e.vin) AS vehicles_exposed, COUNT(DISTINCT e.campaign_number) AS distinct_campaigns, COUNT(DISTINCT CASE WHEN e.park_it OR e.do_not_drive THEN e.campaign_number END) AS urgent_campaigns FROM gold_fleet_exposure e JOIN gold_fleet_depot d ON d.depot_id = e.depot_id GROUP BY d.depot_id, d.depot_name, d.region, d.city ORDER BY vehicles_exposed DESC "
+      ],
+      "schema": "fleetguard"
+    },
+    {
+      "catalog": "bootcamp_students",
+      "displayName": "Technician workload (live, via CDF)",
+      "name": "ds_ops_technicians",
+      "queryLines": [
+        "WITH tech AS (SELECT technician_id, name, depot_id, active FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY technician_id ORDER BY _sort_by DESC) AS rn FROM bootcamp_students.bootcamp_cdc.lb_fleetguard_technician_history WHERE _pg_change_type <> 'update_preimage') WHERE rn = 1 AND _pg_change_type <> 'delete' ), wo AS (SELECT wo_id, assigned_to, status, due_date FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY wo_id ORDER BY _sort_by DESC) AS rn FROM bootcamp_students.bootcamp_cdc.lb_fleetguard_work_order_history WHERE _pg_change_type <> 'update_preimage') WHERE rn = 1 AND _pg_change_type <> 'delete' ) SELECT t.technician_id, t.name, t.depot_id, t.active, COUNT(w.wo_id) FILTER (WHERE w.status NOT IN ('COMPLETED','CANCELLED')) AS open_work_orders, COUNT(w.wo_id) FILTER (WHERE w.status NOT IN ('COMPLETED','CANCELLED') AND w.due_date < current_date()) AS overdue_work_orders FROM tech t LEFT JOIN wo w ON w.assigned_to = t.technician_id GROUP BY t.technician_id, t.name, t.depot_id, t.active ORDER BY open_work_orders DESC "
+      ],
+      "schema": "fleetguard"
+    },
+    {
+      "catalog": "bootcamp_students",
+      "displayName": "Backtest population case detail",
+      "name": "ds_evidence_case_detail",
+      "queryLines": [
+        "SELECT action_number, open_date, campaign_number, led_to_recall, distinct_makes, model_year_min, model_year_max, subject FROM silver_investigation_case WHERE open_date >= '2010-01-01' ORDER BY open_date DESC"
+      ],
+      "schema": "fleetguard"
+    },
+    {
+      "catalog": "bootcamp_students",
+      "displayName": "Signal-to-depot exposure (approximate)",
+      "name": "ds_signal_depot_exposure",
+      "queryLines": [
+        "WITH exposure_by_make_model AS (SELECT make, model, depot_id, COUNT(DISTINCT vin) AS vehicles_at_risk FROM gold_fleet_exposure GROUP BY make, model, depot_id) SELECT s.series_key, s.make, s.model, s.comp_top, dep.depot_id, dep.depot_name, dep.region, e.vehicles_at_risk FROM gold_emerging_signal s JOIN exposure_by_make_model e ON e.make = s.make AND e.model = s.model JOIN gold_fleet_depot dep ON dep.depot_id = e.depot_id WHERE s.fleet_vehicles > 0 ORDER BY e.vehicles_at_risk DESC"
+      ],
+      "schema": "fleetguard"
     }
   ],
   "pages": [
@@ -248,12 +287,12 @@
               {
                 "name": "main_query",
                 "query": {
-                  "datasetName": "ds_overview_kpis",
-                  "disaggregated": true,
+                  "datasetName": "ds_fleet_exposure_metrics",
+                  "disaggregated": false,
                   "fields": [
                     {
-                      "expression": "`vehicles_exposed`",
-                      "name": "vehicles_exposed"
+                      "expression": "MEASURE(`Vehicles Exposed`)",
+                      "name": "measure(Vehicles Exposed)"
                     }
                   ]
                 }
@@ -263,7 +302,7 @@
               "encodings": {
                 "value": {
                   "displayName": "Vehicles with open exposure",
-                  "fieldName": "vehicles_exposed"
+                  "fieldName": "measure(Vehicles Exposed)"
                 }
               },
               "frame": {
@@ -288,12 +327,12 @@
               {
                 "name": "main_query",
                 "query": {
-                  "datasetName": "ds_overview_kpis",
-                  "disaggregated": true,
+                  "datasetName": "ds_fleet_exposure_metrics",
+                  "disaggregated": false,
                   "fields": [
                     {
-                      "expression": "`open_campaigns`",
-                      "name": "open_campaigns"
+                      "expression": "MEASURE(`Open Campaigns`)",
+                      "name": "measure(Open Campaigns)"
                     }
                   ]
                 }
@@ -303,7 +342,7 @@
               "encodings": {
                 "value": {
                   "displayName": "Open campaigns matched to fleet",
-                  "fieldName": "open_campaigns"
+                  "fieldName": "measure(Open Campaigns)"
                 }
               },
               "frame": {
@@ -328,12 +367,12 @@
               {
                 "name": "main_query",
                 "query": {
-                  "datasetName": "ds_overview_kpis",
-                  "disaggregated": true,
+                  "datasetName": "ds_fleet_exposure_metrics",
+                  "disaggregated": false,
                   "fields": [
                     {
-                      "expression": "`urgent_campaigns`",
-                      "name": "urgent_campaigns"
+                      "expression": "MEASURE(`Urgent Campaigns`)",
+                      "name": "measure(Urgent Campaigns)"
                     }
                   ]
                 }
@@ -343,7 +382,7 @@
               "encodings": {
                 "value": {
                   "displayName": "Park It / Do Not Drive campaigns",
-                  "fieldName": "urgent_campaigns"
+                  "fieldName": "measure(Urgent Campaigns)"
                 }
               },
               "frame": {
@@ -1139,10 +1178,226 @@
         },
         {
           "position": {
-            "height": 2,
+            "height": 1,
             "width": 12,
             "x": 0,
             "y": 22
+          },
+          "widget": {
+            "multilineTextboxSpec": {
+              "lines": [
+                "## Depot risk\n"
+              ]
+            },
+            "name": "ops-h-depot-risk"
+          }
+        },
+        {
+          "position": {
+            "height": 5,
+            "width": 12,
+            "x": 0,
+            "y": 23
+          },
+          "widget": {
+            "name": "ops-depot-risk-table",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_depot_risk",
+                  "disaggregated": true,
+                  "fields": [
+                    {
+                      "expression": "`depot_id`",
+                      "name": "depot_id"
+                    },
+                    {
+                      "expression": "`depot_name`",
+                      "name": "depot_name"
+                    },
+                    {
+                      "expression": "`region`",
+                      "name": "region"
+                    },
+                    {
+                      "expression": "`city`",
+                      "name": "city"
+                    },
+                    {
+                      "expression": "`vehicles_exposed`",
+                      "name": "vehicles_exposed"
+                    },
+                    {
+                      "expression": "`distinct_campaigns`",
+                      "name": "distinct_campaigns"
+                    },
+                    {
+                      "expression": "`urgent_campaigns`",
+                      "name": "urgent_campaigns"
+                    }
+                  ],
+                  "orders": [
+                    {
+                      "direction": "DESC",
+                      "expression": "`vehicles_exposed`"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "encodings": {
+                "columns": [
+                  {
+                    "displayName": "Depot",
+                    "fieldName": "depot_id"
+                  },
+                  {
+                    "displayName": "Name",
+                    "fieldName": "depot_name"
+                  },
+                  {
+                    "displayName": "Region",
+                    "fieldName": "region"
+                  },
+                  {
+                    "displayName": "City",
+                    "fieldName": "city"
+                  },
+                  {
+                    "displayName": "Vehicles exposed",
+                    "fieldName": "vehicles_exposed"
+                  },
+                  {
+                    "displayName": "Distinct campaigns",
+                    "fieldName": "distinct_campaigns"
+                  },
+                  {
+                    "displayName": "Urgent campaigns",
+                    "fieldName": "urgent_campaigns"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Depot exposure risk"
+              },
+              "version": 2,
+              "widgetType": "table"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 1,
+            "width": 12,
+            "x": 0,
+            "y": 28
+          },
+          "widget": {
+            "multilineTextboxSpec": {
+              "lines": [
+                "## Technician workload\n"
+              ]
+            },
+            "name": "ops-h-technicians"
+          }
+        },
+        {
+          "position": {
+            "height": 5,
+            "width": 12,
+            "x": 0,
+            "y": 29
+          },
+          "widget": {
+            "name": "ops-technicians-table",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_ops_technicians",
+                  "disaggregated": true,
+                  "fields": [
+                    {
+                      "expression": "`technician_id`",
+                      "name": "technician_id"
+                    },
+                    {
+                      "expression": "`name`",
+                      "name": "name"
+                    },
+                    {
+                      "expression": "`depot_id`",
+                      "name": "depot_id"
+                    },
+                    {
+                      "expression": "`active`",
+                      "name": "active"
+                    },
+                    {
+                      "expression": "`open_work_orders`",
+                      "name": "open_work_orders"
+                    },
+                    {
+                      "expression": "`overdue_work_orders`",
+                      "name": "overdue_work_orders"
+                    }
+                  ],
+                  "orders": [
+                    {
+                      "direction": "DESC",
+                      "expression": "`open_work_orders`"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "encodings": {
+                "columns": [
+                  {
+                    "displayName": "Technician",
+                    "fieldName": "technician_id"
+                  },
+                  {
+                    "displayName": "Name",
+                    "fieldName": "name"
+                  },
+                  {
+                    "displayName": "Depot",
+                    "fieldName": "depot_id"
+                  },
+                  {
+                    "displayName": "Active",
+                    "fieldName": "active"
+                  },
+                  {
+                    "displayName": "Open work orders",
+                    "fieldName": "open_work_orders"
+                  },
+                  {
+                    "displayName": "Overdue",
+                    "fieldName": "overdue_work_orders"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Technician workload"
+              },
+              "version": 2,
+              "widgetType": "table"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 2,
+            "width": 12,
+            "x": 0,
+            "y": 34
           },
           "widget": {
             "multilineTextboxSpec": {
@@ -1160,7 +1415,7 @@
             "height": 4,
             "width": 12,
             "x": 0,
-            "y": 24
+            "y": 36
           },
           "widget": {
             "name": "ops-agent-table",
@@ -1663,6 +1918,142 @@
               "widgetType": "table"
             }
           }
+        },
+        {
+          "position": {
+            "height": 1,
+            "width": 12,
+            "x": 0,
+            "y": 21
+          },
+          "widget": {
+            "multilineTextboxSpec": {
+              "lines": [
+                "## Depot exposure if a signal becomes a campaign\n"
+              ]
+            },
+            "name": "signals-h-depot-exposure"
+          }
+        },
+        {
+          "position": {
+            "height": 1,
+            "width": 12,
+            "x": 0,
+            "y": 22
+          },
+          "widget": {
+            "multilineTextboxSpec": {
+              "lines": [
+                "Approximate — matched on make/model text since no campaign exists yet for a signal that hasn't become one (unlike the exact VIN-level matches used elsewhere in this dashboard). Treat as directional, not authoritative. Scoped to signals with known fleet relevance (fleet_vehicles > 0), not just currently-live ones — the signals currently live have no fleet overlap today."
+              ]
+            },
+            "name": "signals-depot-exposure-caption"
+          }
+        },
+        {
+          "position": {
+            "height": 7,
+            "width": 12,
+            "x": 0,
+            "y": 23
+          },
+          "widget": {
+            "name": "signals-depot-exposure-table",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_signal_depot_exposure",
+                  "disaggregated": true,
+                  "fields": [
+                    {
+                      "expression": "`series_key`",
+                      "name": "series_key"
+                    },
+                    {
+                      "expression": "`make`",
+                      "name": "make"
+                    },
+                    {
+                      "expression": "`model`",
+                      "name": "model"
+                    },
+                    {
+                      "expression": "`comp_top`",
+                      "name": "comp_top"
+                    },
+                    {
+                      "expression": "`depot_id`",
+                      "name": "depot_id"
+                    },
+                    {
+                      "expression": "`depot_name`",
+                      "name": "depot_name"
+                    },
+                    {
+                      "expression": "`region`",
+                      "name": "region"
+                    },
+                    {
+                      "expression": "`vehicles_at_risk`",
+                      "name": "vehicles_at_risk"
+                    }
+                  ],
+                  "orders": [
+                    {
+                      "direction": "DESC",
+                      "expression": "`vehicles_at_risk`"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "encodings": {
+                "columns": [
+                  {
+                    "displayName": "Series",
+                    "fieldName": "series_key"
+                  },
+                  {
+                    "displayName": "Make",
+                    "fieldName": "make"
+                  },
+                  {
+                    "displayName": "Model",
+                    "fieldName": "model"
+                  },
+                  {
+                    "displayName": "Component",
+                    "fieldName": "comp_top"
+                  },
+                  {
+                    "displayName": "Depot",
+                    "fieldName": "depot_id"
+                  },
+                  {
+                    "displayName": "Depot name",
+                    "fieldName": "depot_name"
+                  },
+                  {
+                    "displayName": "Region",
+                    "fieldName": "region"
+                  },
+                  {
+                    "displayName": "Vehicles at risk",
+                    "fieldName": "vehicles_at_risk"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Fleet-relevant signals — depot exposure"
+              },
+              "version": 2,
+              "widgetType": "table"
+            }
+          }
         }
       ],
       "layoutVersion": "GRID_V1",
@@ -2070,6 +2461,142 @@
               ]
             },
             "name": "stated-limits"
+          }
+        },
+        {
+          "position": {
+            "height": 1,
+            "width": 12,
+            "x": 0,
+            "y": 15
+          },
+          "widget": {
+            "multilineTextboxSpec": {
+              "lines": [
+                "## Backtest population detail\n"
+              ]
+            },
+            "name": "evidence-h-case-detail"
+          }
+        },
+        {
+          "position": {
+            "height": 1,
+            "width": 12,
+            "x": 0,
+            "y": 16
+          },
+          "widget": {
+            "multilineTextboxSpec": {
+              "lines": [
+                "Case metadata only — substantiates the 777-case backtest population size and composition shown in the KPIs above. It does not carry a per-case detected/lead-days outcome; that exists only at the arm level, in the metric view above."
+              ]
+            },
+            "name": "evidence-case-detail-caption"
+          }
+        },
+        {
+          "position": {
+            "height": 7,
+            "width": 12,
+            "x": 0,
+            "y": 17
+          },
+          "widget": {
+            "name": "evidence-case-detail-table",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_evidence_case_detail",
+                  "disaggregated": true,
+                  "fields": [
+                    {
+                      "expression": "`action_number`",
+                      "name": "action_number"
+                    },
+                    {
+                      "expression": "`open_date`",
+                      "name": "open_date"
+                    },
+                    {
+                      "expression": "`campaign_number`",
+                      "name": "campaign_number"
+                    },
+                    {
+                      "expression": "`led_to_recall`",
+                      "name": "led_to_recall"
+                    },
+                    {
+                      "expression": "`distinct_makes`",
+                      "name": "distinct_makes"
+                    },
+                    {
+                      "expression": "`model_year_min`",
+                      "name": "model_year_min"
+                    },
+                    {
+                      "expression": "`model_year_max`",
+                      "name": "model_year_max"
+                    },
+                    {
+                      "expression": "`subject`",
+                      "name": "subject"
+                    }
+                  ],
+                  "orders": [
+                    {
+                      "direction": "DESC",
+                      "expression": "`open_date`"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "encodings": {
+                "columns": [
+                  {
+                    "displayName": "Action #",
+                    "fieldName": "action_number"
+                  },
+                  {
+                    "displayName": "Open date",
+                    "fieldName": "open_date"
+                  },
+                  {
+                    "displayName": "Campaign #",
+                    "fieldName": "campaign_number"
+                  },
+                  {
+                    "displayName": "Led to recall",
+                    "fieldName": "led_to_recall"
+                  },
+                  {
+                    "displayName": "Distinct makes",
+                    "fieldName": "distinct_makes"
+                  },
+                  {
+                    "displayName": "Model year min",
+                    "fieldName": "model_year_min"
+                  },
+                  {
+                    "displayName": "Model year max",
+                    "fieldName": "model_year_max"
+                  },
+                  {
+                    "displayName": "Subject",
+                    "fieldName": "subject"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Backtest population — 777 investigations opened 2010+"
+              },
+              "version": 2,
+              "widgetType": "table"
+            }
           }
         }
       ],
