@@ -1,6 +1,6 @@
 # FleetGuard — project status
 
-**Last updated:** 2026-09-17 · **MVP target: 7 September — MET** · **Demo: 25–30 September**
+**Last updated:** 2026-09-18 · **MVP target: 7 September — MET** · **Demo: 25–30 September**
 
 > **NO END-TO-END TEST WITH BILLABLE RESOURCES SINCE 2026-09-11.** Six PRs merged on 2026-09-14
 > (`watch_campaign`, persona/dashboard, a 32-finding UI/UX pass, follow-up polish, the sidebar
@@ -758,6 +758,9 @@ clean before that PR. Six PRs plus one small standalone commit since the last co
     directory at import time) and one `chat.py` branch its own comment says "should not fire
     today" — left as documented gaps rather than forced.
 
+11. **AI Search rebuild attempted and abandoned (I-105, 2026-09-18)** — see the "AI Search
+    endpoint" note above. No code changed; this is a workspace-state note only.
+
 **Headline caveat, same shape as every prior session's note except item 9 above: nothing else
 has been redeployed.** Verified only against `scripts/run_local_static_dev.sh` (local dev server,
 live Lakebase) and Playwright screenshots — see "No end-to-end test" below, which still applies
@@ -766,13 +769,21 @@ dashboard/metric-view work is the exception: it went through the live bundle dep
 verified against the actual workspace, not just local dev. Item 10 (test coverage) is neither
 deployed nor deployable — it's test code only, and its own suite runs the same everywhere.
 
-**AI Search endpoint is still `DELETED`.** Re-checked live today (`vector-search-endpoints
-list-endpoints`, `serving-endpoints list`, `apps get`), not assumed: **0** fleetguard AI
-Search endpoints, agent serving endpoint `ready: NOT_READY`, App `compute_status: STOPPED` —
-all three unchanged from the last recorded state, none touched this session. Consequence
-unchanged: **any** run of `14_fleetguard_agent.py`'s smoke-test cells still fails immediately
-on `search_complaints`, before reaching any tool added since. Recreating it is a cost/timing
-call for whoever is about to demo, not something to do reflexively.
+**AI Search endpoint is `DELETED` again — a real attempt to rebuild it was made and abandoned
+2026-09-18 (I-105).** `fleetguard-vs` (STANDARD) + `complaint_chunk_idx` (DELTA_SYNC from
+`silver_complaint_chunk`, `columns_to_sync` = exactly what `search_complaints` requests) were
+created and synced for ~7h, reaching 62% (1,366,650 / 2,196,091 rows) — then the sync failed
+fatally on a transient timeout calling the embedding gateway, and the platform's own
+`RETRY_ON_FAILURE` restarted the sync **from row zero**, not from a checkpoint. Rather than pay
+for a second ~7h attempt right now, the index and endpoint were deleted again
+(`vector-search-indexes delete-index`, `vector-search-endpoints delete-endpoint`, both
+confirmed via `list-endpoints` showing no `fleetguard-*` entry). **v6 is still the latest
+registered/served agent model — `watch_campaign` was never smoke-tested or re-registered.**
+Consequence unchanged: **any** run of `14_fleetguard_agent.py`'s smoke-test cells still fails
+immediately on `search_complaints`, before reaching any tool added since. The full plan for a
+real end-to-end pass (create → register v7 → deploy → App dry run → teardown) is saved at
+`/Users/sunita/.claude/plans/go-ahead-with-high-bubbly-breeze.md` for the next attempt, ideally
+timed close to the actual submission date and with a buffer for a possible mid-sync restart.
 
 #### No end-to-end test with billable resources this session — read this before assuming anything is live
 

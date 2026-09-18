@@ -28,6 +28,45 @@ no error and passed the obvious check.
 
 ## Tooling / process
 
+### I-105 — AI Search initial sync restarted from scratch after a transient embedding-gateway timeout, ~7h into the run
+*Date:* 2026-09-18 · *Status:* **watch**
+
+**Found while** running Phase A of the one-time end-to-end test (create `fleetguard-vs` +
+`complaint_chunk_idx`, DELTA_SYNC from `silver_complaint_chunk`, 2,196,091 rows). Progress was
+polled every ~45 min via `get-index`'s `status.indexed_row_count` (never the CLI exit code, per
+I-043) and climbed steadily: 54,650 → 179,450 → 329,650 → 453,250 → 641,650 → 883,250 →
+1,045,850 → 1,212,850 → 1,366,650 (62.2%, ~7h07m after endpoint creation).
+
+**Symptom.** The next poll showed `indexed_row_count: 82,050` — a large *drop*, not a stall.
+`pipelines list-pipeline-events` on the index's underlying pipeline showed the original update
+(`bba800...`) failed fatally at 18:19:54 UTC: `java.util.concurrent.TimeoutException: Timed out
+with exception after 3 attempts. Last exception is: Read timed out`, thrown from
+`BrickIndexGatewayClient.makePredictions` while calling the embedding model-serving endpoint
+(`databricks-gte-large-en`) to resolve flow `__online_index_view`. The platform's own
+`RETRY_ON_FAILURE` policy immediately started a **new** update (`6fd721...`), which began
+**re-syncing from row zero** rather than resuming from the last committed offset — the 82,050
+reading was that new update's own early progress, not a partial rollback of the old one.
+
+**Root cause.** A single transient timeout calling the managed embedding endpoint, deep inside
+platform-internal retry logic (3 attempts already exhausted before the fatal error surfaced).
+Not caused by anything in this project's config — `columns_to_sync`, `embedding_source_columns`,
+`pipeline_type: TRIGGERED` were all unchanged from creation. Whether Delta Sync initial-sync
+updates are checkpointed at all, or are all-or-nothing per update, is not documented anywhere
+found so far — behavior observed here is "all-or-nothing": ~85% of the work already done was
+discarded.
+
+**Cost impact.** At ~$6.72/day (STANDARD, 1 unit) the failed 7h attempt cost nothing extra in
+endpoint-uptime terms (the endpoint kept running into the retry), but the ~7h of embedding-model
+inference for 1.37M already-processed rows was redone from scratch — roughly doubling the
+one-off embedding compute cost for this sync, and pushing wall-clock completion back by the
+full elapsed time already spent.
+
+**Lesson.** Don't assume steady `indexed_row_count` progress is monotonic across a long initial
+sync — poll for *drops*, not just plateaus, and check `pipelines list-pipeline-events` (not just
+`get-index`) the moment a reading goes backward, since the index API itself gives no indication
+a restart happened. For a run this long, a mid-sync transient failure should be treated as
+expected, not exceptional.
+
 ### I-104 — `spark.createDataFrame(list_of_dicts)` crashes under pyspark 3.5.9 + Python 3.14
 *Date:* 2026-09-17 · *Status:* **resolved (workaround)**
 
