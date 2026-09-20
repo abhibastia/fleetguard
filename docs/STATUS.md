@@ -1,6 +1,45 @@
 # FleetGuard — project status
 
-**Last updated:** 2026-09-18 · **MVP target: 7 September — MET** · **Demo: 25–30 September**
+## SESSION 2026-09-20 — five PRs merged, four rubric gaps closed, three bugs fixed
+
+**Submission moved to 4 October.** The capstone rubric (`capstone-submission-requirement.pdf`,
+8 categories / 100 points) was read and checked against the repo and the live workspace. Every
+category is built; the work below closed the gaps that did **not** depend on AI Search or the
+agent endpoint, so the later live pass is "turn it on and screenshot it" rather than "turn it
+on and start building".
+
+| PR | Closes | Verified live |
+|---|---|---|
+| Retry/validation/gate on the NHTSA APIs (`src/fleetguard/http_retry.py`, 59 tests) | cat. 2 | 200/200 combos ok in 102 s, 2,122 campaign rows; gate tripped deliberately left `gold_recall_alert` at Delta v1 |
+| 14 foreign keys + I-107 | cat. 3 | all 14 FKs, 14/14 tables `REPLICA IDENTITY FULL`, 14/14 CDF history tables |
+| Incremental CDF→gold + 2 activity rollups | cat. 5 | trigger fired unattended for an insert *and* a delete; tombstone applied, key not resurrected |
+| Recall API console tab + 20 screenshots + `docs/EVIDENCE.md` | cat. 2, evidence gap | route serves live Lakebase; screenshots regenerated from live data |
+| Three fixes from an external review (I-109) | cat. 4 | offline; the agent half needs a redeploy |
+
+**Three defects found along the way, none previously known:**
+
+- **I-107** — `fleetguard_depot_assignment` was created without `REPLICA IDENTITY FULL` and
+  **had never replicated**: 13 CDF history tables existed while three documents asserted 14.
+  The missing *assertion* was the root cause — three of four creation scripts had it. Fixed at
+  the root, and the invariant is now checked across the whole schema in one pass.
+- **I-108** — a CDF capture took **212–245 s**, against the 7.1–15.6 s this project quotes from
+  n=3. Both are real; **neither is a bound**. Recorded rather than dismissed as an outlier.
+- **I-109** — an external review found a genuine write-path bug: an action envelope collected
+  mid-loop still executed when the agent's 6-round loop exhausted without a final answer.
+  Also: a model-asserted `complaint_count` was rendered as a measurement, and `Infinity`
+  silently cleared a logged cost. One of its four claims was **rejected** — a documented
+  decision it had read past.
+
+**Also corrected:** I-044's "CDF destinations appear at `CREATE TABLE`, not on first write" is
+**not universal** — for a table never written to, only the first actual write created the
+destination.
+
+**Unchanged and still the critical path:** the AI Search index is deleted, the agent endpoint
+is `DEPLOYMENT_STOPPED`, and the App is stopped and has not been redeployed since 2026-09-14.
+`docs/EVIDENCE.md` states what each of those costs to restore. **Two of this session's fixes
+(the agent loop and the tool schema) only take effect on the next `agents.deploy()`.**
+
+**Last updated:** 2026-09-20 · previously 2026-09-18 · **MVP target: 7 September — MET** · **Demo: 25–30 September**
 
 > **NO END-TO-END TEST WITH BILLABLE RESOURCES SINCE 2026-09-11.** Six PRs merged on 2026-09-14
 > (`watch_campaign`, persona/dashboard, a 32-finding UI/UX pass, follow-up polish, the sidebar
