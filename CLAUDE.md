@@ -543,3 +543,11 @@ claim you then have to keep true; rejected experiments belong in `src/` and `doc
   console bundle committed at `app/backend/fleetguard_api/console/` is what the Databricks App
   actually serves — no Node runs on the Apps runtime — so an un-rebuilt bundle ships stale UI
   while every test still passes.
+- **Screenshots are generated, gitignored, and belong to the submission zip — not to git.**
+  `docs/screenshots/` is build output from `scripts/capture_screenshots.py` (needs
+  `scripts/run_local_static_dev.sh 8811` running against live Lakebase; ~1 min for 20 images,
+  both themes). They were committed once and that was reversed: images go stale the moment the
+  UI changes, and a stale screenshot still looks like evidence. **Generate them last**, after
+  the App redeploy, so they match the code being submitted. An empty `docs/screenshots/` on a
+  cold start is the expected state. Full sequence in `docs/STATUS.md` → *Picking this up cold*;
+  what each screenshot is evidence *for* is in `docs/EVIDENCE.md`.

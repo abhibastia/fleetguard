@@ -1,14 +1,19 @@
-"""Capture the console's views as committed screenshots.
+"""Capture the console's views as screenshots, for the submission zip.
 
-**Why these are committed rather than taken on demand.** The demo surfaces are asleep
-between sessions by design — the Databricks App is stopped, the agent endpoint is scaled to
-zero or stopped, and the AI Search index is deleted to cap billing. A reviewer opening the
-repo cold cannot see the product, and the capstone rubric lists "screenshots or demo
-transcripts" among the things it will otherwise record as *unverified*. Committed images are
-the only evidence that survives the resources going back to sleep.
+**Output is gitignored.** `docs/screenshots/` is build output, not source. Committing it was
+tried and reversed: images go stale the moment the UI changes, and a stale screenshot is
+worse than none because it still looks like evidence. Regenerating takes about a minute, so
+they are made when needed rather than carried in git.
 
-They are generated, not hand-taken, so they can be regenerated after a UI change instead of
-silently going stale — the same argument as `export_evidence.py` for the backtest numbers.
+**When they are needed: assembling the submission zip.** The demo surfaces are asleep
+between sessions by design — the App is stopped, the agent endpoint is scaled to zero or
+stopped, and the AI Search index is deleted to cap billing. A reviewer cannot click through
+the product, and the capstone rubric lists "screenshots or demo transcripts" among the
+things it otherwise records as *unverified*. Run this before zipping and the images travel
+with the submission, matching the code being submitted.
+
+Same argument as `export_evidence.py` for the backtest numbers: derived from the real thing
+by a committed script, rather than hand-made once and quietly rotting.
 
     scripts/run_local_static_dev.sh 8811        # in another shell; live Lakebase
     .venv/bin/python scripts/capture_screenshots.py

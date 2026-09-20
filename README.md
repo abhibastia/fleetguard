@@ -143,7 +143,7 @@ the next deploy.
 |---|---|
 | `src/` | Ingestion, medallion pipelines, fleet registry, search, agent, backtest, Lakebase migrations |
 | `app/` | The FastAPI backend + React console that make up the live product |
-| `docs/` | Living architecture spec, build status, issue log, and the frozen original proposal |
+| `docs/` | Living architecture spec, build status, evidence map, issue log, and the frozen original proposal. `docs/screenshots/` is gitignored build output — regenerate with `scripts/capture_screenshots.py` |
 | `scripts/` | Runnable setup/build scripts — local dev server, console build, evidence/snapshot export, demo-state seeding |
 | `tests/` | Unit tests (run everywhere) and integration tests (opt-in, hit the live workspace) |
 | `dashboards/` | AI/BI dashboard definitions |

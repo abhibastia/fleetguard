@@ -9,9 +9,30 @@ deleted to cap billing (I-101, I-105). Someone reading this repo cold cannot cli
 the product, and the capstone rubric records anything it cannot verify as *unverified* —
 listing deployment URL, Spark execution logs, Lakebase schema, CDF configuration, dataset
 size, measured latency, API error-handling code, agent tool definitions, and screenshots as
-the usual gaps. Every one of those exists here; this page says where.
+the usual gaps. Every one of those is **reachable** from here; this page says how, and says
+plainly which ones need a resource woken up first.
 
 **Nothing on this page is an estimate.** Where a number could not be measured, it says so.
+
+> ### Screenshots are NOT in git — regenerate them before you need them
+>
+> `docs/screenshots/` is **gitignored**. The images are build output: they go stale the
+> moment the UI changes, and a stale screenshot is worse than none because it looks like
+> evidence. Regenerating them takes about a minute and needs nothing but a local server:
+>
+> ```bash
+> scripts/run_local_static_dev.sh 8811                  # live Lakebase, ~1h token
+> .venv/bin/python scripts/capture_screenshots.py       # 20 images, both themes
+> ```
+>
+> **Do this as part of assembling the submission zip**, not earlier — the zip is the
+> artefact that carries them, and generating them at submission time means they match the
+> code being submitted. If you are reading this on a cold start and `docs/screenshots/` is
+> empty or missing, that is the expected state, not a loss.
+>
+> The script refuses to run against snapshot mode and waits for each view's loading skeleton
+> to clear, so what it produces is real data or nothing. See *Regenerating this evidence* at
+> the bottom.
 
 ---
 
@@ -39,7 +60,7 @@ the usual gaps. Every one of those exists here; this page says where.
 | The gate | Above a 10% combo failure rate the sweep **refuses** to rebuild `gold_recall_alert` and fails the run, so a mostly-failed sweep cannot silently replace the alert table (I-106) |
 | Tests | `tests/test_http_retry.py` — **59 tests**, no network and no clock; the sleeper is asserted on, so backoff is verified rather than assumed |
 | Measured live 2026-09-20 | **200/200 combos ok in 102 s**, 2,122 campaign rows. Gate tripped deliberately → run failed and `gold_recall_alert` stayed at **Delta version 1**, proving the rebuild was skipped rather than only reported as skipped |
-| Displayed in the app | **Recall API** tab (`docs/screenshots/recall-api-*.png`) and the dashboard's Operations page |
+| Displayed in the app | **Recall API** tab (`app/frontend/src/views/RecallApi.tsx`; screenshot `recall-api-*.png` once regenerated) and the dashboard's Operations page |
 
 ### 3. Lakebase data model
 
@@ -87,7 +108,7 @@ the usual gaps. Every one of those exists here; this page says where.
 | States | Every view handles gated (401) → first-load error → loading skeleton → empty dataset → no-match-after-filter, in that order |
 | Consequential actions | Approval is a confirmation flow behind `FLEETGUARD_APPROVERS`, writes campaign + N work orders + audit in **one transaction**, and returns `409` naming the existing campaign on a re-approval (I-063) |
 | Tests | **147 frontend** (23 files) + **478 backend** |
-| Screenshots | `docs/screenshots/` — all 10 views, **both themes**, captured from live Lakebase |
+| Screenshots | `scripts/capture_screenshots.py` — all 10 views, **both themes**, from live Lakebase. Output is gitignored; regenerate before submitting (see the box at the top) |
 
 ### 7. Deployed application
 
@@ -139,7 +160,7 @@ minutes" for the round trip.
 | Measured processing latency | §8 above, with the two-number caveat |
 | API request and error-handling code | `src/fleetguard/http_retry.py`, `src/ingest/05_poll_recalls_api.py`, `src/fleet/04_build_fleet_registry.py` |
 | Agent tool definitions | `src/agent/14_fleetguard_agent.py`; reference table in ARCHITECTURE §7.2 |
-| Screenshots / demo transcripts | `docs/screenshots/` (20 images + `manifest.json`); `docs/DEMO.md` is the guided walkthrough |
+| Screenshots / demo transcripts | `scripts/capture_screenshots.py` produces 20 images + a `manifest.json` into the gitignored `docs/screenshots/`; `docs/DEMO.md` is the guided walkthrough. **Generate these into the submission zip** — they are not in the repo |
 
 ## Deliberately still missing
 
@@ -154,13 +175,50 @@ Named so the gap is bounded rather than discovered.
 
 ## Regenerating this evidence
 
+Nothing here is hand-maintained. Each artefact has a command, and every command is safe to
+re-run.
+
+| Artefact | Command | Needs |
+|---|---|---|
+| **Screenshots** (gitignored) | `scripts/run_local_static_dev.sh 8811` then `.venv/bin/python scripts/capture_screenshots.py` | a local server on live Lakebase; ~1 min |
+| **Backtest numbers** (`evidence.json`, committed) | `.venv/bin/python scripts/export_evidence.py --profile abhi` | SQL warehouse |
+| **Counts in this page** | see *Checking the numbers on this page* below | Lakebase + CLI |
+
+Two properties of the screenshot script worth knowing before trusting its output:
+
+- **It refuses to run against snapshot mode.** Evidence must come from live data; capturing
+  the demo snapshot and presenting it as the product would be the exact failure the Evidence
+  tab exists to avoid.
+- **It waits for each view's loading skeleton to clear.** `networkidle` is not enough — every
+  view fetches on mount from a `useEffect`, so the document goes idle before the API call is
+  issued. The first run produced twenty pixel-perfect screenshots of placeholders and
+  reported success. A screenshot of a spinner is worse than no screenshot: it is evidence
+  that the page does not work.
+
+### Checking the numbers on this page
+
+Every count above was measured, not asserted, and none of them should be trusted after the
+schema changes again. To re-check:
+
 ```bash
-scripts/run_local_static_dev.sh 8811                 # live Lakebase
-.venv/bin/python scripts/capture_screenshots.py      # both themes, refuses snapshot mode
-.venv/bin/python scripts/export_evidence.py --profile abhi   # backtest numbers
+ls resources/*.job.yml | wc -l                                    # bundle jobs
+.venv/bin/python -m pytest tests/test_http_retry.py --collect-only -q | tail -1
+jq '.datasets | length' dashboards/fleetguard_overview.lvdash.json  # dashboard datasets
 ```
 
-The screenshot script **refuses to run against snapshot mode** — evidence must come from
-live data. It also waits for each view's loading skeleton to clear before capturing: the
-first run produced twenty pixel-perfect screenshots of placeholders and reported success,
-which is worse than no screenshot at all.
+and against live Postgres — table count, foreign keys, indexes, and the replica-identity
+invariant that I-107 was hiding in:
+
+```sql
+SELECT COUNT(*) FROM pg_tables
+ WHERE schemaname = 'bootcamp_students' AND tablename LIKE 'fleetguard_%';
+SELECT COUNT(*) FROM pg_constraint
+ WHERE connamespace = 'bootcamp_students'::regnamespace AND contype = 'f';
+SELECT relname, relreplident FROM pg_class c
+ JOIN pg_namespace n ON n.oid = c.relnamespace
+ WHERE n.nspname = 'bootcamp_students' AND relname LIKE 'fleetguard_%' AND relkind = 'r';
+```
+
+The last one is the check that did not exist before 2026-09-20, and its absence is why one
+table silently failed to replicate for weeks (I-107). Run it across the **whole schema**,
+not per table — that was the actual lesson.

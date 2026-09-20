@@ -13,7 +13,7 @@ on and start building".
 | Retry/validation/gate on the NHTSA APIs (`src/fleetguard/http_retry.py`, 59 tests) | cat. 2 | 200/200 combos ok in 102 s, 2,122 campaign rows; gate tripped deliberately left `gold_recall_alert` at Delta v1 |
 | 14 foreign keys + I-107 | cat. 3 | all 14 FKs, 14/14 tables `REPLICA IDENTITY FULL`, 14/14 CDF history tables |
 | Incremental CDF→gold + 2 activity rollups | cat. 5 | trigger fired unattended for an insert *and* a delete; tombstone applied, key not resurrected |
-| Recall API console tab + 20 screenshots + `docs/EVIDENCE.md` | cat. 2, evidence gap | route serves live Lakebase; screenshots regenerated from live data |
+| Recall API console tab + `scripts/capture_screenshots.py` + `docs/EVIDENCE.md` | cat. 2, evidence gap | route serves live Lakebase; 20 screenshots generated from it, both themes |
 | Three fixes from an external review (I-109) | cat. 4 | offline; the agent half needs a redeploy |
 
 **Three defects found along the way, none previously known:**
@@ -38,6 +38,33 @@ destination.
 is `DEPLOYMENT_STOPPED`, and the App is stopped and has not been redeployed since 2026-09-14.
 `docs/EVIDENCE.md` states what each of those costs to restore. **Two of this session's fixes
 (the agent loop and the tool schema) only take effect on the next `agents.deploy()`.**
+
+### Picking this up cold — the run-up to 4 October
+
+Everything below is *restoring and verifying*, not building. The build side of the rubric is
+done; read `docs/EVIDENCE.md` first for what backs each graded line and what is still missing.
+
+**Nothing here is scheduled and nothing is billing except AI Search once you recreate it.**
+
+| # | Step | Time | Why it is in this order |
+|---|---|---|---|
+| 1 | **Recreate AI Search** — endpoint `fleetguard-vs` + `complaint_chunk_idx` from `silver_complaint_chunk` | **~7 h**, treat as a floor | Longest pole by far, and I-105 showed a mid-sync failure restarts from row zero rather than resuming. Start it first, early in the day, and budget a retry day. Everything else fits inside its runtime |
+| 2 | **Restore the agent endpoint** (`serving_endpoints.update_config`; there is no `start`) | ~3 min | Check `state.ready` and `deployment_state_message`, **never** `scale_to_zero_enabled` — it reads `True` in both idle states and distinguishes nothing (I-092) |
+| 3 | **Re-register and deploy the agent** (`fleetguard-agent-build`, then `agents.deploy()`) | ~15 min | **Required, not optional this time.** The served v6 predates `watch_campaign` *and* both I-109 fixes — the loop-exhaustion guard and the `complaint_count` schema change are inert until this runs. Re-assert `scale_to_zero_enabled` afterwards; `agents.deploy()` has silently reset it every time |
+| 4 | **Run the agent smoke test** in `14_fleetguard_agent.py` | ~5 min | It dies on `search_complaints` without step 1, which is why the order matters. First run past that point since `watch_campaign` was written |
+| 5 | `./scripts/deploy.sh abhi prod` then `databricks bundle run fleetguard_console` | ~5 min | The second command is the one that ships App code (I-097). The App has lagged `main` since 2026-09-14 and now lags by five more PRs |
+| 6 | **Full dry run** of `docs/DEMO.md`, all nine beats | ~1 h | The thing that has never been done: every change has been verified individually and **nothing in composition**, which is where this project's failures live |
+| 7 | **Generate screenshots** — `scripts/run_local_static_dev.sh 8811`, then `capture_screenshots.py` | ~1 min | Gitignored on purpose (build output, goes stale). Do it *last*, so they match what is being submitted, and include `docs/screenshots/` in the zip |
+| 8 | **Assemble the zip** | — | Repo + `docs/screenshots/`. The requirement PDF and `repo-review.md` are gitignored and not part of it |
+
+**Two things that are easy to get wrong here.** The agent redeploy (step 3) is the one people
+skip because the endpoint "works" — but it serves code without this session's safety fix. And
+the screenshots must come *after* the App redeploy, or they show older UI than the code in the
+zip.
+
+**Cost while this runs:** AI Search is ~$6.72/day from the moment step 1 starts. The App is
+stopped between sessions, the agent endpoint is scale-to-zero, and `fleetguard-cdf-to-gold` is
+event-driven and capped at one run/minute.
 
 **Last updated:** 2026-09-20 · previously 2026-09-18 · **MVP target: 7 September — MET** · **Demo: 25–30 September**
 
