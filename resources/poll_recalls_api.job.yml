@@ -1,11 +1,46 @@
+# Live recall polling against api.nhtsa.gov/recalls/recallsByVehicle.
+#
+# HARDENED 2026-09-20. Three things changed and each closes a real gap:
+#
+# 1. `max_retries` — the notebook retries individual *combos* (see
+#    `src/fleetguard/http_retry.py`), but nothing retried the *task*. A serverless
+#    start-up failure or a warehouse hiccup used to need a human to notice and re-run.
+#    Two retries a minute apart; the notebook is safe to re-run because the bronze write is
+#    an append and the poll-state write is a MERGE.
+#
+# 2. `parameters` — `max_combos` was read by the notebook from a widget that was never
+#    declared and never passed, inside a bare `except`, so it was permanently 0. It is a
+#    real knob now, and `failure_gate_pct` joins it.
+#
+# 3. `failure_gate_pct` is what makes a bad sweep fail loudly. Above that share of failed
+#    combos the notebook refuses to rebuild `gold_recall_alert` (a destructive
+#    `CREATE OR REPLACE`) and raises. Set it to `-1` to deliberately trip the gate when
+#    proving it works; leave it at 10 otherwise.
+#
+# NO SCHEDULE, DELIBERATELY. The notebook prints a worst-case-latency table for cadences
+# from 5 to 60 minutes, and I-033 records why the proposal's "every 60 seconds" is not
+# achievable: `recallsByVehicle` is make/model/year-scoped, so a sweep is ~200 requests and
+# a 1-minute cadence would be ~288k requests/day against a public government API this
+# project explicitly commits to not using in bulk. A schedule would spend shared-metastore
+# compute continuously to demonstrate something the latency table already documents. Run it
+# on demand.
+
 resources:
   jobs:
     poll_recalls_api:
       name: fleetguard-poll-recalls-api
+      parameters:
+        - name: max_combos
+          default: "0"
+        - name: failure_gate_pct
+          default: "10"
       tasks:
         - task_key: poll
           disabled: false
           email_notifications: {}
+          max_retries: 2
+          min_retry_interval_millis: 60000
+          retry_on_timeout: true
           notebook_task:
             notebook_path: ../src/ingest/05_poll_recalls_api.py
             source: WORKSPACE

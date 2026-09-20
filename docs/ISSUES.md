@@ -2844,6 +2844,65 @@ corpus would double the cost for coverage the backtest does not use. Source tabl
 
 ## Recalls API integration
 
+### I-106 — a mostly-failed sweep would silently rebuild the alert table, and the one knob that could have limited a sweep was inert — **SILENT**
+*Date:* 2026-09-20 · *Status:* resolved
+
+**Found while** hardening the recall poll against the capstone rubric's "rate-limit handling,
+retries, malformed-response handling, validation" line. The rubric prompted the look; the
+three findings below were not what the rubric was asking about.
+
+**1. The destructive step had no floor under it.** `05_poll_recalls_api.py` ends with
+`CREATE OR REPLACE TABLE gold_recall_alert`, derived from whatever the sweep collected.
+`poll()` never raised — by design, so one dead combo could not kill a 200-combo sweep — and
+nothing aggregated those per-combo statuses into a run-level verdict. So a sweep in which 190
+of 200 combos 500'd would **replace the alert table with a 10-combo view of the world and
+report SUCCESS**, into a job whose `email_notifications` and `webhook_notifications` blocks
+are both empty. The alert set would silently narrow and nobody would be told. This is the
+same shape as I-032 (alerts that were confidently wrong) but in the opposite direction:
+alerts confidently *missing*.
+
+Fixed: per-combo statuses are now summarised into `ops_recall_api_sweep` (one row per run),
+and above `failure_gate_pct` (default 10%) the notebook **skips the rebuild, records
+`alert_table_refreshed = false`, and raises**. The bronze append and the poll-state MERGE are
+deliberately *not* gated — they are append/upsert, and skipping them would discard the
+evidence of the failure.
+
+**2. `max_combos` was dead configuration that read as a live knob.** The notebook called
+`dbutils.widgets.get("max_combos")` against a widget nothing ever declared, inside a bare
+`except` that set it to 0, and `resources/poll_recalls_api.job.yml` had no `parameters:`
+block to pass it with. So the documented "cap it for a quick demo run without touching the
+code" was never once true. Fixed: the widget is declared, and both it and `failure_gate_pct`
+are real job parameters.
+
+**3. There were no retries anywhere in the project.** A grep for
+`retry|backoff|429|tenacity` across `src/` and `app/backend/` returned exactly one hit, an
+unrelated print string. `poll()` recorded a status and moved on, so a single transient blip
+dropped a combo's campaigns for the whole sweep; `vpic_batch()` was worse, with no
+`try`/`except` at all and a bare `json.load(r)["Results"]`, so one dropped connection aborted
+the entire 20,000-vehicle registry build. Both now route through
+`src/fleetguard/http_retry.py`.
+
+**A fourth thing, found by the new tests rather than by reading.** The first version of
+`should_retry` tested the exception before the HTTP status — and
+`urllib.error.HTTPError` **is a subclass of `URLError`**, so every HTTP status matched the
+"transient network error" arm and answered *retry*, including the 400 the policy exists to
+exclude. It would have tripled request volume against NHTSA for every unrecognised combo
+while looking correct. Caught because
+`test_a_400_is_returned_immediately_without_retrying` asserts on the **opener's call count**,
+not just on the returned status — a test that only checked the status string passes against
+the broken version. The ordering in `should_retry` is now load-bearing and commented as such.
+
+**Why a 400 is never retried.** NHTSA answers an unrecognised make/model/year with HTTP 400
+*and a body reading "Results returned successfully"* (I-031). That is deterministic, not
+transient. The real mitigation is upstream and already in place — poll
+`gold_fleet_exposure.recall_model` rather than the vPIC name, which took coverage from 60% to
+200/200.
+
+**Lesson.** "Never raises" is the right property for a per-item fetch inside a sweep and the
+wrong property for the sweep itself. If nothing aggregates the per-item outcomes into a
+run-level verdict, a resilient loop becomes an *invisible* one — and the more destructive the
+step it feeds, the worse that trade gets.
+
 ### I-032 — "New campaign" alerts were false positives from model-string mismatch — **SILENT**
 *Date:* 2026-08-31 · *Status:* resolved
 

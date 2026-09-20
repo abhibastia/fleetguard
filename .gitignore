@@ -56,3 +56,7 @@ app/frontend/dist/
 
 # TypeScript incremental build cache
 *.tsbuildinfo
+/capstone-submission-requirement.pdf
+
+# Local-only: an external review dropped into the tree, not part of the project record.
+/repo-review.md

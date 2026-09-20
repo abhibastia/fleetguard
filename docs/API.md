@@ -84,5 +84,5 @@ section for how each was confirmed live.
 | API | Used for |
 |---|---|
 | `static.nhtsa.gov/odi/ffdd/{cmpl,rcl,inv,tsbs}/*.zip` | Complaint, recall, investigation, and TSB flat files — the corpus everything else is built on. Conditional fetch via `If-Modified-Since` only (the host advertises but ignores `If-None-Match`). |
-| `api.nhtsa.gov/recalls/recallsByVehicle` | Per make/model/year recall lookup for the fleet registry. No conditional-request support — every poll returns the full body. |
+| `api.nhtsa.gov/recalls/recallsByVehicle` | Live recall polling for the fleet's ~200 (make, model, year) combos — the reactive half's real-time trigger, feeding `bronze_recall_api` and `gold_recall_alert`. Not the fleet registry: that is vPIC's job, below. No conditional-request support — every poll returns the full body. Retry/gate behaviour in `ARCHITECTURE.md` §3.1. |
 | `vpic.nhtsa.dot.gov/api` (`DecodeVINValuesBatch`) | Authoritative make/model/year/body-class decode for every fleet VIN — never the dirty make/model strings on complaint records. |

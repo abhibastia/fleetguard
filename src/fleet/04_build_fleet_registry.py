@@ -26,9 +26,17 @@
 # COMMAND ----------
 
 import json
+import os
 import random
+import sys
+import time
 import urllib.parse
 import urllib.request
+
+# Same rationale as src/ingest/05_poll_recalls_api.py: the retry policy is tested off
+# platform in src/fleetguard/http_retry.py, and the bundle uploads the whole src/ tree.
+sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "..")))
+from fleetguard.http_retry import fetch_json  # noqa: E402
 
 CATALOG, SCHEMA = "bootcamp_students", "fleetguard"
 spark.sql(f"USE {CATALOG}.{SCHEMA}")
@@ -39,6 +47,9 @@ SEED = 20260831
 random.seed(SEED)
 
 VPIC_BATCH = "https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVINValuesBatch/"
+# Identify ourselves to the API the same way the recall poll does. Absent here until
+# 2026-09-20, which meant ~18 unattributed batch POSTs per registry build.
+UA = {"User-Agent": "FleetGuard/1.0 (capstone; contact abhisek.bastia17@gmail.com)"}
 
 # COMMAND ----------
 
@@ -154,11 +165,46 @@ print(f"candidate prefixes: {len(candidates):,}")
 
 
 def vpic_batch(vins):
-    """Decode up to 50 VINs in one request."""
+    """Decode up to 50 VINs in one request. Retries transient faults; never returns garbage.
+
+    **This was the least defensive network call in the repo until 2026-09-20** — no
+    `try`/`except` at all, no `User-Agent`, and a bare `json.load(r)["Results"]` subscript.
+    Any single transient failure, anywhere in the ~18 batches this notebook issues, aborted
+    the entire fleet-registry build: 20,000 vehicles and the whole exposure chain, lost to
+    one dropped connection. That is a worse failure mode than the poll job's, which at least
+    recorded a status and carried on.
+
+    Now routed through the same tested retry policy (`fleetguard.http_retry`) as the recall
+    poll. Raises `RuntimeError` on exhaustion rather than returning `[]`: unlike a recall
+    combo, a missing vPIC batch is **not** survivable — it would silently drop VIN prefixes
+    from the roster, and §3 is explicit that make/model/year comes from vPIC and never from
+    the complaint record. Failing loudly is the correct behaviour here; the change is that
+    it now fails loudly only after retrying, and says which batch died.
+    """
     payload = urllib.parse.urlencode({"format": "json", "data": ";".join(vins)}).encode()
-    req = urllib.request.Request(VPIC_BATCH, data=payload)
-    with urllib.request.urlopen(req, timeout=120) as r:
-        return json.load(r)["Results"]
+
+    def _open(_url):
+        return urllib.request.urlopen(
+            urllib.request.Request(VPIC_BATCH, data=payload, headers=dict(UA)), timeout=120
+        )
+
+    outcome = fetch_json(VPIC_BATCH, opener=_open, sleeper=time.sleep)
+    if not outcome.ok:
+        raise RuntimeError(
+            f"vPIC decode failed after {outcome.attempts} attempt(s) for a batch of "
+            f"{len(vins)} VINs (status {outcome.status}, {outcome.error}). "
+            "The roster must not be built from a partial decode — rerun."
+        )
+
+    results = (outcome.body or {}).get("Results") if isinstance(outcome.body, dict) else None
+    if not isinstance(results, list):
+        raise RuntimeError(
+            f"vPIC returned {type(outcome.body).__name__} with no usable 'Results' list "
+            f"for a batch of {len(vins)} VINs — response shape has changed."
+        )
+    if outcome.retried:
+        print(f"  (vPIC batch recovered after {outcome.attempts} attempts)")
+    return results
 
 
 validated = []

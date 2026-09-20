@@ -92,6 +92,40 @@ metastore. Catalog creation is unavailable, so **medallion layers are table-name
 - Row counts are entity-vs-row traps: 154,367 investigation *rows* are 5,344
   *investigations*. Never quote a row count when you mean entities.
 
+### 3.1 Reliability posture of the outbound calls
+
+Both live APIs go through one tested retry policy, `src/fleetguard/http_retry.py` — pure,
+dependency-injected logic with 60 unit tests that run in CI with no network and no clock.
+Added 2026-09-20; before that the project had **no retry logic anywhere** (I-106).
+
+| | Recall poll (`05_poll_recalls_api.py`) | vPIC (`04_build_fleet_registry.py`) |
+|---|---|---|
+| Retries | 3 attempts, exponential + full jitter, `Retry-After` honoured | same |
+| Pacing | 2 req/s, ~200 combos, ~100 s/sweep | ~18 batches of 50 VINs |
+| On exhaustion | record the status, continue the sweep | **raise** — a partial decode must not become a roster |
+| Shape check | `Count` cross-checked against `len(results)` | `Results` must be a list |
+| Run-level verdict | `ops_recall_api_sweep`, one row per sweep | 500-VIN verification sample |
+
+Three policies here are deliberate and easy to get backwards:
+
+- **A 400 is never retried.** NHTSA answers an unrecognised make/model/year with HTTP 400 and
+  a body reading *"Results returned successfully"* (I-031) — deterministic, not transient.
+- **The two callers fail differently on purpose.** A dead recall combo costs a combo; a dead
+  vPIC batch aborts the build, because §4.3's guarantee is that make/model/year comes from
+  vPIC and never from the complaint record, and a silently short roster would break that.
+- **The sweep has a quality gate.** `gold_recall_alert` is rebuilt with `CREATE OR REPLACE`;
+  above a 10% combo failure rate the rebuild is skipped and the run fails, so a mostly-failed
+  sweep cannot quietly replace the alert table with a partial view of the world (I-106).
+
+**Verified live 2026-09-20, both directions.** A clean sweep: 200/200 `ok` in 102 s, 2,122
+campaign rows, `alert_table_refreshed = true`. Then the gate deliberately tripped
+(`failure_gate_pct=-1`, `max_combos=5`): the run failed, three `ops_recall_api_sweep` rows
+landed with `alert_table_refreshed = false`, and `gold_recall_alert` **stayed at Delta
+version 1** — proving the rebuild was skipped rather than merely reported as skipped. Three
+rows rather than one because the task's new `max_retries: 2` re-ran the whole sweep twice;
+each attempt is a real sweep and is counted as one, so `gold_api_poll_health` sees attempts,
+not runs.
+
 The Postgres operational schema built from this data is in §4.6.
 
 ---
