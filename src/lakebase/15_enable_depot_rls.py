@@ -83,6 +83,28 @@ with conn.cursor() as cur:
         )
     """)
 
+    # REPLICA IDENTITY FULL, same as every other table in this schema. Missing here until
+    # 2026-09-20 (I-107), which is why `lb_fleetguard_depot_assignment_history` never
+    # appeared in bootcamp_cdc: CDF had only the primary key to work with, and the table
+    # was the one exception to an invariant three documents asserted was universal. It went
+    # unnoticed because nothing reads that history table. The assertion below is the part
+    # that matters — `08_`, `17_` and `22_` all carry one and this script did not, so it was
+    # the missing *check*, not the missing ALTER, that let the gap persist.
+    cur.execute(f"""
+        ALTER TABLE {PG_SCHEMA}.fleetguard_depot_assignment REPLICA IDENTITY FULL
+    """)
+    cur.execute(
+        "SELECT relreplident FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
+        "WHERE n.nspname = %(s)s AND c.relname = 'fleetguard_depot_assignment'",
+        {"s": PG_SCHEMA},
+    )
+    _ri = cur.fetchone()[0]
+    assert _ri == "f", (
+        f"fleetguard_depot_assignment has REPLICA IDENTITY '{_ri}', not 'f' (FULL) — CDF "
+        "would carry only the primary key on update/delete and update_preimage would be "
+        "useless. This is I-107; do not proceed."
+    )
+
     # Fail-open by construction: a role with no assignment row matches the first branch of
     # the OR and sees everything. Only a role with a row in the assignment table is
     # restricted, and only to that row's depot.

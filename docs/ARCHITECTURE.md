@@ -206,10 +206,24 @@ retrieval passes 10/10, and near-duplicate retrieval is a non-issue (10/10 disti
 every one `REPLICA IDENTITY FULL` (a hard CDF prerequisite — without it the WAL carries only
 the key and `update_preimage` is useless). Full column-level reference: §4.6.
 
+> **This section claimed "every one" while one table was the exception, from the day
+> `fleetguard_depot_assignment` was created until 2026-09-20 (I-107).** It was created without
+> `REPLICA IDENTITY FULL` and without the read-back assertion its sibling creation scripts
+> carry, so it never replicated: there were **13** history tables, not 14. Repaired, and the
+> invariant is now checked across the whole schema by `24_add_foreign_keys.py` rather than
+> once per creation script. **Re-verified live 2026-09-20: 14/14 tables `FULL`, 14/14 history
+> tables present**, and the repaired table's first replicated `delete` carries its non-key
+> columns — which is the property FULL exists to provide. The claim above is true again, and
+> is worth re-measuring rather than re-reading the next time a table is added.
+
 CDF replicates to `bootcamp_students.bootcamp_cdc` as `lb_fleetguard_<entity>_history`. All
 14 exist with exact names and **no `_1` collision suffixes**.
 
-- **CDF replicates DDL**, so destinations appear at `CREATE TABLE`, not on first write.
+- **CDF replicates DDL**, so destinations appear at `CREATE TABLE`, not on first write —
+  **but not universally.** Measured 2026-09-20 (I-107): `fleetguard_depot_assignment` existed
+  for weeks with no destination, and setting `REPLICA IDENTITY FULL` did not create one
+  either. It appeared only after the table's **first actual write**. A table that has never
+  been written to is the case where the DDL rule does not hold.
 - **Capture latency: 7.1–15.6 s** (n=3, all true measurements). State it as a range
   consistent with a ~15 s flush; size demos against the **15.6 s worst case**.
 - CDF configuration is **UI-only** — no CLI, no API, not a bundle resource. It is a manual
@@ -247,6 +261,43 @@ counts stay owned by §4.3 — linked here, not restated. Postgres schema fragme
 | `fleetguard_work_order` | `wo_id` PK, `service_campaign_id`, `vin`, `depot_id`, `assigned_to`, `status` | One row per exposed vehicle, same transaction as its service campaign (§7.3) |
 | `fleetguard_agent_action` | `action_id` PK, `tool`, `tool_input`/`tool_output` (JSONB), `actor_principal`, `on_behalf_of`, `requires_approval`, `trace_id` | Every agent tool call, read or write (§7.1) |
 | `fleetguard_audit_log` | `audit_id` PK, `entity_type`/`entity_id`, `action`, `actor_principal`, `before_state`/`after_state` (JSONB) | Append-only, written alongside the service-campaign/work-order transaction (§7.3) |
+
+#### 4.6a Referential integrity
+
+**14 foreign keys, added 2026-09-20** (`src/lakebase/24_add_foreign_keys.py`). Before that
+this schema had none: `pg_constraint` held only primary keys, not-nulls and checks, and every
+cross-table relationship was enforced in application code.
+
+Reversing that was a deliberate decision, not a cleanup. The app checks are good, they stay,
+and several are *stronger* than any constraint — `routers/work_orders.py` validates that an
+assignee is on the roster **and** at the work order's own depot **and** active. What the app
+cannot cover is every writer that does not go through it: the bulk loaders, the seed script,
+and future migrations. `13_load_exposure.py` already hand-rolled a ghost-VIN check and rolled
+back on a miss — a foreign key written out longhand, once, in one loader. The constraints are
+that check applied to every writer for free.
+
+| Child | Parent | On delete |
+|---|---|---|
+| `vehicle.depot_id`, `technician.depot_id`, `depot_assignment.depot_id`, `work_order.depot_id` | `depot` | `RESTRICT` |
+| `vehicle_exposure.vin`, `work_order.vin` | `vehicle` | `RESTRICT` |
+| `vehicle_exposure.campaign_id`, `service_campaign.campaign_id`, `watchlist.campaign_id` | `recall_campaign` | `RESTRICT` |
+| `vehicle_exposure.signal_id`, `service_campaign.signal_id` | `defect_signal` | `RESTRICT` |
+| `work_order.service_campaign_id` | `service_campaign` | `RESTRICT` |
+| `work_order.assigned_to` | `technician` | **`SET NULL`** |
+| `approval.action_id` | `agent_action` | `RESTRICT` |
+
+- **All 14 scanned clean before being applied** — zero orphans across 118,323 exposure rows,
+  20,000 vehicles and 331 work orders — so they went on validated, with no `NOT VALID` step.
+- **No `CASCADE` anywhere.** This schema is append-and-audit; a cascade would let one parent
+  delete silently remove audited history.
+- **`SET NULL` only for `assigned_to`**: retiring a technician should unassign their open
+  work, not block the retirement and not delete the work.
+- Five child columns had no index (`work_order.vin`, `work_order.assigned_to`,
+  `vehicle_exposure.signal_id`, `service_campaign.signal_id`, `approval.action_id`); an
+  unindexed FK child makes every parent delete a sequential scan, so those were added too.
+- **`fleetguard_audit_log` deliberately gets none.** Its `entity_id` is polymorphic — campaign
+  ids, work-order ids and service-campaign ids share the column — and an audit row must
+  outlive whatever it describes.
 
 **Present in schema, not currently wired to the app** — created and CDF-enabled, but no
 router or agent tool reads or writes them as of this reconciliation (confirmed by grep
@@ -375,14 +426,15 @@ and each was violated at least once.
 | `DO_NOT_DRIVE` compared with `UPPER(...)` | Stored title-case `Yes`/`No`; a case-sensitive predicate silently returns zero rows |
 | `read_files` sets `quote => '\0'` | All bronze SQL |
 | Chunk count is window-driven, not stride-driven | `chunking.py` + regression test |
-| Every Lakebase table `REPLICA IDENTITY FULL` | Creation script refuses to commit otherwise |
+| Every Lakebase table `REPLICA IDENTITY FULL` | Creation scripts refuse to commit otherwise — **and `24_add_foreign_keys.py` re-checks all 14 in one pass**, because the per-script version was enforced by three of four scripts and missed one for weeks (I-107) |
 | Project tables are `fleetguard_`-prefixed | Name guard; shared schema |
 | Backtest population is exactly **777** investigations | Assertion in scope build |
 | No detection dated on or after its investigation opened | Integration test |
 | The agent can open a defect signal or watch a campaign, but **never** reaches `fleetguard_work_order` or `fleetguard_service_campaign` | Build assertion on `propose_service_campaign`; dispatch is behind `FLEETGUARD_APPROVERS` |
 | An agent write is attributed to a **real human**, never a service principal | `agent_actions.execute` refuses (403) a token carrying no identity, for both write actions |
 | Fleet counts joining NHTSA and vPIC model strings state their **match tier** | `ActionResult.match_basis`; I-075 |
-| A `watch_campaign` request checks the campaign exists before writing | `fleetguard_watchlist` carries no DB-level FK; `_execute_watch_campaign` refuses (404) an unknown `campaign_id` |
+| A `watch_campaign` request checks the campaign exists before writing | `_execute_watch_campaign` refuses (404) an unknown `campaign_id` **before** the insert, so the caller gets a message naming the campaign rather than a bare `ForeignKeyViolation`. Since 2026-09-20 `fk_fg_watchlist_campaign` is the floor underneath it (§4.6a) |
+| Cross-table references are valid | **14 foreign keys**, added 2026-09-20 — the app checks still run first and are stronger; the constraints cover every writer that does not go through the app (§4.6a) |
 
 ---
 

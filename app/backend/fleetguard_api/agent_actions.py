@@ -358,9 +358,15 @@ def _execute_watch_campaign(
         try:
             with conn.cursor() as cur:
                 # Same shape as approve_campaign's existence check (routers/approval.py):
-                # name what's missing rather than let a bare FK violation surface, since this
-                # table deliberately carries no FK on campaign_id (consistent with every other
-                # cross-table reference in this schema — app-checked, not DB-enforced).
+                # name what's missing rather than let a bare FK violation surface.
+                #
+                # Since 2026-09-20 there IS an FK here (`fk_fg_watchlist_campaign`,
+                # ARCHITECTURE §4.6a), which reverses what this comment used to say about the
+                # schema being app-checked rather than DB-enforced. The check stays and still
+                # runs first, because the two do different jobs: the constraint guarantees the
+                # row cannot be written, and this gives the caller a 404 naming the campaign
+                # instead of a ForeignKeyViolation the UI would have to parse. Defence in
+                # depth, in that order.
                 cur.execute(
                     f"""SELECT campaign_id FROM {PG_SCHEMA}.fleetguard_recall_campaign
                         WHERE campaign_id = %(cid)s""",

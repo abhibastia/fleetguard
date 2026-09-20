@@ -28,7 +28,10 @@
 # MAGIC
 # MAGIC **Safety.** Writes three rows to `fleetguard_audit_log`, which is append-only by
 # MAGIC design and carries no foreign keys, each tagged `entity_type = 'LATENCY_PROBE'`.
-# MAGIC Nothing is deleted or altered.
+# MAGIC Nothing is deleted or altered. (Still true after the 2026-09-20 foreign-key
+# MAGIC migration: the audit log is deliberately excluded, because `entity_id` is
+# MAGIC polymorphic and an audit row must outlive whatever it describes — ARCHITECTURE
+# MAGIC §4.6a. A probe row referencing nothing real is therefore legal by design.)
 
 # COMMAND ----------
 

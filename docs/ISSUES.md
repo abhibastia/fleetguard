@@ -2842,6 +2842,87 @@ corpus would double the cost for coverage the backtest does not use. Source tabl
 
 ---
 
+## Lakebase / CDF
+
+### I-107 — one table was never set `REPLICA IDENTITY FULL`, so it has no CDF history table at all — **SILENT**
+*Date:* 2026-09-20 · *Status:* resolved
+
+**Found while** enumerating tables for the foreign-key migration. Reading
+`relreplident` out of `pg_class` for all 14 Lakebase tables — a check nothing else in the
+project performs across the whole schema at once — returned `'d'` (default) for
+`fleetguard_depot_assignment` and `'f'` (full) for the other thirteen.
+
+Cross-checking `bootcamp_students.bootcamp_cdc` confirmed the consequence:
+**13 `lb_fleetguard_*_history` tables exist, not 14.**
+`lb_fleetguard_depot_assignment_history` has never existed. That table has not been
+replicating into Unity Catalog since the day it was created.
+
+**Root cause is the missing *assertion*, not the missing `ALTER`.**
+`08_create_remaining_tables.py`, `17_create_technician_roster.py` and
+`22_create_watchlist_table.py` all set `REPLICA IDENTITY FULL` **and then read
+`relreplident` back and refuse to commit if it is not `'f'`**.
+`15_enable_depot_rls.py` did neither. The one creation script without the check is the one
+that got it wrong, which is the whole argument for the check.
+
+**Three documents asserted the opposite, and none of them were wrong by accident** — they
+were written when the claim was true and never re-verified after this table was added:
+
+| claim | where | truth |
+|---|---|---|
+| *"**14 total**, every one `REPLICA IDENTITY FULL`"* | `ARCHITECTURE.md` §4.5 | 14 tables, **13** with FULL |
+| *"All 14 exist with exact names"* (history tables) | `ARCHITECTURE.md` §4.5 | **13** exist |
+| *"Every Lakebase table `REPLICA IDENTITY FULL` \| Creation script refuses to commit otherwise"* | `ARCHITECTURE.md` §7 invariants | the refusal existed in 3 of 4 creation scripts |
+| *"11 tables, all `REPLICA IDENTITY FULL`; all 11 CDF history tables exist"* | `STATUS.md` phase 5 | predates three later tables |
+| *"12 `lb_fleetguard_*_history` tables"* | `STATUS.md` | 13 |
+
+**Why nobody noticed.** `fleetguard_depot_assignment` holds **0 rows** — RLS is fail-open by
+construction and nobody is enrolled (Phase 10) — and nothing reads its history. A table that
+is empty and unread produces no symptom when it silently stops replicating. The invariant was
+checked per-script at creation time and never once across the schema as a whole, so the one
+table that skipped the check was invisible to the check.
+
+**Fixed** in `24_add_foreign_keys.py` (`ALTER TABLE ... REPLICA IDENTITY FULL`, plus a
+schema-wide `relreplident` assertion that now guards *every* table on every run of that
+migration), and at the root in `15_enable_depot_rls.py`, which now sets and asserts it like
+its siblings so a rebuild-from-empty cannot reproduce the gap.
+
+**Verified fixed, 2026-09-20, and the sequencing isolated something worth keeping.**
+
+| step | result |
+|---|---|
+| `fleetguard-add-foreign-keys` runs the `ALTER ... REPLICA IDENTITY FULL` | all 14 tables read `relreplident = 'f'` |
+| list `bootcamp_cdc` immediately after | **still 13** history tables — the destination did *not* appear |
+| write one probe row, wait 75 s | **14** history tables; `lb_fleetguard_depot_assignment_history` exists |
+| read it back | `insert` **and** `delete`, and the delete row carries `depot_id` |
+
+Two things fall out of that.
+
+**This refines I-044.** That issue concluded *"CDF replicates DDL, so destinations appear at
+`CREATE TABLE`, not on first write."* For this table the destination did **not** appear at
+`CREATE TABLE` — it had existed for weeks with no history table — and setting
+`REPLICA IDENTITY FULL` alone did not create it either. It appeared only after the first
+actual **write**. I-044's rule is not wrong for the tables it was measured on; it is not
+universal, and a table that has never been written to is the case where it does not hold.
+
+**The delete row is the proof that FULL is doing its job.** Under the default replica
+identity a delete carries only the primary key, so `depot_id` would have been NULL. It is
+populated, which is exactly the property the invariant exists to guarantee and the reason
+`update_preimage` is usable at all.
+
+The probe used a deliberately fake `postgres_role` (`i107-cdf-probe-not-a-real-role`) so no
+live identity was ever restricted while it existed — RLS on `fleetguard_vehicle` is
+fail-open, and a row matching no real role changes nothing for anyone. Removed afterwards;
+the table is back to 0 rows, with the insert/delete pair retained in CDF by design.
+
+**Adding the 14 foreign keys did not disturb CDF** — checked in the same pass, since the
+interaction is documented nowhere.
+
+**Lesson.** An invariant enforced by N copies of the same assertion is enforced N-1 times as
+soon as someone writes the N-th creation script from memory. The durable version is one check
+that walks the whole schema — which is what the FK migration's verification cell now does.
+
+---
+
 ## Recalls API integration
 
 ### I-106 — a mostly-failed sweep would silently rebuild the alert table, and the one knob that could have limited a sweep was inert — **SILENT**

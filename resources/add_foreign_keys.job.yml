@@ -1,0 +1,41 @@
+# Referential integrity for the Lakebase schema — the 14 relationships that were
+# app-checked but never database-enforced, plus five supporting indexes on FK child
+# columns (an unindexed child makes every parent DELETE a sequential scan).
+#
+# Also repairs I-107: `fleetguard_depot_assignment` was created without
+# `REPLICA IDENTITY FULL` and had no CDF history table as a result.
+#
+# Idempotent. `ADD CONSTRAINT` has no `IF NOT EXISTS` in Postgres (I-067), so the notebook
+# checks `pg_constraint` itself; the indexes use `CREATE INDEX IF NOT EXISTS`. A re-run is
+# a no-op that still re-proves enforcement.
+#
+# The `environments` block is load-bearing: for serverless jobs the dependency list lives
+# in the job, not the notebook (I-045).
+
+resources:
+  jobs:
+    add_foreign_keys:
+      name: fleetguard-add-foreign-keys
+      tasks:
+        - task_key: add_foreign_keys
+          disabled: false
+          email_notifications: {}
+          environment_key: fgenv
+          notebook_task:
+            notebook_path: ../src/lakebase/24_add_foreign_keys.py
+            source: WORKSPACE
+          run_if: ALL_SUCCESS
+          timeout_seconds: 3600
+      email_notifications: {}
+      environments:
+        - environment_key: fgenv
+          spec:
+            client: "3"
+            dependencies:
+              - psycopg[binary]
+              - databricks-sdk>=0.89.0
+      max_concurrent_runs: 1
+      queue:
+        enabled: true
+      timeout_seconds: 0
+      webhook_notifications: {}
