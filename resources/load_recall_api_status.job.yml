@@ -1,0 +1,42 @@
+# Loads the recall-API integration's own state into Lakebase so the console can show it.
+#
+# WHY THIS JOB EXISTS. bronze_recall_api (2,117 rows / 653 campaigns) and gold_recall_alert
+# had zero consumers — no router, no frontend view, no dashboard widget, no agent tool, no
+# test. The polling notebook called gold_recall_alert "the reactive product surface" and the
+# only humans who ever saw it were whoever opened that job's run output.
+#
+# The console cannot read Unity Catalog at request time (every authenticated route goes to
+# Lakebase; /api/evidence is a committed file), so making it visible means loading it.
+#
+# Run AFTER fleetguard-poll-recalls-api — this reads what that job writes.
+#
+# The `environments` block is load-bearing: for serverless jobs the dependency list lives in
+# the job, not the notebook (I-045).
+
+resources:
+  jobs:
+    load_recall_api_status:
+      name: fleetguard-load-recall-api-status
+      tasks:
+        - task_key: load
+          disabled: false
+          email_notifications: {}
+          environment_key: fgenv
+          notebook_task:
+            notebook_path: ../src/lakebase/25_load_recall_api_status.py
+            source: WORKSPACE
+          run_if: ALL_SUCCESS
+          timeout_seconds: 3600
+      email_notifications: {}
+      environments:
+        - environment_key: fgenv
+          spec:
+            client: "3"
+            dependencies:
+              - psycopg[binary]
+              - databricks-sdk>=0.89.0
+      max_concurrent_runs: 1
+      queue:
+        enabled: true
+      timeout_seconds: 0
+      webhook_notifications: {}

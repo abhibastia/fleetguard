@@ -29,6 +29,7 @@ from .routers import (
     depots,
     evidence,
     queue,
+    recall_api,
     signals,
     technicians,
     trends,
@@ -97,6 +98,7 @@ def me(principal: CurrentPrincipal) -> Me:
 
 
 api.include_router(queue.router)
+api.include_router(recall_api.router)
 api.include_router(approval.router)
 api.include_router(chat.router)
 api.include_router(evidence.router)

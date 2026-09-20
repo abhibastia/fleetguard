@@ -8,6 +8,7 @@ import { DepotRisk } from "./views/DepotRisk";
 import { Evidence } from "./views/Evidence";
 import { Home } from "./views/Home";
 import { Queue } from "./views/Queue";
+import { RecallApi } from "./views/RecallApi";
 import { ServiceCampaigns } from "./views/ServiceCampaigns";
 import { Signals } from "./views/Signals";
 import { Trends } from "./views/Trends";
@@ -23,7 +24,8 @@ type View =
   | { name: "launched" }
   | { name: "audit-log" }
   | { name: "depot-risk" }
-  | { name: "trends" };
+  | { name: "trends" }
+  | { name: "recall-api" };
 
 /**
  * The console is a single page, but its tabs are addressable.
@@ -46,6 +48,7 @@ function viewFromHash(): View {
   if (h === "audit-log") return { name: "audit-log" };
   if (h === "depot-risk") return { name: "depot-risk" };
   if (h === "trends") return { name: "trends" };
+  if (h === "recall-api") return { name: "recall-api" };
   return { name: "home" };
 }
 
@@ -62,6 +65,7 @@ function hashForView(v: View): string {
   if (v.name === "audit-log") return "#/audit-log";
   if (v.name === "depot-risk") return "#/depot-risk";
   if (v.name === "trends") return "#/trends";
+  if (v.name === "recall-api") return "#/recall-api";
   if (v.name === "queue") return "#/queue";
   return "#/";
 }
@@ -378,6 +382,15 @@ export function App() {
           >
             Trends
           </button>
+          <button
+            onClick={() => {
+              setView({ name: "recall-api" });
+              setNavOpen(false);
+            }}
+            aria-current={tab === "recall-api" ? "page" : undefined}
+          >
+            Recall API
+          </button>
         </nav>
 
         <div className="sidebar-footer">
@@ -433,6 +446,7 @@ export function App() {
         {view.name === "audit-log" && <AuditLog />}
         {view.name === "depot-risk" && <DepotRisk />}
         {view.name === "trends" && <Trends />}
+        {view.name === "recall-api" && <RecallApi />}
         {view.name === "home" && (
           <Home
             onNavigate={(v) =>

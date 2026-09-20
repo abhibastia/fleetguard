@@ -268,6 +268,51 @@ export interface RecallTrend {
   latest_issued_at: string | null;
 }
 
+/** Live recall-API feed: per-combo poll health plus novel-campaign alerts.
+ *
+ * `success_rate_pct` is deliberately nullable. Zero combos polled means "the sweep has not
+ * run", which is not the same as "every combo failed" — rendering them identically is the
+ * bug this type exists to prevent. */
+export interface RecallApiPollCombo {
+  combo_key: string;
+  make: string;
+  model: string;
+  model_year: number;
+  fleet_vehicles: number;
+  last_polled_at: string | null;
+  last_status: string | null;
+  last_campaign_count: number | null;
+}
+
+export interface RecallApiAlert {
+  alert_key: string;
+  campaign_number: string;
+  make: string | null;
+  model: string | null;
+  model_year: number | null;
+  component: string | null;
+  park_it: boolean;
+  park_outside: boolean;
+  consequence: string | null;
+  vehicles_exposed: number;
+  depots_affected: number;
+}
+
+export interface RecallApiStatus {
+  summary: {
+    combos: number;
+    combos_ok: number;
+    success_rate_pct: number | null;
+    fleet_vehicles_covered: number;
+    last_polled_at: string | null;
+    alerts: number;
+    alert_campaigns: number;
+    vehicles_exposed_by_alerts: number;
+  };
+  poll: RecallApiPollCombo[];
+  alerts: RecallApiAlert[];
+}
+
 export interface DepotRisk {
   depot_id: string;
   depot_name: string;
@@ -359,4 +404,5 @@ export const api = {
   depotRisk: () => request<DepotRisk[]>("/depot-risk"),
   recallTrend: () => request<RecallTrend>("/recall-trend"),
   watchlist: (limit = 50) => request<WatchlistEntry[]>(`/watchlist?limit=${limit}`),
+  recallApiStatus: () => request<RecallApiStatus>("/recall-api-status"),
 };

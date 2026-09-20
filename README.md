@@ -110,7 +110,7 @@ the console the backend serves with `scripts/build_console.sh`.
 ## Deploying
 
 Everything deployable is a **Declarative Automation Bundle** — `databricks.yml` plus
-`resources/` describe the App, the bronze/silver pipeline, the AI/BI dashboard and 17 jobs.
+`resources/` describe the App, the bronze/silver pipeline, the AI/BI dashboard and every job.
 They are *bound* to the existing workspace objects, so deploying updates them in place rather
 than creating copies.
 
@@ -147,7 +147,7 @@ the next deploy.
 | `scripts/` | Runnable setup/build scripts — local dev server, console build, evidence/snapshot export, demo-state seeding |
 | `tests/` | Unit tests (run everywhere) and integration tests (opt-in, hit the live workspace) |
 | `dashboards/` | AI/BI dashboard definitions |
-| `resources/` | Bundle resource files — the App, the pipeline, the dashboard, 17 jobs, as code |
+| `resources/` | Bundle resource files — the App, the pipeline, the dashboard and every job, as code (`ls resources/*.job.yml | wc -l`) |
 
 ## Documentation map
 
@@ -156,6 +156,7 @@ Read `docs/STATUS.md` first if you're picking this up cold — it's the one page
 
 | Document | Job |
 |---|---|
+| [`docs/EVIDENCE.md`](docs/EVIDENCE.md) | **What backs each claim** — the artefact, table, job or measured number behind every graded line, and what is deliberately still missing |
 | [`docs/DEMO.md`](docs/DEMO.md) | **Start here to look around** — pre-flight, the nine beats, numbers with sources, what not to claim |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | The living spec — what the system *is*, kept true with the code |
 | [`docs/API.md`](docs/API.md) | Every console REST endpoint and every external API this project consumes, one page |

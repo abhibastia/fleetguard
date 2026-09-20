@@ -37,6 +37,7 @@ READ_ENDPOINTS = [
     "/api/recall-trend",
     "/api/audit-log",
     "/api/technicians",
+    "/api/recall-api-status",
 ]
 
 # Endpoints backed by the committed snapshot file rather than by an empty fallback.
@@ -78,6 +79,22 @@ def test_unsnapshotted_endpoints_return_an_honest_empty(snapshot_client, endpoin
         [],
         {"by_component": [], "by_depot": []},
         {"points": [], "latest_issued_at": None},
+        # /api/recall-api-status. `success_rate_pct: None` rather than 0.0 is the point:
+        # "the feed has not run" and "every combo failed" must not serialise identically.
+        {
+            "summary": {
+                "combos": 0,
+                "combos_ok": 0,
+                "success_rate_pct": None,
+                "fleet_vehicles_covered": 0,
+                "last_polled_at": None,
+                "alerts": 0,
+                "alert_campaigns": 0,
+                "vehicles_exposed_by_alerts": 0,
+            },
+            "poll": [],
+            "alerts": [],
+        },
     )
 
 

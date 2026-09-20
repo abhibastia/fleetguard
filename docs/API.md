@@ -59,6 +59,12 @@ below.
 |---|---|---|
 | GET | `/api/signals` | Emerging defect signals: the batch z-score detector's rows plus any agent-opened (`open_defect_signal`) ones, fleet-relevant first. |
 
+## Recall API — the live feed's own state
+
+| Route | What |
+|---|---|
+| `GET /api/recall-api-status` | Coverage and health of the `recallsByVehicle` sweep (one row per fleet make/model/year), plus campaigns the live API has that the daily flat file does not, with fleet exposure attached. `summary.success_rate_pct` is **null, not 0**, when nothing has been polled — "not run" and "all failed" must not render the same. Backed by `fleetguard_recall_api_poll` / `fleetguard_recall_api_alert`, loaded by `fleetguard-load-recall-api-status`. |
+
 ## Reference / roster
 
 | Method | Path | Purpose |

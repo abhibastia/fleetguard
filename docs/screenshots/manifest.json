@@ -1,0 +1,139 @@
+{
+  "captured_at": "2026-09-20T15:23:10.258072+00:00",
+  "base_url": "http://127.0.0.1:8811",
+  "data_mode": "lakebase",
+  "viewport": {
+    "width": 1440,
+    "height": 1000
+  },
+  "shots": [
+    {
+      "file": "home-dark.png",
+      "route": "#/home",
+      "theme": "dark",
+      "caption": "Orientation: what the product is and who it is for"
+    },
+    {
+      "file": "queue-dark.png",
+      "route": "#/queue",
+      "theme": "dark",
+      "caption": "Recall queue, ranked consequence-before-volume"
+    },
+    {
+      "file": "signals-dark.png",
+      "route": "#/signals",
+      "theme": "dark",
+      "caption": "Emerging signals \u2014 the proactive half"
+    },
+    {
+      "file": "evidence-dark.png",
+      "route": "#/evidence",
+      "theme": "dark",
+      "caption": "The measured backtest, including the negative result"
+    },
+    {
+      "file": "launched-dark.png",
+      "route": "#/launched",
+      "theme": "dark",
+      "caption": "Launched service campaigns"
+    },
+    {
+      "file": "work-orders-dark.png",
+      "route": "#/work-orders",
+      "theme": "dark",
+      "caption": "Work orders, assignment and actual cost"
+    },
+    {
+      "file": "audit-log-dark.png",
+      "route": "#/audit-log",
+      "theme": "dark",
+      "caption": "Append-only audit trail"
+    },
+    {
+      "file": "depot-risk-dark.png",
+      "route": "#/depot-risk",
+      "theme": "dark",
+      "caption": "Depot risk, real component numbers not a blended score"
+    },
+    {
+      "file": "trends-dark.png",
+      "route": "#/trends",
+      "theme": "dark",
+      "caption": "Recall trend over time"
+    },
+    {
+      "file": "recall-api-dark.png",
+      "route": "#/recall-api",
+      "theme": "dark",
+      "caption": "Live NHTSA feed: coverage, health, novel campaigns"
+    },
+    {
+      "file": "home-light.png",
+      "route": "#/home",
+      "theme": "light",
+      "caption": "Orientation: what the product is and who it is for"
+    },
+    {
+      "file": "queue-light.png",
+      "route": "#/queue",
+      "theme": "light",
+      "caption": "Recall queue, ranked consequence-before-volume"
+    },
+    {
+      "file": "signals-light.png",
+      "route": "#/signals",
+      "theme": "light",
+      "caption": "Emerging signals \u2014 the proactive half"
+    },
+    {
+      "file": "evidence-light.png",
+      "route": "#/evidence",
+      "theme": "light",
+      "caption": "The measured backtest, including the negative result"
+    },
+    {
+      "file": "launched-light.png",
+      "route": "#/launched",
+      "theme": "light",
+      "caption": "Launched service campaigns"
+    },
+    {
+      "file": "work-orders-light.png",
+      "route": "#/work-orders",
+      "theme": "light",
+      "caption": "Work orders, assignment and actual cost"
+    },
+    {
+      "file": "audit-log-light.png",
+      "route": "#/audit-log",
+      "theme": "light",
+      "caption": "Append-only audit trail"
+    },
+    {
+      "file": "depot-risk-light.png",
+      "route": "#/depot-risk",
+      "theme": "light",
+      "caption": "Depot risk, real component numbers not a blended score"
+    },
+    {
+      "file": "trends-light.png",
+      "route": "#/trends",
+      "theme": "light",
+      "caption": "Recall trend over time"
+    },
+    {
+      "file": "recall-api-light.png",
+      "route": "#/recall-api",
+      "theme": "light",
+      "caption": "Live NHTSA feed: coverage, health, novel campaigns"
+    }
+  ],
+  "deferred": [
+    {
+      "route": "#/queue",
+      "slug": "assistant",
+      "caption": "Assistant panel answering a question (needs the agent endpoint)",
+      "blocked_on": "agent endpoint + AI Search"
+    }
+  ]
+}
