@@ -643,10 +643,30 @@ print(f"model : {MODEL_NAME}\nllm   : {LLM_ENDPOINT}\nindex : {INDEX}")
 # MAGIC                     }
 # MAGIC                 )
 # MAGIC
+# MAGIC         # LOOP EXHAUSTED — RETURN NO ACTIONS.
+# MAGIC         #
+# MAGIC         # Reaching here means the model never produced a final answer. Any action
+# MAGIC         # envelope collected along the way belongs to a turn that was cut off mid-
+# MAGIC         # reasoning, and `routers/chat.py` executes `actions[0]` unconditionally — so
+# MAGIC         # returning them would let a write land from a turn the model never concluded,
+# MAGIC         # and even from a line of reasoning it had already moved on from. The write is
+# MAGIC         # the part with real-world consequences; an abandoned turn must abandon it too.
+# MAGIC         #
+# MAGIC         # Discarding rather than executing is the safe direction: the operator sees
+# MAGIC         # "stopped without a final answer" and can ask again, which is a visible
+# MAGIC         # non-event rather than an invisible write.
+# MAGIC         if actions:
+# MAGIC             print(f"discarding {len(actions)} action envelope(s) from an unfinished turn")
 # MAGIC         emitted.append(
-# MAGIC             {"role": "assistant", "content": "Stopped after 6 tool rounds without a final answer."}
+# MAGIC             {
+# MAGIC                 "role": "assistant",
+# MAGIC                 "content": (
+# MAGIC                     "Stopped after 6 tool rounds without a final answer. No action was "
+# MAGIC                     "taken — please ask again, more specifically."
+# MAGIC                 ),
+# MAGIC             }
 # MAGIC         )
-# MAGIC         return emitted, actions
+# MAGIC         return emitted, []
 # MAGIC
 # MAGIC     def predict(self, request: ResponsesAgentRequest) -> ResponsesAgentResponse:
 # MAGIC         # mlflow's Message type defaults `type` to the literal "message" (not None), so

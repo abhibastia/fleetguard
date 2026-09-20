@@ -122,6 +122,22 @@ describe("WorkOrders", () => {
     expect(updateWorkOrder).not.toHaveBeenCalled();
   });
 
+  it("rejects Infinity rather than silently clearing the cost", async () => {
+    // Regression. `Number("Infinity")` is a number, is not NaN and is not negative, so it
+    // passed the old `!Number.isNaN` guard — and then `JSON.stringify` turned it into
+    // `null`, which the PATCH endpoint reads as an explicit "clear this cost". Typing
+    // Infinity into a costed work order wiped the figure instead of being rejected, with
+    // no error shown. The guard is `Number.isFinite` now.
+    workOrders.mockResolvedValue([order({ wo_id: "WO-1", actual_cost: 250 })]);
+    render(<WorkOrders />);
+    const costInput = await screen.findByDisplayValue("250");
+    await userEvent.clear(costInput);
+    await userEvent.type(costInput, "Infinity");
+    await userEvent.tab();
+    expect(await screen.findByText(/is not a valid cost/)).toBeInTheDocument();
+    expect(updateWorkOrder).not.toHaveBeenCalled();
+  });
+
   it("shows the truncation notice when the fetch returns exactly the request limit", async () => {
     workOrders.mockResolvedValue(
       Array.from({ length: 500 }, (_, i) => order({ wo_id: `WO-${i}` })),

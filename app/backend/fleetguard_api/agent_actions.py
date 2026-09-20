@@ -68,6 +68,9 @@ class OpenDefectSignalParams(BaseModel):
     rationale: str = Field(min_length=1, max_length=2000)
     make: str | None = Field(default=None, max_length=80)
     model: str | None = Field(default=None, max_length=80)
+    # Accepted so an already-deployed agent version can still call the tool, and recorded on
+    # `fleetguard_agent_action.tool_input` as what the model claimed — but deliberately NOT
+    # written to `fleetguard_defect_signal`. See the INSERT below.
     complaint_count: int | None = Field(default=None, ge=0, le=10_000_000)
 
     @field_validator("component", "make", "model")
@@ -242,12 +245,28 @@ def _execute_open_defect_signal(
                 # are left NULL on purpose: the agent did not run the z-score detector, and
                 # filling them would fabricate a measurement. `source` carries the provenance
                 # explicitly rather than leaving it to be inferred from those NULLs (I-069).
+                #
+                # `complaint_count` IS NOW ONE OF THEM, and it did not used to be.
+                #
+                # It was persisted straight from `params.complaint_count` — a value the *model*
+                # supplies, bounded by Pydantic but not derived from anything. The Emerging tab
+                # renders it in the same column as the detector's measured counts, so a number
+                # the model produced was displayed exactly like one the pipeline computed. That
+                # is the mistake the neighbouring `max_z` handling already guards against: the
+                # console shows an em-dash there precisely because "the agent did not measure
+                # this" and "the measurement was zero" are different claims.
+                #
+                # So it is written NULL. The value still exists on the envelope and in
+                # `fleetguard_agent_action.tool_input`, where it is legible as *what the model
+                # asserted* rather than as fleet data. If a real count is wanted here it has to
+                # be computed, not accepted (I-051's rule: a NULL that says "not measured" beats
+                # a value implying a calibration nobody performed).
                 cur.execute(
                     f"""INSERT INTO {PG_SCHEMA}.fleetguard_defect_signal
-                        (signal_id, component, make, model, series_key, complaint_count,
+                        (signal_id, component, make, model, series_key,
                          fleet_vehicles, status, source, opened_by, rationale)
                         VALUES (%(sid)s, %(component)s, %(make)s, %(model)s, %(series_key)s,
-                                %(complaint_count)s, %(fleet_vehicles)s, 'OPEN', 'AGENT',
+                                %(fleet_vehicles)s, 'OPEN', 'AGENT',
                                 %(actor)s, %(rationale)s)""",
                     {
                         "sid": signal_id,
@@ -255,7 +274,6 @@ def _execute_open_defect_signal(
                         "make": params.make,
                         "model": params.model,
                         "series_key": series_key or None,
-                        "complaint_count": params.complaint_count,
                         "fleet_vehicles": fleet_vehicles,
                         "actor": actor,
                         "rationale": params.rationale,

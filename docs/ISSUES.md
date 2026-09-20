@@ -2844,6 +2844,58 @@ corpus would double the cost for coverage the backtest does not use. Source tabl
 
 ## Lakebase / CDF
 
+### I-109 — an external review found a real write-path bug, and one claim it made was already a decision
+*Date:* 2026-09-20 · *Status:* resolved (3 fixed, 1 rejected, 2 open)
+
+**Found by** an external review of an exported zip of this repo, triaged claim-by-claim
+against the code rather than accepted. That distinction mattered: the review was right about
+the most serious thing and wrong about the second-most serious.
+
+**1. CONFIRMED and fixed — a write could execute from a turn the model never finished.**
+`_run()` in `14_fleetguard_agent.py` collects action envelopes as tools return them, and its
+bounded 6-round loop ended with `return emitted, actions` — the *same* return as the clean
+path. `routers/chat.py` then executes `actions[0]` unconditionally. So: the model requests
+`open_defect_signal`, keeps calling tools, never produces a final answer, the loop exhausts —
+and the write still lands, from a line of reasoning the model may already have abandoned.
+Fixed: the exhaustion path returns **no** actions and says so in the reply. Discarding is the
+safe direction — the operator sees a visible non-event instead of an invisible write.
+**Takes effect on the next `agents.deploy()`**; the currently-served v6 predates it.
+
+**2. CONFIRMED and fixed — a model-asserted number was displayed as a measurement.**
+`complaint_count` comes from the model, was bounded by Pydantic, and was then written
+straight into `fleetguard_defect_signal.complaint_count`, which the Emerging tab renders in
+the same column as the detector's computed counts. The column immediately beside it already
+gets this exactly right — `max_z` shows an em-dash for agent-opened signals, with a tooltip
+saying "not a measurement of zero" — so the console was simultaneously careful and careless
+about the same row. Now written NULL, rendered as an em-dash, and preserved on
+`fleetguard_agent_action.tool_input` where it reads as *what the model claimed*. This is
+I-051's rule applied one table along.
+
+**3. CONFIRMED and fixed — `Infinity` silently cleared a logged cost.**
+`Number("Infinity")` is a number, is not `NaN`, and is not negative, so it passed the
+frontend guard; `JSON.stringify` then serialised it to `null`, which the PATCH endpoint reads
+as an explicit "clear this cost". Typing it into a costed work order wiped the figure with no
+error. Guard is `Number.isFinite` now. Verified the exact mechanism in node before fixing.
+
+**4. REJECTED — "multiple action envelopes are silently dropped" is a documented decision.**
+`chat.py` carries eight lines explaining it: a chat turn that performs a batch of writes is
+not something an operator can review, nothing in the prompt asks for more than one, and if it
+ever became a real pattern it should be a deliberate design rather than an emergent one. The
+review read the code and not the comment directly above it. Recording this because "a
+reviewer flagged it" is not evidence on its own, and re-litigating a settled decision every
+time someone new reads the file is its own cost.
+
+**5-6. OPEN, not yet triaged:** campaign-detail scope handling, and the observation that
+depot scoping is fail-open. The second is already documented as fail-open *by construction*
+(ARCHITECTURE §8a — a role with no assignment row is unrestricted, and nobody is enrolled),
+so it is a known limit rather than a finding; the first needs a proper look.
+
+**Lesson.** The two bugs worth fixing here have the same shape: a value or an action that was
+*provisional* at one layer and treated as *final* at the next. An action envelope is a
+request until the turn concludes; a model-supplied integer is a claim until something
+measures it. Both bugs are what happens when the boundary between those two states is not
+represented anywhere in the data that crosses it.
+
 ### I-108 — Lakebase CDF capture took ~3.7 minutes, not the 7–15 s the project quotes
 *Date:* 2026-09-20 · *Status:* **open** — observation, n=1, nothing to fix
 

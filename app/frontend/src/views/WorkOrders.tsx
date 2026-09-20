@@ -154,7 +154,11 @@ export function WorkOrders({
     if (draft === undefined) return; // never touched - nothing to commit
     const trimmed = draft.trim();
     const parsed = trimmed === "" ? null : Number(trimmed);
-    if (parsed !== null && (Number.isNaN(parsed) || parsed < 0)) {
+    // `Number.isFinite`, not `!Number.isNaN`. Number("Infinity") is a number, is not NaN,
+    // and is not negative — so it passed every guard here, and then JSON.stringify turned
+    // it into `null`, which the PATCH endpoint reads as an explicit "clear this cost".
+    // Typing Infinity silently wiped a logged cost instead of being rejected.
+    if (parsed !== null && (!Number.isFinite(parsed) || parsed < 0)) {
       setUpdateError(`"${draft}" is not a valid cost`);
       return;
     }

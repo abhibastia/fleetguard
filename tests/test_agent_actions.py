@@ -537,3 +537,31 @@ class TestChatExtraction:
         text, actions = _extract(payload)
         assert text == "visible"
         assert actions == []
+
+
+def test_model_supplied_complaint_count_is_not_written_to_the_signal(monkeypatch):
+    """Regression: the agent's own number must not land in a measured column.
+
+    `complaint_count` arrives on the envelope from the model. It used to be inserted
+    straight into `fleetguard_defect_signal`, where the Emerging tab renders it in the same
+    column as the detector's computed counts — so a value the model asserted was displayed
+    exactly like one the pipeline measured. The neighbouring `max_z` column already gets
+    this right (em-dash, "not measured" is not "measured zero"); this makes the data layer
+    agree.
+
+    The value is still accepted and still recorded on `fleetguard_agent_action.tool_input`,
+    where it reads as a model claim rather than as fleet data.
+    """
+    cur = _cursor(fleet_n=12)
+    install(monkeypatch, agent_actions, cur)
+
+    envelope = {**VALID, "params": {**VALID["params"], "complaint_count": 4242}}
+    agent_actions.execute(USER, envelope)
+
+    assert "complaint_count" not in cur.sql_for(INSERT_SIGNAL), (
+        "complaint_count was written to fleetguard_defect_signal — it is model-supplied and "
+        "must stay NULL there, like every other column the agent did not measure"
+    )
+    assert 4242 not in cur.params_for(INSERT_SIGNAL).values()
+    # Still preserved as provenance: what the model claimed, on the action record.
+    assert "4242" in str(cur.params_for(INSERT_AGENT_ACTION).values())

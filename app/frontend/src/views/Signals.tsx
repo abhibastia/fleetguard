@@ -224,7 +224,22 @@ export function Signals() {
                       </span>
                     )}
                   </td>
-                  <td className="num">{s.complaint_count}</td>
+                  {/* Same rule as max_z above: an agent-opened signal has no measured
+                      complaint count, and a blank cell would read as zero. The number the
+                      model asserted is kept on the agent-action record, not shown here as
+                      if the pipeline had counted it. */}
+                  <td className="num">
+                    {s.complaint_count != null ? (
+                      s.complaint_count
+                    ) : (
+                      <span
+                        className="muted"
+                        title="Agent-opened signals carry no measured complaint count — not a count of zero."
+                      >
+                        —
+                      </span>
+                    )}
+                  </td>
                   {/* Harm share is triage context. It plays no part in whether a signal fires —
                     the detector is pure volume anomaly (I-051) — so it must never be styled
                     as if it were a score. */}
