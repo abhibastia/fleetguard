@@ -196,6 +196,48 @@
         "WITH exposure_by_make_model AS (SELECT make, model, depot_id, COUNT(DISTINCT vin) AS vehicles_at_risk FROM gold_fleet_exposure GROUP BY make, model, depot_id) SELECT s.series_key, s.make, s.model, s.comp_top, dep.depot_id, dep.depot_name, dep.region, e.vehicles_at_risk FROM gold_emerging_signal s JOIN exposure_by_make_model e ON e.make = s.make AND e.model = s.model JOIN gold_fleet_depot dep ON dep.depot_id = e.depot_id WHERE s.fleet_vehicles > 0 ORDER BY e.vehicles_at_risk DESC"
       ],
       "schema": "fleetguard"
+    },
+    {
+      "catalog": "bootcamp_students",
+      "displayName": "Agent activity KPIs",
+      "name": "ds_agent_activity_kpis",
+      "queryLines": [
+        "SELECT SUM(requests) AS agent_requests,\n",
+        "       SUM(write_actions) AS write_actions,\n",
+        "       COUNT(DISTINCT actor) AS actors\n",
+        "FROM gold_agent_activity_daily"
+      ],
+      "schema": "fleetguard"
+    },
+    {
+      "catalog": "bootcamp_students",
+      "displayName": "Agent tool usage and success rate",
+      "name": "ds_agent_activity_by_tool",
+      "queryLines": [
+        "SELECT tool,\n",
+        "       SUM(requests) AS requests,\n",
+        "       SUM(write_actions) AS writes,\n",
+        "       MAX(success_rate_pct) AS success_rate_pct\n",
+        "FROM gold_agent_activity_daily\n",
+        "GROUP BY tool\n",
+        "ORDER BY requests DESC"
+      ],
+      "schema": "fleetguard"
+    },
+    {
+      "catalog": "bootcamp_students",
+      "displayName": "Recall API poll health by day",
+      "name": "ds_api_poll_health",
+      "queryLines": [
+        "SELECT poll_date,\n",
+        "       success_rate_pct,\n",
+        "       combos_polled,\n",
+        "       combos_http_4xx + combos_http_5xx + combos_malformed + combos_errored AS combos_failed,\n",
+        "       gated_attempts\n",
+        "FROM gold_api_poll_health\n",
+        "ORDER BY poll_date"
+      ],
+      "schema": "fleetguard"
     }
   ],
   "pages": [
@@ -1510,6 +1552,336 @@
               "frame": {
                 "showTitle": true,
                 "title": "Agent writes — who authorised it, what it cost, how long it took"
+              },
+              "version": 2,
+              "widgetType": "table"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 2,
+            "width": 12,
+            "x": 0,
+            "y": 40
+          },
+          "widget": {
+            "multilineTextboxSpec": {
+              "lines": [
+                "## What the system did — agent activity and API health\n\nBoth rollups are derived by `fleetguard-cdf-to-gold`. **The agent numbers are small and real:** the write path has been exercised deliberately, a few times, by one person. Nothing here is seeded. A blank success rate means *not traced*, not *failed* — inference-table ingest lags >30 min and actions written before 2026-09-09 carry no `trace_id`.\n"
+              ]
+            },
+            "name": "ops-w4-text-40"
+          }
+        },
+        {
+          "position": {
+            "height": 4,
+            "width": 4,
+            "x": 0,
+            "y": 42
+          },
+          "widget": {
+            "name": "kpi-agent-requests",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_agent_activity_kpis",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "`agent_requests`",
+                      "name": "agent_requests"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "encodings": {
+                "value": {
+                  "displayName": "Agent requests, all time",
+                  "fieldName": "agent_requests"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Agent requests"
+              },
+              "version": 2,
+              "widgetType": "counter"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 4,
+            "width": 4,
+            "x": 4,
+            "y": 42
+          },
+          "widget": {
+            "name": "kpi-agent-writes",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_agent_activity_kpis",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "`write_actions`",
+                      "name": "write_actions"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "encodings": {
+                "value": {
+                  "displayName": "Of which write actions",
+                  "fieldName": "write_actions"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Write actions"
+              },
+              "version": 2,
+              "widgetType": "counter"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 4,
+            "width": 4,
+            "x": 8,
+            "y": 42
+          },
+          "widget": {
+            "name": "kpi-agent-actors",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_agent_activity_kpis",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "`actors`",
+                      "name": "actors"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "encodings": {
+                "value": {
+                  "displayName": "Humans the writes are attributed to",
+                  "fieldName": "actors"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Distinct actors"
+              },
+              "version": 2,
+              "widgetType": "counter"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 5,
+            "width": 12,
+            "x": 0,
+            "y": 46
+          },
+          "widget": {
+            "name": "agent-tool-usage",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_agent_activity_by_tool",
+                  "disaggregated": true,
+                  "fields": [
+                    {
+                      "expression": "`tool`",
+                      "name": "tool"
+                    },
+                    {
+                      "expression": "`requests`",
+                      "name": "requests"
+                    },
+                    {
+                      "expression": "`writes`",
+                      "name": "writes"
+                    },
+                    {
+                      "expression": "`success_rate_pct`",
+                      "name": "success_rate_pct"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "tool",
+                    "displayName": "tool",
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "type": "string",
+                    "title": "tool"
+                  },
+                  {
+                    "fieldName": "requests",
+                    "displayName": "requests",
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "type": "string",
+                    "title": "requests"
+                  },
+                  {
+                    "fieldName": "writes",
+                    "displayName": "writes",
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "type": "string",
+                    "title": "writes"
+                  },
+                  {
+                    "fieldName": "success_rate_pct",
+                    "displayName": "success_rate_pct",
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "type": "string",
+                    "title": "success_rate_pct"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Tool usage and success rate"
+              },
+              "version": 2,
+              "widgetType": "table"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 5,
+            "width": 12,
+            "x": 0,
+            "y": 51
+          },
+          "widget": {
+            "name": "api-poll-health",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_api_poll_health",
+                  "disaggregated": true,
+                  "fields": [
+                    {
+                      "expression": "`poll_date`",
+                      "name": "poll_date"
+                    },
+                    {
+                      "expression": "`success_rate_pct`",
+                      "name": "success_rate_pct"
+                    },
+                    {
+                      "expression": "`combos_polled`",
+                      "name": "combos_polled"
+                    },
+                    {
+                      "expression": "`combos_failed`",
+                      "name": "combos_failed"
+                    },
+                    {
+                      "expression": "`gated_attempts`",
+                      "name": "gated_attempts"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "poll_date",
+                    "displayName": "poll_date",
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "type": "string",
+                    "title": "poll_date"
+                  },
+                  {
+                    "fieldName": "success_rate_pct",
+                    "displayName": "success_rate_pct",
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "type": "string",
+                    "title": "success_rate_pct"
+                  },
+                  {
+                    "fieldName": "combos_polled",
+                    "displayName": "combos_polled",
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "type": "string",
+                    "title": "combos_polled"
+                  },
+                  {
+                    "fieldName": "combos_failed",
+                    "displayName": "combos_failed",
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "type": "string",
+                    "title": "combos_failed"
+                  },
+                  {
+                    "fieldName": "gated_attempts",
+                    "displayName": "gated_attempts",
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "type": "string",
+                    "title": "gated_attempts"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Recall API: usage and failure rate by day (one row per sweep attempt, retries included)"
               },
               "version": 2,
               "widgetType": "table"

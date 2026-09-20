@@ -2844,6 +2844,50 @@ corpus would double the cost for coverage the backtest does not use. Source tabl
 
 ## Lakebase / CDF
 
+### I-108 — Lakebase CDF capture took ~3.7 minutes, not the 7–15 s the project quotes
+*Date:* 2026-09-20 · *Status:* **open** — observation, n=1, nothing to fix
+
+**Found while** proving the new incremental MERGE path in `21_cdf_to_gold_facts.py`. A probe
+row was inserted into `fleetguard_defect_signal` and the CDF history table was polled every
+~32 s until it appeared.
+
+| event | time (UTC) |
+|---|---|
+| Postgres commit | 14:39:03.6 |
+| `lb_fleetguard_defect_signal_history` still 50 rows | 14:42:35 |
+| row present, 51 rows | 14:43:08 |
+| the row's own `_timestamp` | 14:42:45.7 |
+
+So capture took **between 212 and 245 seconds by observation**, and the row's `_timestamp`
+sits 222 s after the commit. I-046 measured **7.1–15.6 s** (n=3) and
+`ARCHITECTURE.md` §4.5 states that range as the capture latency.
+
+**What this does and does not license.**
+
+- It does **not** replace I-046's numbers. Those were real measurements; so is this. The
+  honest reading is that the range is **much wider than three samples suggested**, and a
+  single figure should not be quoted as "the" capture latency in either direction.
+- It does **not** change the end-to-end figure materially in shape: §8.3's chain was already
+  stated as **2.5–4.5 minutes** and must stay stated that way. What changes is *which part*
+  dominates — on this run, capture alone consumed roughly what the whole chain was budgeted.
+- `_timestamp`'s exact semantics are **not** established. On the I-107 probe earlier the same
+  day, two events 75 s apart in the writer carried `_timestamp`s only 29 s apart, so it is
+  not a faithful source-commit clock. The 212–245 s bound comes from polling, which does not
+  depend on interpreting that column — quote the polled bound, not the 222 s.
+- Databricks publishes **no latency SLA** for Lakebase CDF (Public Preview), so there is
+  nothing being violated here. This is variance, recorded.
+
+**Why record it rather than re-measure until it agrees.** The velocity claim is a graded
+line, and the temptation with an inconvenient sample is to call it an outlier and keep the
+flattering number. One observation is not a distribution — but it is enough to know that
+"7.1–15.6 s" is not a bound. If a tighter claim is ever needed, it needs a proper repeated
+measurement, not a re-run that happens to come back fast.
+
+**Consequence for the demo, and it is mild.** The `table_update` trigger fired correctly and
+the fact table updated unattended; nothing broke. A write simply may take minutes rather than
+seconds to appear in Unity Catalog. Say "a few minutes" when showing the round trip, and do
+not promise sub-minute for anything but the claim I-046 supports on its own terms.
+
 ### I-107 — one table was never set `REPLICA IDENTITY FULL`, so it has no CDF history table at all — **SILENT**
 *Date:* 2026-09-20 · *Status:* resolved
 

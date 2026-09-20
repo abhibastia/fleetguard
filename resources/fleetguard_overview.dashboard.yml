@@ -1,9 +1,11 @@
-# AI/BI (Lakeview) dashboard — the read-only evidence surface, 5 pages / 12 datasets.
+# AI/BI (Lakeview) dashboard — the read-only evidence surface, 5 pages / 20 datasets.
+# (Counts drift: this header said 12 while the file held 17. Read the number out of the
+#  JSON rather than trusting a comment — `jq '.datasets | length' dashboards/*.lvdash.json`.)
 #
 # `file_path` points at `dashboards/fleetguard_overview.lvdash.json`, which was **replaced
 # with a fresh export of the live dashboard** when this resource was created (2026-09-10) and
 # renamed from `.json` to `.lvdash.json` so the CLI recognises it. The previous committed copy
-# and the live dashboard were semantically identical — 5 pages, 12 datasets, 15 widgets on the
+# and the live dashboard were semantically identical — 5 pages, 12 datasets at the time, 15 widgets on the
 # operations page, same positions, same SQL. The only differences were serialisation: the live
 # form splits long text into per-line arrays and carries `catalog`/`schema` on each dataset.
 # Using the exported form means a round-trip through `bundle generate dashboard` is a no-op
@@ -15,7 +17,7 @@
 # but the UI is the tool this file is generated from.
 #
 # `dataset_catalog` / `dataset_schema` are set from the bundle variables rather than left to
-# the values baked into each of the 12 datasets, so the catalog/schema is stated in exactly one
+# the values baked into each dataset, so the catalog/schema is stated in exactly one
 # place. Both parameters need CLI 0.281.0+; this bundle was built on 1.12.1.
 
 resources:

@@ -100,7 +100,7 @@ manual, 1 event-triggered** (`fleetguard-cdf-to-gold`, `table_update`, UNPAUSED 
 
 **AI/BI Dashboard & metric view (added 2026-09-03, Operations page added 2026-09-09):**
 `FleetGuard — Fleet & Recall Overview` (`dashboard_id 01f1a7257e801a2ebb71bdc18fc2113a`,
-published), **5 pages — Overview, Operations, Emerging Signals, Evidence, Trust — 12 datasets**, all against `bootcamp_students.fleetguard` on the
+published), **5 pages — Overview, Operations, Emerging Signals, Evidence, Trust — 20 datasets**, all against `bootcamp_students.fleetguard` on the
 existing `Serverless Starter Warehouse` (`b15d3d6f837ba428`). No new compute, no scheduled
 auto-refresh (queries run only on view). `bootcamp_students.fleetguard.evidence_metrics` — a
 UC Metric View governing `Detection Rate %` / `Lift` / `Median Lead Days` once, sourced from

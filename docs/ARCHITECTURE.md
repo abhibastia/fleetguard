@@ -224,8 +224,11 @@ CDF replicates to `bootcamp_students.bootcamp_cdc` as `lb_fleetguard_<entity>_hi
   for weeks with no destination, and setting `REPLICA IDENTITY FULL` did not create one
   either. It appeared only after the table's **first actual write**. A table that has never
   been written to is the case where the DDL rule does not hold.
-- **Capture latency: 7.1–15.6 s** (n=3, all true measurements). State it as a range
-  consistent with a ~15 s flush; size demos against the **15.6 s worst case**.
+- **Capture latency is wider than three samples suggested.** I-046 measured **7.1–15.6 s**
+  (n=3, all true measurements). A fourth, 2026-09-20, measured **212–245 s by polling**
+  (I-108). Both are real; neither is a bound. Say "seconds to a few minutes", and do not
+  size a demo against 15.6 s as a worst case — it is not one. Databricks publishes no
+  latency SLA for this path, so nothing is being violated; the variance is the finding.
 - CDF configuration is **UI-only** — no CLI, no API, not a bundle resource. It is a manual
   runbook step in any rebuild.
 
@@ -538,12 +541,44 @@ actual dispatch happens through this sequence instead.
 4. `approve_campaign` writes the service campaign, one work order per exposed vehicle, and an
    audit row — **all in one transaction** (per the module's own docstring): a half-launched
    campaign is not a state this path can leave behind.
-5. Lakebase CDF captures the commit in the same **7.1–15.6 s** measured elsewhere (§4.5, §9)
-   and replicates it to `bootcamp_cdc.lb_fleetguard_*_history`.
+5. Lakebase CDF captures the commit and replicates it to
+   `bootcamp_cdc.lb_fleetguard_*_history` — **seconds to a few minutes**; see §4.5, and
+   I-108 for why the older "7.1–15.6 s" is not a bound.
 6. The `fleetguard-cdf-to-gold` job (`src/lakebase/21_cdf_to_gold_facts.py`,
    `trigger.table_update`) derives current-state gold facts from the append-only history
    tables — ranking then dropping tombstoned keys rather than filtering deletes
    pre-window (I-080), the correction recorded in that job's own header comment.
+   **Incremental since 2026-09-20**: it reads a `_sort_by` high-water mark from
+   `ops_cdf_fact_refresh`, ranks only the slice above it and `MERGE`s, with the DELETE and
+   UPSERT branches in one statement so a key deleted and re-inserted inside one slice
+   resolves to its latest state. The watermark is not trusted — every run still reconciles
+   the fact against the **entire** history, and on a mismatch rebuilds from scratch, records
+   the drift and fails. `full_refresh=true` forces the old whole-history path, which is kept
+   rather than deleted. This is the change E-16 named as the trigger for reconsidering
+   `AUTO CDC INTO`; that comparison was made and `AUTO CDC INTO` lost on its own objection,
+   since a hand-written MERGE keeps the I-080 regression guard its opaque ranking would cost.
+
+   **Verified live 2026-09-20, both directions, unattended.** A probe signal was inserted
+   into Lakebase and then deleted; the `table_update` trigger fired on its own each time.
+
+   | run | trigger | mode | fact rows | watermark |
+   |---|---|---|---|---|
+   | 14:39:41 | manual | `SKIP` | 50 | 503 |
+   | 14:44:52 | **table_update** | `INCREMENTAL` | 50 → **51** | 504 |
+   | 14:45:31 | manual | `SKIP` | 51 | 504 |
+   | 14:48:56 | **table_update** | `INCREMENTAL` | 51 → **50** | 505 |
+
+   The second incremental run applied a **tombstone** — the key was removed rather than
+   resurrected, which is the I-080 failure this job exists to prevent, now exercised through
+   the MERGE path rather than only the full-rebuild path. `SKIP` runs did no work at all,
+   which is the point of the watermark. Cleanup confirmed against Postgres: 50 = 50.
+6b. The same job derives two **rollups over time**, which nothing previously did:
+   `gold_agent_activity_daily` (requests, write actions, success rate, latency percentiles
+   and tokens by day/tool/actor) and `gold_api_poll_health` (sweep attempts, failure rates by
+   class, retries, gated rebuilds). Latency and tokens come from the MLflow inference table,
+   never from `gold_agent_action`'s deliberately NULL columns (E-04); a success rate over
+   zero traced requests is **NULL, not 0%**, because "not traced" and "all failed" are
+   different answers.
 7. `/api/work-orders` and `/api/queue` reflect the new state on next read.
 
 ```mermaid

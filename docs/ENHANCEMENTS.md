@@ -482,9 +482,32 @@ unit tests alongside `vin.py` and `chunking.py` — no workspace required.
 
 ---
 
-### E-16 · `AUTO CDC INTO` for the CDF-to-gold job — **DEFERRED, scoped 2026-09-16**
+### E-16 · `AUTO CDC INTO` for the CDF-to-gold job — **REVISITED 2026-09-20, still not built**
 
-**Status: DEFERRED — feasible, not worth doing now.** `src/lakebase/21_cdf_to_gold_facts.py`
+**Status: DEFERRED, and the reason is now stronger rather than weaker.**
+
+> **Revisited 2026-09-20, on the trigger this entry named.** The closing paragraph below says
+> to reconsider *"if `21_cdf_to_gold_facts.py` needs to change for another reason anyway"*.
+> It did — the job became incremental, for the capstone rubric's *"incremental, re-runnable
+> analytics pipeline"* line. So the comparison was made properly rather than deferred again,
+> and `AUTO CDC INTO` **lost on its own stated objection**.
+>
+> Reason 2 below is that `AUTO CDC INTO`'s ranking is opaque engine internals, so the I-080
+> regression guard — the self-test that caught the tombstone bug this job exists to avoid
+> repeating — would have to be dropped or rebuilt downstream. A hand-written `MERGE` against
+> a `_sort_by` high-water mark delivers the same incrementality **and keeps the guard, all
+> three assertions, and the explicit `update_preimage` handling**. It also allowed adding
+> something `AUTO CDC INTO` could not have: a full-history reconciliation on every run, which
+> is what makes the watermark assumption checkable rather than assumed.
+>
+> So the trade E-16 was contemplating is now clearly bad: it would have cost the guard to buy
+> incrementality that was available without it. **Revisit only if a third synced table
+> arrives and the hand-rolled version becomes the bigger maintenance cost** — and note that
+> the one open question below (whether `AUTO CDC INTO` tolerates raw `update_preimage` rows
+> without a staging-view pre-filter) is still unanswered and still needs a live pipeline run
+> to settle.
+
+**Original entry, 2026-09-16 — feasible, not worth doing now.** `src/lakebase/21_cdf_to_gold_facts.py`
 is the only stage past bronze/silver that isn't in the LDP pipeline (`resources/
 bronze_silver.pipeline.yml`); it hand-rolls "current state from an append-only change-event
 log" with `ROW_NUMBER() OVER (PARTITION BY <key> ORDER BY _sort_by DESC)`, which is exactly
