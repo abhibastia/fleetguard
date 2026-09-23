@@ -162,10 +162,10 @@ table again at step 3.6 (Run 2) — do not append a second table, replace these 
 
 | # | Step | Note |
 |---|---|---|
-| 2.1 | **Delete the index** | The one that matters — billing stops **24 h after the last index is deleted** |
-| 2.2 | **Verify the next day that billing actually stopped** | That 24 h rule is load-bearing for this whole plan and is recorded from a single source. Check it once, while there is still time to react |
-| 2.3 | **Stop the App** | |
-| 2.4 | **Leave the agent endpoint on scale-to-zero** | Free idle, and it removes a restore step from Run 2 |
+| 2.1 | ~~**Delete the index**~~ **DONE 2026-09-23** — `complaint_chunk_idx` and endpoint `fleetguard-vs` both deleted; confirmed gone via `list-endpoints` | The one that matters — billing stops **24 h after the last index is deleted** |
+| 2.2 | **Verify the next day that billing actually stopped** — check ~2026-09-24 | That 24 h rule is load-bearing for this whole plan and is recorded from a single source. Check it once, while there is still time to react |
+| 2.3 | ~~**Stop the App**~~ **DONE 2026-09-23** — confirmed `compute_status.state: STOPPED` on the live resource | |
+| 2.4 | ~~**Leave the agent endpoint on scale-to-zero**~~ **CONFIRMED 2026-09-23** — `scale_to_zero_enabled: true` on the live entity; still warm right now, will idle down on its own | Free idle, and it removes a restore step from Run 2 |
 | 2.5 | **Touch nothing else** | Delta tables, Lakebase rows, the registered UC model version and the bundle deployment all persist — which is exactly why Run 2 is cheap. Never `bundle destroy` |
 
 #### Phase 3 — Run 2, before submission. Much shorter: the UC model registration survives teardown
@@ -314,11 +314,15 @@ instead of carrying its own copy of the rate/lift SQL. See I-064/I-065.
 recalls (`recallsByVehicle`, 200/200 combos, 100 s sweep) · `static.nhtsa.gov` flat files
 (`If-Modified-Since`, verified 304).
 
-⚠️ **Now billing — two things (re-established for Run 1, 2026-09-23):**
-1. AI Search endpoint `fleetguard-vs` (STANDARD, 1 unit) — **~$6.72/day**, recreated
-   2026-09-23 (had been deleted; see I-112 for the stalled-then-self-cleared first attempt).
-   Index `complaint_chunk_idx` now at the **fleet make/model scope**: 115,499 rows, `ready:
-   true`, matching `silver_complaint_chunk_indexed` exactly (I-111).
+⚠️ **TORN DOWN 2026-09-23 after Run 1** — Phase 2 executed same day as Run 1 (see the Phase 2
+table above). AI Search endpoint + index deleted, App stopped, agent endpoint left on
+scale-to-zero. **Verify tomorrow (~2026-09-24) that AI Search billing actually stopped** —
+step 2.2, not yet confirmable same-day. What was billing during Run 1, for the record:
+1. AI Search endpoint `fleetguard-vs` (STANDARD, 1 unit) — **~$6.72/day** while it ran
+   2026-09-23 (had been deleted before Run 1; see I-112 for the stalled-then-self-cleared
+   first attempt). Index `complaint_chunk_idx` reached the **fleet make/model scope**:
+   115,499 rows, `ready: true`, matching `silver_complaint_chunk_indexed` exactly (I-111) —
+   **now deleted**, along with the endpoint.
 2. Model Serving endpoint `agents_bootcamp_students-fleetguard-fleetguard_agent` (Small CPU),
    redeployed 2026-09-23, now serving **v7** (carries all I-109/I-110 fixes — action
    terminality, content-based CDF reconciliation, defect-signal idempotency, and the rest).
