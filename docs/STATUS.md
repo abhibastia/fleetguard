@@ -78,23 +78,35 @@ the measured 4,336 rows/min (I-041):
 
 | scope | chunks | one build | **two builds** | if it fails |
 |---|---:|---:|---:|---|
-| fleet make/model | 115,499 | ~27 min | ~54 min | retry the same morning |
+| **chosen 2026-09-23 — fleet make/model** | **115,499** | **~27 min** | **~54 min** | **retry the same morning** |
 | any_harm only | 212,207 | ~49 min | ~1.6 h | retry the same day |
-| **current — post-2010 series** | **1,746,601** | **~6.7 h** | **~13.4 h** | **a lost day, twice** |
+| superseded — post-2010 series | 1,746,601 | ~6.7 h | ~13.4 h | a lost day, twice |
 | all chunks | 2,196,091 | ~8.4 h | ~16.8 h | 2 units, $13.44/day |
 
 **I-035 and I-041 were filed the same day and never combined.** I-035 concluded "under 2M
 vectors, subset size is cost-free" — true for $/day, where every option ties — and is silent
 on time. The current scope is ~30x slower than an option costing exactly the same.
 
-**What shrinking costs, in work rather than money** — decide with this in view, it is the one
-judgement here that is not a technical fact:
-- `ARCHITECTURE.md` §4.4, `DEMO.md` and `EVIDENCE.md` all quote **1,746,601 chunks**, and
-  EVIDENCE frames it as "well past the 1M". Those become wrong.
+**DECIDED 2026-09-23 — fleet make/model, and the scoped source table is already rebuilt
+(I-111).** `silver_complaint_chunk_indexed` now holds 115,499 chunks, verified live against
+`gold_fleet_vehicle`'s 47 make/model pairs (`src/search/27_build_chunk_index_source.py`,
+job `fleetguard-build-chunk-index-source`) — this table had no committed producer at all
+before now, a rebuild-from-empty gap closed at the same time. Reasoning: both builds
+together now fit under an hour instead of ~13.4h against a hard deadline that has already
+seen one rebuild fail outright (I-105); cost is identical to every other sub-2M option
+(I-035); and a fleet-safety tool searching complaints about vehicles the fleet does not
+operate is the weaker demo anyway. Old post-2010-scope table content preserved at Delta
+version 0 if ever needed.
+
+**What this still owes, not yet done:**
+- `ARCHITECTURE.md` §4.4, `DEMO.md` and `EVIDENCE.md` all still quote **1,746,601 chunks**,
+  and EVIDENCE frames it as "well past the 1M". Update once the index itself is rebuilt at
+  the new scope (Phase 1 — needs the live index, so it waits for that paid step).
 - Phase 3's done-when evidence (`ops_hybrid_query_test`, quoted in §4.4) must be **re-run
   against the smaller index and republished as-is**, including if it comes back worse. The
   paraphrase probe *"car suddenly sped up on its own"* leans on unintended-acceleration
-  complaints concentrated in makes this fleet may not operate.
+  complaints concentrated in makes this fleet may not operate — pick a probe the new scope
+  can actually answer.
 - The full corpus stays in Delta either way (2.2M complaints, 5.8M TSBs), so the scale claim
   survives on the lakehouse side — it is the *vector index* number that changes.
 
@@ -109,8 +121,8 @@ day** and 26% longer than it needed to be.
 
 | # | Step | Why now |
 |---|---|---|
-| 0.1 | **Decide the corpus scope** and build the scoped source table | Gates everything below, and Run 1 must use the **identical** scope Run 2 will, or Run 1 did not test what gets submitted |
-| 0.2 | **Merge `fix/repo-review-round-2`** (4 commits, 11 I-110 fixes, full gate green) | Five of those fixes only take effect at step 1.4's `agents.deploy()`; they must be on `main` first |
+| 0.1 | ~~**Decide the corpus scope** and build the scoped source table~~ **DONE 2026-09-23** — fleet make/model, 115,499 chunks, table rebuilt live (I-111) | Gates everything below, and Run 1 must use the **identical** scope Run 2 will, or Run 1 did not test what gets submitted |
+| 0.2 | ~~**Merge `fix/repo-review-round-2`**~~ **DONE 2026-09-23** — squashed into `main` at `40e6864` (5 commits, 11 I-110 fixes, full gate green) | Five of those fixes only take effect at step 1.4's `agents.deploy()`; they must be on `main` first |
 | 0.3 | **Run `src/lakebase/26_add_defect_signal_idempotency.py`** | Lakebase only, seconds, no AI Search involved. Creates `ux_fg_defect_signal_agent_active` |
 | 0.4 | **Write the exact commands down** before you need them | This runbook gets executed **twice**, the second time under deadline pressure |
 

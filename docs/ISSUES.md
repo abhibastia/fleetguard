@@ -28,6 +28,48 @@ no error and passed the obvious check.
 
 ## Tooling / process
 
+### I-111 — AI Search source rescoped to the fleet's make/model, and its rebuild step had never existed
+*Date:* 2026-09-23 · *Status:* resolved
+
+**Decision.** `silver_complaint_chunk_indexed` — the table `complaint_chunk_idx` syncs
+from — was rescoped from the post-2010 ODI investigation series (1,746,601 chunks, ~6.7h to
+sync, I-041) to the fleet's own 47 make/model pairs (`gold_fleet_vehicle`, 15 makes):
+**115,499 chunks, ~27 min to sync.** Driven by `docs/STATUS.md`'s two-window submission plan
+(a dress-rehearsal build now, a second real build before the 4 October deadline) — at the old
+scope that's ~13.4h of index-build exposure with I-105 already showing one rebuild can fail
+outright; at the fleet scope both builds together take under an hour. Cost is identical
+either way (every scope under 2M vectors bills the same $6.72/day, I-035), so this buys
+schedule safety for free, and scoping retrieval to vehicles the fleet actually operates reads
+as the stronger product story, not a shrink.
+
+**Found while rebuilding it: the table had no producer step at all.** It was created
+2026-08-31 by a one-off `CREATE OR REPLACE TABLE AS SELECT` run directly against the
+workspace — never committed as a script. `src/setup/00_create_all_objects.py`'s `EXPECTED`
+manifest listed it under step 2 (the silver pipeline) anyway, which is wrong: the pipeline
+never produces this table. A rebuild-from-empty had no runnable step for it. Closed the same
+way `create_remaining_tables` was closed on 2026-09-11: new committed script
+(`src/search/27_build_chunk_index_source.py`), new bundle job
+(`resources/build_chunk_index_source.job.yml`, `fleetguard-build-chunk-index-source`),
+inserted as step 5 in the manifest with every later step renumbered (+1) to keep the
+printout's step numbers matching what it actually prints.
+
+**Verified live 2026-09-23.** Rebuilt against `bootcamp_students.fleetguard` (`abhi`
+profile): `count(*) = 115,499`, exact match to the figure I-035 measured for this scope on
+2026-08-31 — so the filter (`silver_complaint_chunk` joined to `gold_fleet_vehicle` on
+make+model) reproduces what was actually measured, not an approximation of it. Old post-2010
+version preserved at Delta version 0 (`CREATE OR REPLACE`, not `DROP`) if a rollback is ever
+needed. `delta.enableChangeDataFeed` carried forward.
+
+**Not yet done — flagged, not silent:** `docs/ARCHITECTURE.md` §4.4, `docs/DEMO.md` and
+`docs/EVIDENCE.md` still quote 1,746,601 chunks and "well past the 1M"; both are now wrong
+and need the new number once the index itself is rebuilt at this scope (Phase 1, paid).
+Phase 3's done-when evidence (`ops_hybrid_query_test`) must be re-run against the new scope
+and republished as-is, including if it comes back worse — the existing paraphrase probe
+("car suddenly sped up on its own") leans on unintended-acceleration complaints that may
+concentrate in makes this fleet does not operate, so a new probe may be needed. The full
+corpus stays in Delta regardless (2.2M complaints, 5.8M TSBs); only the vector index number
+changes.
+
 ### I-110 — a second external review, triaged claim-by-claim: 11 fixed, 2 rejected, 5 deferred with reasons
 *Date:* 2026-09-20 · *Status:* resolved (11 fixed, 2 rejected, 5 deferred, 2 doc-only)
 

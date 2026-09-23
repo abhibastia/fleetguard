@@ -1,0 +1,27 @@
+# Rebuilds silver_complaint_chunk_indexed -- the AI Search source table -- scoped to the
+# fleet's own make/model pairs (I-111). Previously a hand-run CTAS with no bundle job, so a
+# rebuild from empty had no runnable step for it; this closes that gap the same way
+# `create_remaining_tables` was closed on 2026-09-11.
+#
+# Idempotent: `CREATE OR REPLACE TABLE AS SELECT`, Delta only, no AI Search endpoint touched.
+# Needs steps 2 (silver pipeline) and 3 (fleet registry) done first.
+
+resources:
+  jobs:
+    build_chunk_index_source:
+      name: fleetguard-build-chunk-index-source
+      tasks:
+        - task_key: build_chunk_index_source
+          disabled: false
+          email_notifications: {}
+          notebook_task:
+            notebook_path: ../src/search/27_build_chunk_index_source.py
+            source: WORKSPACE
+          run_if: ALL_SUCCESS
+          timeout_seconds: 0
+      email_notifications: {}
+      max_concurrent_runs: 1
+      queue:
+        enabled: true
+      timeout_seconds: 0
+      webhook_notifications: {}

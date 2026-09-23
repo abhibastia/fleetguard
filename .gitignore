@@ -60,6 +60,7 @@ app/frontend/dist/
 
 # Local-only: an external review dropped into the tree, not part of the project record.
 /repo-review.md
+/indexing-review.md
 
 # Generated console screenshots. Regenerate with scripts/capture_screenshots.py against a
 # local dev server on live Lakebase — see docs/EVIDENCE.md. Kept out of git deliberately:
