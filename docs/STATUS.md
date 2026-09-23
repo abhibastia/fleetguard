@@ -141,7 +141,22 @@ corpus AI Search is no longer the longest pole, so it moves off the front of the
 | 1.6 | ~~`./scripts/deploy.sh abhi prod` then `databricks bundle run fleetguard_console`~~ **DONE 2026-09-23** — bundle deployed at `5267d0565`, provenance confirmed matching; App `active_deployment.status.state: SUCCEEDED`, `RUNNING`, source path matches the bundle's `app/backend` | ~5 min | The **second** command is what ships App code (I-097). The App has lagged `main` since 2026-09-14 |
 | 1.7 | ~~**Full dry run of `docs/DEMO.md`, every beat**~~ **DONE 2026-09-23 (I-113), as a data/API verification pass, not a manual browser walkthrough** — every beat's claim checked against the live App's `/api/*` routes (programmatic OBO token) and cross-checked against direct queries. **9/10 beats matched exactly**, several to the decimal. Beat 5 (approval) and the write half of Beat 8 deliberately not exercised — irreversible writes. Two real findings, both fixed in `DEMO.md`: the Beat 6 overdue count (44/28 → **93/43**, purely from two weeks passing) is now flagged as "read live, never quote this doc"; audit rows drifted 723→727. One false alarm chased and resolved: an unexplained `FORD F-250` signal turned out to be one of the two agent-opened signals the doc's own math already accounts for | ~1 h | The thing that has never been done: everything is verified individually and **nothing in composition**, which is where this project's failures live |
 | 1.8 | **Generate screenshots** — `scripts/run_local_static_dev.sh 8811`, then `capture_screenshots.py` | ~1 min | Gitignored build output. *After* 1.6, or they show older UI than the code in the zip |
-| 1.9 | **Record the release provenance** — git SHA, bundle deployment, agent model version, App deployment id, index name + row count | ~2 min | Nothing writes these together, so "is the live system the thing in the zip?" today means checking five separate places. Named by the 2026-09-20 review as the single biggest practical risk (I-110) |
+| 1.9 | ~~**Record the release provenance**~~ **DONE 2026-09-23** — see the record immediately below | ~2 min | Nothing writes these together, so "is the live system the thing in the zip?" today means checking five separate places. Named by the 2026-09-20 review as the single biggest practical risk (I-110) |
+
+#### Run 1 release provenance — recorded 2026-09-23
+
+All five checked against the live resource directly, not a deploy call's return value.
+
+| What | Value |
+|---|---|
+| Git HEAD | `1421716` |
+| Deployed bundle state | `5267d05` — one commit behind HEAD; the gap (`1421716`) is docs-only (I-113's DEMO.md/STATUS.md/ISSUES.md edits), no code or bundle resource changed |
+| Agent model version | `7` (`bootcamp_students.fleetguard.fleetguard_agent`), `entity_version: "7"`, `deployment: DEPLOYMENT_READY` |
+| App deployment id | `01f1b759d1b8130dbd51e760e7cae918`, `state: SUCCEEDED`, app `state: RUNNING` |
+| AI Search index | `complaint_chunk_idx`, **115,499 rows**, `ready: true` |
+
+**This is the "is the live system the thing in the zip?" answer for Run 1.** Update this
+table again at step 3.6 (Run 2) — do not append a second table, replace these five values.
 
 #### Phase 2 — teardown
 
