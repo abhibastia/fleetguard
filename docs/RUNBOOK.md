@@ -43,19 +43,17 @@ right, not a formality — if the smoke index's `get-index` output doesn't show 
 
 ### 1.1 — 10K smoke index, then delete it
 
-> **BLOCKED here on the first attempt, 2026-09-23 (I-112) — read before running this again.**
-> Two independent fresh endpoint+index creations both stuck at `ready: false` /
-> "pending endpoint provisioning" indefinitely (~25 min and ~5 min observed), underlying
-> pipeline `IDLE`, zero sync activity, `sync-index` refuses ("not ready"). No cost impact
-> (`IDLE` burns no compute) but no progress either. **Both stuck resources were left live** —
-> check them first before creating a third:
-> ```bash
-> databricks vector-search-indexes get-index bootcamp_students.fleetguard.complaint_chunk_smoke_idx --profile abhi
-> ```
-> If still stuck, next real test per I-112 is pointing a fresh index straight at
-> `silver_complaint_chunk_indexed` (skipping the smoke step) to check whether the 10K `LIMIT`
-> scratch table itself is the trigger — accepting the larger real-scope cost exposure that
-> implies. Full writeup in `docs/ISSUES.md` I-112.
+> **STALLED on the first attempt, 2026-09-23, then SELF-CLEARED (I-112) — read before running
+> this again.** Two independent fresh endpoint+index creations both stuck at `ready: false` /
+> "pending endpoint provisioning" for ~25 min and ~5 min observed, underlying pipeline `IDLE`,
+> zero sync activity, `sync-index` refused ("not ready"). **The second one resolved on its
+> own** — found `ready: true, indexed_row_count: 10000` on a later, unrelated check, with no
+> further action taken in between. The real 115,499-row build immediately after, on the same
+> (now-warm) endpoint, hit **no stall at all** — straight to `RUNNING`, steady climb, `ready`
+> in ~39 min. Best-supported guess: shared-workspace contention specific to the *first* index
+> on a *fresh* endpoint (~296 other students on this metastore). **If this recurs: wait, do
+> not delete-and-recreate** — that was tried in between and did not clear it; inaction did.
+> Full writeup in `docs/ISSUES.md` I-112.
 
 Scope a 10K-row subset from the already-fleet-scoped table (free — Delta only):
 
@@ -213,22 +211,62 @@ databricks bundle run deploy_agent -t prod --profile abhi
 
 `src/agent/15_deploy_agent.py` resolves the **latest** registered version automatically (the
 `model_version` widget default is blank = latest, not a pinned "1" — I-098) and runs its own
-live smoke test at the end. Re-assert scale-to-zero afterward — `agents.deploy()` resets it
-to `False` on every call, silently, every time it has been checked:
+live smoke test at the end (hard `assert`s — a `SUCCESS` job result actually means the live
+answer passed, not just that the notebook ran).
 
-```bash
-databricks serving-endpoints get agents_bootcamp_students-fleetguard-fleetguard_agent --profile abhi
-# then update-config again as in 1.3, scale_to_zero_enabled: true
-```
-
-Confirm the version that's actually serving matches what you just registered — the mismatch
-history here (three silent old-version survivals: v1, v4, v5) is exactly why this checks the
-live resource rather than trusting the deploy call's return value:
+**Check for the old version still being served** — this has now recurred a fourth time (v1,
+v4, v5, and confirmed again 2026-09-23 going v6→v7):
 
 ```bash
 databricks serving-endpoints get agents_bootcamp_students-fleetguard-fleetguard_agent --profile abhi \
-  | grep -A3 '"entity_version"'
+  | grep -A3 '"entity_version"\|"deployment"'
 ```
+
+If the old version is still `DEPLOYMENT_READY`, remove it and re-assert `scale_to_zero_enabled`
+in one call — this is the exact command that worked 2026-09-23 (replace `"7"`/the two `_7`
+names with whatever the new version actually is):
+
+```bash
+databricks serving-endpoints update-config agents_bootcamp_students-fleetguard-fleetguard_agent \
+  --json '{
+    "served_entities": [{
+      "entity_name": "bootcamp_students.fleetguard.fleetguard_agent",
+      "entity_version": "7",
+      "name": "bootcamp_students-fleetguard-fleetguard_agent_7",
+      "workload_size": "Small",
+      "workload_type": "CPU",
+      "scale_to_zero_enabled": true,
+      "environment_vars": {
+        "ENABLE_LANGCHAIN_STREAMING": "true",
+        "ENABLE_MLFLOW_TRACING": "true",
+        "MLFLOW_EXPERIMENT_ID": "127427013652374",
+        "RETURN_REQUEST_ID_IN_RESPONSE": "true"
+      }
+    }],
+    "traffic_config": {
+      "routes": [{"served_entity_name": "bootcamp_students-fleetguard-fleetguard_agent_7", "traffic_percentage": 100}]
+    }
+  }' \
+  --profile abhi
+```
+
+**Verifying a live answer: use a raw REST call, not the CLI or the SDK's `query()` helper.**
+Both were tried 2026-09-23 and failed for different reasons — the CLI's `serving-endpoints
+query` truncates this endpoint's response to `{"id": ..., "object": "response"}` with no
+`output` field (same class of Go-SDK unmarshalling gap as I-040's vector-search finding),
+and the Python SDK's `w.serving_endpoints.query()` sends the wrong body shape for this
+endpoint's `agent/v1/responses` task (`inputs` instead of the top-level `input` key it
+actually expects, `400 Bad Request`). What works:
+
+```bash
+HOST=$(databricks auth env --profile abhi | grep -o '"DATABRICKS_HOST": *"[^"]*"' | grep -o '"[^"]*"$' | tr -d '"')
+TOKEN=$(databricks auth token --profile abhi | grep -o '"access_token": *"[^"]*"' | grep -o '"[^"]*"$' | tr -d '"')
+curl -s -X POST "$HOST/serving-endpoints/agents_bootcamp_students-fleetguard-fleetguard_agent/invocations" \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"input": [{"role": "user", "content": "Which fleet vehicles does recall 17V629000 affect?"}]}'
+```
+
+Expected answer (confirmed 2026-09-23 on v7): 25 vehicles, 22 depots, all `EXACT`.
 
 ### 1.5 — Agent smoke test
 

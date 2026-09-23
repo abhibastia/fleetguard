@@ -133,10 +133,10 @@ corpus AI Search is no longer the longest pole, so it moves off the front of the
 
 | # | Step | Time | Why it is in this order |
 |---|---|---|---|
-| 1.1 | **10K smoke index** — then delete it. **STARTED 2026-09-23, BLOCKED (I-112)** — stuck at `ready: false` on two independent fresh endpoint+index attempts, ~25 min and ~5 min observed, `IDLE` pipeline with zero sync activity. Resume by re-checking those (left live) before creating a third | ~2 min (not observed yet) | Proves columns, embedding model, HYBRID and the `any_harm` filter **before** committing to the real build. Every config mistake otherwise surfaces at the end of the run |
-| 1.2 | **Build the real index** — endpoint `fleetguard-vs` + `complaint_chunk_idx` | 27 min – 6.7 h by scope | Watch it. Poll for **drops**, not just plateaus: I-105's restart showed up as `indexed_row_count` going *backwards*, and the index API gives no other signal. On a drop, check `pipelines list-pipeline-events`, not `get-index` |
-| 1.3 | **Restore the agent endpoint** (`serving_endpoints.update_config`; there is no `start`) | ~3 min | Check `state.ready` and `deployment_state_message`, **never** `scale_to_zero_enabled` — it reads `True` in both idle states and distinguishes nothing (I-092) |
-| 1.4 | **Re-register and deploy the agent** (`fleetguard-agent-build`, then `agents.deploy()`) | ~15 min | **The step people skip because the endpoint "works".** Served v6 predates `watch_campaign`, both I-109 fixes *and* all five I-110 agent-source fixes — action terminality, the result cap, retrieval error-vs-empty, field-wise truncation, the un-hard-coded evidence figures. All inert until this runs. Re-assert `scale_to_zero_enabled` afterwards; `agents.deploy()` has silently reset it every time |
+| 1.1 | ~~**10K smoke index** — then delete it.~~ **DONE 2026-09-23** — I-112's stall cleared on its own (both stuck attempts left live; the second reached `ready: true, indexed_row_count: 10000` by the time this was rechecked). All three I-040 verification checks re-passed on the smoke scope: `columns_to_sync` complete, `any_harm` filter 10/10, HYBRID differs from ANN. Smoke index + scratch table deleted after | ~2 min once unblocked | Proves columns, embedding model, HYBRID and the `any_harm` filter **before** committing to the real build. Every config mistake otherwise surfaces at the end of the run |
+| 1.2 | ~~**Build the real index**~~ **DONE 2026-09-23** — `complaint_chunk_idx` on `fleetguard-vs`, **115,499/115,499, `ready: true`**. ~39 min build (vs ~27 min estimate), no drops, watched via `indexed_row_count` polling the whole way | 27 min – 6.7 h by scope | Watch it. Poll for **drops**, not just plateaus: I-105's restart showed up as `indexed_row_count` going *backwards*, and the index API gives no other signal. On a drop, check `pipelines list-pipeline-events`, not `get-index` |
+| 1.3 | ~~**Restore the agent endpoint**~~ **SKIPPED, folded into 1.4** — v6 was still `DEPLOYMENT_STOPPED`; since 1.4 deploys a new version to the same endpoint regardless of the old one's state, waking v6 first would have been wasted work | ~3 min | Check `state.ready` and `deployment_state_message`, **never** `scale_to_zero_enabled` — it reads `True` in both idle states and distinguishes nothing (I-092) |
+| 1.4 | ~~**Re-register and deploy the agent**~~ **DONE 2026-09-23** — `agent_build` registered **v7** (job run `984458696663658`, `result_state: SUCCESS`), `deploy_agent` deployed it (job run `107051120124244`, `SUCCESS`). **v6 stayed `DEPLOYMENT_READY` at 0% traffic exactly as I-050/I-092 predicted** — the third+ occurrence — removed via `update-config` with only v7's served entity; `scale_to_zero_enabled` re-asserted `true` in the same call. Independently verified live via a raw REST call (not the CLI, which truncates this endpoint's response, and not just the job's exit code): the recall-17V629000 question returned **"25 vehicles across 22 depots... all EXACT matches"**, matching the historically-confirmed correct answer | ~15 min | **The step people skip because the endpoint "works".** Served v6 predates `watch_campaign`, both I-109 fixes *and* all five I-110 agent-source fixes — action terminality, the result cap, retrieval error-vs-empty, field-wise truncation, the un-hard-coded evidence figures. All inert until this runs. Re-assert `scale_to_zero_enabled` afterwards; `agents.deploy()` has silently reset it every time |
 | 1.5 | **Run the agent smoke test** in `14_fleetguard_agent.py` | ~5 min | Dies on `search_complaints` without 1.2. First run past that point since `watch_campaign` was written |
 | 1.6 | `./scripts/deploy.sh abhi prod` then `databricks bundle run fleetguard_console` | ~5 min | The **second** command is what ships App code (I-097). The App has lagged `main` since 2026-09-14 |
 | 1.7 | **Full dry run of `docs/DEMO.md`, every beat** | ~1 h | The thing that has never been done: everything is verified individually and **nothing in composition**, which is where this project's failures live |
@@ -299,13 +299,17 @@ instead of carrying its own copy of the rate/lift SQL. See I-064/I-065.
 recalls (`recallsByVehicle`, 200/200 combos, 100 s sweep) · `static.nhtsa.gov` flat files
 (`If-Modified-Since`, verified 304).
 
-⚠️ **Now billing — two things:**
-1. AI Search endpoint `fleetguard-vs` (STANDARD, 1 unit) — **~$6.72/day**, started 2026-08-31.
+⚠️ **Now billing — two things (re-established for Run 1, 2026-09-23):**
+1. AI Search endpoint `fleetguard-vs` (STANDARD, 1 unit) — **~$6.72/day**, recreated
+   2026-09-23 (had been deleted; see I-112 for the stalled-then-self-cleared first attempt).
+   Index `complaint_chunk_idx` now at the **fleet make/model scope**: 115,499 rows, `ready:
+   true`, matching `silver_complaint_chunk_indexed` exactly (I-111).
 2. Model Serving endpoint `agents_bootcamp_students-fleetguard-fleetguard_agent` (Small CPU),
-   started 2026-09-02, serving **v6**. **`scale_to_zero_enabled` is `True`** as of 2026-09-08,
-   so it bills per use rather than continuously and the first question after an idle period
-   pays a cold start. **This has to be re-asserted after every deploy:** `agents.deploy()`
-   set it back to `False` on both v5 and v6, silently reverting the decision.
+   redeployed 2026-09-23, now serving **v7** (carries all I-109/I-110 fixes — action
+   terminality, content-based CDF reconciliation, defect-signal idempotency, and the rest).
+   **`scale_to_zero_enabled` is `True`**, re-asserted in the same call that removed the old
+   version — see below. **This has to be re-asserted after every deploy:** `agents.deploy()`
+   set it back to `False` on v7 too, same as every prior version.
    **The rate cannot be self-served from this workspace:** `system.billing` requires
    `USE SCHEMA`, which a non-admin on a shared metastore does not have, and the public
    pricing pages publish GPU serving DBU rates only — there is no CPU workload-size table.
@@ -314,7 +318,8 @@ recalls (`recallsByVehicle`, 200/200 combos, 100 s sweep) · `static.nhtsa.gov` 
    `DEPLOYMENT_READY` at 0% traffic — two containers billing for one agent. Removed
    2026-09-02 via `serving-endpoints update-config`; endpoint re-verified afterwards
    (25 vehicles / 22 depots / EXACT). Check for this after every redeploy. **It has now
-   happened three times** (v1, v4, v5) — assume it, do not check for it hopefully.
+   happened four times** (v1, v4, v5, and v6→v7 on 2026-09-23) — assume it, do not check for
+   it hopefully. The exact working `update-config` command is in `docs/RUNBOOK.md` step 1.4.
 
 3. **`fleetguard-cdf-to-gold` (job `851598550157757`) is the first job that runs without being
    asked** — `table_update` trigger, UNPAUSED 2026-09-08. It is **event-driven, not scheduled**:

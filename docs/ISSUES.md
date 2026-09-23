@@ -14,7 +14,7 @@ no error and passed the obvious check.
 
 | ID | Area | Issue | Status |
 |---|---|---|---|
-| I-112 | Phase 1 | Run 1's smoke index (`complaint_chunk_smoke_idx`) stuck at `ready: false` / "pending endpoint provisioning" indefinitely, on **two independent fresh endpoint+index+pipeline creations**, ~25 min and ~5 min observed. Underlying pipeline stays `IDLE`, zero events past creation, `sync-index` refuses ("not ready"). Not billing extra while `IDLE`. Left as-is (both left live) rather than a third blind retry. | **open** |
+| I-112 | Phase 1 | Smoke index stuck at `ready: false` on two fresh attempts, **self-cleared** on the second — root cause unconfirmed, best guess is shared-workspace contention on a *first* index on a fresh endpoint (the real 115K build, on an already-warm endpoint, hit no stall at all same session). If it recurs in Run 2: wait, don't delete-and-recreate. | **watch** |
 | I-028 | Phase 5 | **RESOLVED 2026-08-31.** User confirmed authorisation to use the existing CDF mapping `databricks_postgres.bootcamp_students` → `bootcamp_students.bootcamp_cdc`. Naming decided as `fleetguard_<entity>` → `lb_fleetguard_<entity>_history` (see I-036). Phase 5 unparked. | ✅ resolved |
 | I-018 | Cost | **Sized (see I-025).** Embedding is ~275M tokens ≈ **$28–36 one-off** — not the problem. The AI Search *endpoint* is **~$403/month recurring** and is the real exposure. Mitigation is index lifecycle (billing stops 24h after the last index is deleted), not corpus trimming. Still open only as a decision on how long to leave the index up. | **open** |
 | I-101 | Cost | The agent's AI Search endpoint (`fleetguard-vs` / `complaint_chunk_idx`) was **deliberately deleted** 2026-09-08 after ~15K DBUs of usage that day, to cap billing. Any run of `14_fleetguard_agent.py` now fails on its first smoke-test cell (`search_complaints`), which blocks live verification of every tool in the file — including new ones — until the endpoint is recreated. Recreating it is a cost decision, not a bug fix. | **watch** |
@@ -30,7 +30,32 @@ no error and passed the obvious check.
 ## Tooling / process
 
 ### I-112 — Run 1's smoke index never leaves "pending endpoint provisioning" — reproduced twice, no root cause found yet
-*Date:* 2026-09-23 · *Status:* **open** — stopped after two clean reproductions, not a fix
+*Date:* 2026-09-23 · *Status:* **resolved (self-cleared) — root cause still unconfirmed**
+
+**UPDATE, same day.** The second stuck attempt (endpoint `776e23e6...`, pipeline
+`1bc01f32...`) resolved on its own — checked again after stopping deliberate investigation
+and it read `ready: true, indexed_row_count: 10000`, no further action taken. **Elapsed
+between "stopped investigating" and "found ready" was on the order of tens of minutes**, not
+independently timestamped since the check was incidental to resuming other work — so this
+does not distinguish "eventually completes on its own" from "completed shortly after the
+last check and sat ready for a while." All three I-040 verification checks (columns_to_sync,
+`any_harm` filter, HYBRID-vs-ANN) passed on the smoke scope before deleting it. The real
+115,499-row build afterward (same session) hit **no** stall at all — created, went straight
+to `RUNNING`, climbed steadily, `ready: true` in ~39 min.
+
+**Best-supported explanation, still unconfirmed:** shared-workspace contention on
+first-index provisioning specifically (this metastore has ~296 other students, and AI
+Search capacity is a documented shared resource elsewhere in this project — I-105 also
+attributed a different failure to platform-side embedding-gateway load). Both stuck
+attempts were the **first index ever placed on a brand-new endpoint**; the real build was
+the **second** index placed on an already-warm endpoint (`fleetguard-vs` had already
+successfully hosted the smoke index earlier in the same session) and did not stall at all.
+This is consistent with, but does not prove, a first-index-provisioning-specific delay.
+
+**Practical takeaway for Run 2 (Phase 3):** if the first index created on a fresh endpoint
+stalls again, the evidence here says *waiting* (not deleting and recreating) is the better
+first response — the fix that actually worked was inaction, not the deliberate
+delete-and-recreate tried in between.
 
 **Found while** executing `docs/RUNBOOK.md` step 1.1 (the 10K-row smoke index) for the first
 time. `create-index` for `bootcamp_students.fleetguard.complaint_chunk_smoke_idx` on a
