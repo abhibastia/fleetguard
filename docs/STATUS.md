@@ -123,7 +123,7 @@ day** and 26% longer than it needed to be.
 |---|---|---|
 | 0.1 | ~~**Decide the corpus scope** and build the scoped source table~~ **DONE 2026-09-23** — fleet make/model, 115,499 chunks, table rebuilt live (I-111) | Gates everything below, and Run 1 must use the **identical** scope Run 2 will, or Run 1 did not test what gets submitted |
 | 0.2 | ~~**Merge `fix/repo-review-round-2`**~~ **DONE 2026-09-23** — squashed into `main` at `40e6864` (5 commits, 11 I-110 fixes, full gate green) | Five of those fixes only take effect at step 1.4's `agents.deploy()`; they must be on `main` first |
-| 0.3 | **Run `src/lakebase/26_add_defect_signal_idempotency.py`** | Lakebase only, seconds, no AI Search involved. Creates `ux_fg_defect_signal_agent_active` |
+| 0.3 | ~~**Run `src/lakebase/26_add_defect_signal_idempotency.py`**~~ **DONE 2026-09-23** — run `715399558734210`, job + task both `TERMINATED`/`SUCCESS` on the live resource (not just CLI exit). `ux_fg_defect_signal_agent_active` created; the notebook's own asserts proved duplicate-rejection, reopen-after-close, and detector-signals-unaffected, any of which would have failed the run | Lakebase only, seconds, no AI Search involved |
 | 0.4 | **Write the exact commands down** before you need them | This runbook gets executed **twice**, the second time under deadline pressure |
 
 #### Phase 1 — Run 1, the dress rehearsal. Budget a day, not the ~3 h of work
