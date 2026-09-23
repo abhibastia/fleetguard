@@ -125,9 +125,15 @@ exposed vehicle + audit row. **205 work orders in 3 s**, measured.
 
 ### Beat 6 · Work orders — closing the loop
 
-331 work orders: 144 completed, 84 in progress, 94 open, 9 cancelled. All assigned to a
-technician **at the right depot** — the server rejects a cross-depot assignment, it is not UI
-filtering. **44 are overdue across 28 depots.**
+331 work orders — the split across completed/in-progress/open/cancelled and the overdue count
+both **move with the calendar** (overdue = `due_date` in the past and not completed/cancelled,
+against uncompleted seed data). Measured 2026-09-09: 144/84/94/9, **44 overdue across 28
+depots**. Re-measured 2026-09-23 (I-113, no writes in between): 144/83/95/9 — a 1-order drift
+— but **93 overdue across 43 depots**, more than double, purely from two more weeks passing
+with no completions on those orders. **Say the overdue figure live from the app, never quote
+this doc's number** — it will be wrong again by the next session, predictably and by a lot.
+All work orders are assigned to a technician **at the right depot** — the server rejects a
+cross-depot assignment, it is not UI filtering.
 
 ### Beat 7 · Cost and audit — why a fleet buys this
 
@@ -192,7 +198,7 @@ existed, but nothing supplied the id until E-03 was wired (`ISSUES.md`).
 | Complaints corpus | **2,240,289** | `bronze_complaints` |
 | Recall campaigns | 244,925 rows / **15,211** campaigns | `bronze_recalls` |
 | Investigations | 154,367 rows / **5,344** distinct | `bronze_investigations` |
-| Indexed chunks | **1,746,601** | `complaint_chunk_idx` |
+| Indexed chunks | **115,499** (fleet make/model scope, rescoped 2026-09-23, I-111 — was 1,746,601) | `complaint_chunk_idx` |
 | Fleet | **20,000** vehicles · **60** depots · 47 models | `gold_fleet_vehicle` |
 | Exposure (EXACT) | **118,323** distinct (vin, campaign) | `fleetguard_vehicle_exposure` |
 | `17V629000` | **25** vehicles / **22** depots, EXACT | verified 2026-09-09 |
@@ -202,7 +208,7 @@ existed, but nothing supplied the id until E-03 was wired (`ISSUES.md`).
 | Top signal (RAM PROMASTER) | **2,418** vehicles, `MODEL_VARIANT` | verified 2026-09-11 |
 | RAM 2500 signal | **1,256** vehicles, z 5.62, 64 complaints, `EXACT` | verified 2026-09-11 |
 | Model B | precision **83.7%**, recall **96.3%**, AUC 0.925 | 765-pair golden set |
-| Work orders / audit / cost | **331** / **723** / **$84,409.68** | verified 2026-09-09 |
+| Work orders / audit / cost | **331** / 723→**727** / **$84,409.68** | verified 2026-09-09, re-checked 2026-09-23 (I-113) — cost and work-order total unchanged, audit rows drifted +4 from activity between sessions |
 
 **Why the console says 6 and the warehouse says 4.** `gold_emerging_signal` holds 48 detector
 rows, **4** of them fleet-relevant. Lakebase adds the 2 agent-opened signals, giving **50 and 6**.

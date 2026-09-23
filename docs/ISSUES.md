@@ -29,6 +29,48 @@ no error and passed the obvious check.
 
 ## Tooling / process
 
+### I-113 — Run 1 step 1.7's data verification: DEMO.md's Beat 6 overdue count is a moving target, not a fact
+*Date:* 2026-09-23 · *Status:* resolved (doc fixed) — the underlying mechanism is not a bug
+
+**What was done.** Rather than a manual browser walkthrough of `DEMO.md`'s ten beats, every
+beat's underlying claim was checked against the **live App's actual `/api/*` routes** (via a
+programmatic OBO token — same method, and same caveat, as the 2026-09-08 App verification:
+this proves the API/data path works, not a fresh browser consent flow) and cross-checked
+against direct warehouse/Lakebase queries where useful. Approval (Beat 5) and any write-path
+exercise of the agent (the "open a defect signal" half of Beat 8) were **deliberately not
+run** — both are irreversible, append-only writes DEMO.md itself warns against outside a real
+demo.
+
+**Nine of ten beats matched exactly**, several to the decimal ($84,409.68; 16.0/11.1/1.44/2.62;
+action_id 7's 29726 ms). Two real findings:
+
+- **Beat 6's "44 overdue across 28 depots" is not a fact, it's a snapshot of a moving
+  target.** Overdue is computed as `due_date` in the past on a not-completed/cancelled order,
+  against seed data that stopped changing after 2026-09-09. Re-measured live 2026-09-23 with
+  zero writes in between: **93 overdue across 43 depots** — more than double, purely from two
+  more weeks elapsing. The work-order status split also drifted by exactly 1 (144/83/95/9 vs
+  the documented 144/84/94/9) for the same reason — some order crossed its due date and the
+  two counts that track "not yet done" moved. **Fixed in `DEMO.md`**: the overdue line now
+  says to read it live from the app, never quote the doc's number — the next session would
+  reproduce the same staleness on any date.
+- **Audit log read 727 rows, not 723.** A small (+4), unexplained drift, present before this
+  session started (nothing here wrote to Lakebase). Recorded in `DEMO.md`'s numbers table
+  rather than silently updated, since the exact number is expected to keep moving too.
+
+**One thing chased and resolved as a non-issue:** a `FORD F-250` signal appeared in the live
+signals list with no mention in `DEMO.md`'s narrative. Checked `gold_defect_signal_current`
+directly — it's one of the **two agent-opened signals** (`AGENT-c1594dc7e41f`, opened
+2026-09-16, real complaint-narrative rationale, not test junk) that `DEMO.md`'s own text
+already accounts for in the "48 detector + 2 agent-opened = 50" arithmetic. The confusion was
+not knowing which two; now confirmed (the other is a RAM 2500 steering signal,
+`AGENT-71556b31962d`).
+
+**Also confirmed unchanged, not re-derived:** the CDF-to-gold reconciliation
+(`ops_cdf_fact_refresh`'s last runs show `gold_agent_action`/`gold_defect_signal_current` row
+counts matching live `/api/*` responses exactly) and Beat 10's trace/audit join (`action_id
+7`, identical values to the 2026-09-09 measurement — this one genuinely does not move, since
+nothing has written a second agent action since).
+
 ### I-112 — Run 1's smoke index never leaves "pending endpoint provisioning" — reproduced twice, no root cause found yet
 *Date:* 2026-09-23 · *Status:* **resolved (self-cleared) — root cause still unconfirmed**
 
