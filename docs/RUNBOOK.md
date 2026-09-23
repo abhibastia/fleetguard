@@ -43,6 +43,20 @@ right, not a formality — if the smoke index's `get-index` output doesn't show 
 
 ### 1.1 — 10K smoke index, then delete it
 
+> **BLOCKED here on the first attempt, 2026-09-23 (I-112) — read before running this again.**
+> Two independent fresh endpoint+index creations both stuck at `ready: false` /
+> "pending endpoint provisioning" indefinitely (~25 min and ~5 min observed), underlying
+> pipeline `IDLE`, zero sync activity, `sync-index` refuses ("not ready"). No cost impact
+> (`IDLE` burns no compute) but no progress either. **Both stuck resources were left live** —
+> check them first before creating a third:
+> ```bash
+> databricks vector-search-indexes get-index bootcamp_students.fleetguard.complaint_chunk_smoke_idx --profile abhi
+> ```
+> If still stuck, next real test per I-112 is pointing a fresh index straight at
+> `silver_complaint_chunk_indexed` (skipping the smoke step) to check whether the 10K `LIMIT`
+> scratch table itself is the trigger — accepting the larger real-scope cost exposure that
+> implies. Full writeup in `docs/ISSUES.md` I-112.
+
 Scope a 10K-row subset from the already-fleet-scoped table (free — Delta only):
 
 ```bash
@@ -68,12 +82,19 @@ databricks vector-search-endpoints get-endpoint fleetguard-vs --profile abhi
 
 Create the smoke index:
 
+**`--json` and positional args are mutually exclusive** — passing both errors with
+`when --json flag is specified, no positional arguments are allowed` (found running this
+live 2026-09-23). `name`, `endpoint_name`, `primary_key`, `index_type` all go inside the JSON
+body instead:
+
 ```bash
 databricks vector-search-indexes create-index \
-  complaint_chunk_smoke_idx fleetguard-vs chunk_id DELTA_SYNC \
   --index-subtype HYBRID \
   --json '{
     "name": "bootcamp_students.fleetguard.complaint_chunk_smoke_idx",
+    "endpoint_name": "fleetguard-vs",
+    "primary_key": "chunk_id",
+    "index_type": "DELTA_SYNC",
     "delta_sync_index_spec": {
       "source_table": "bootcamp_students.fleetguard.silver_complaint_chunk_smoke10k",
       "pipeline_type": "TRIGGERED",
@@ -115,10 +136,12 @@ Same command shape as the smoke index, full scope, no `smoke10k` suffix:
 
 ```bash
 databricks vector-search-indexes create-index \
-  complaint_chunk_idx fleetguard-vs chunk_id DELTA_SYNC \
   --index-subtype HYBRID \
   --json '{
     "name": "bootcamp_students.fleetguard.complaint_chunk_idx",
+    "endpoint_name": "fleetguard-vs",
+    "primary_key": "chunk_id",
+    "index_type": "DELTA_SYNC",
     "delta_sync_index_spec": {
       "source_table": "bootcamp_students.fleetguard.silver_complaint_chunk_indexed",
       "pipeline_type": "TRIGGERED",

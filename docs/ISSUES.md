@@ -14,6 +14,7 @@ no error and passed the obvious check.
 
 | ID | Area | Issue | Status |
 |---|---|---|---|
+| I-112 | Phase 1 | Run 1's smoke index (`complaint_chunk_smoke_idx`) stuck at `ready: false` / "pending endpoint provisioning" indefinitely, on **two independent fresh endpoint+index+pipeline creations**, ~25 min and ~5 min observed. Underlying pipeline stays `IDLE`, zero events past creation, `sync-index` refuses ("not ready"). Not billing extra while `IDLE`. Left as-is (both left live) rather than a third blind retry. | **open** |
 | I-028 | Phase 5 | **RESOLVED 2026-08-31.** User confirmed authorisation to use the existing CDF mapping `databricks_postgres.bootcamp_students` → `bootcamp_students.bootcamp_cdc`. Naming decided as `fleetguard_<entity>` → `lb_fleetguard_<entity>_history` (see I-036). Phase 5 unparked. | ✅ resolved |
 | I-018 | Cost | **Sized (see I-025).** Embedding is ~275M tokens ≈ **$28–36 one-off** — not the problem. The AI Search *endpoint* is **~$403/month recurring** and is the real exposure. Mitigation is index lifecycle (billing stops 24h after the last index is deleted), not corpus trimming. Still open only as a decision on how long to leave the index up. | **open** |
 | I-101 | Cost | The agent's AI Search endpoint (`fleetguard-vs` / `complaint_chunk_idx`) was **deliberately deleted** 2026-09-08 after ~15K DBUs of usage that day, to cap billing. Any run of `14_fleetguard_agent.py` now fails on its first smoke-test cell (`search_complaints`), which blocks live verification of every tool in the file — including new ones — until the endpoint is recreated. Recreating it is a cost decision, not a bug fix. | **watch** |
@@ -27,6 +28,55 @@ no error and passed the obvious check.
 ---
 
 ## Tooling / process
+
+### I-112 — Run 1's smoke index never leaves "pending endpoint provisioning" — reproduced twice, no root cause found yet
+*Date:* 2026-09-23 · *Status:* **open** — stopped after two clean reproductions, not a fix
+
+**Found while** executing `docs/RUNBOOK.md` step 1.1 (the 10K-row smoke index) for the first
+time. `create-index` for `bootcamp_students.fleetguard.complaint_chunk_smoke_idx` on a
+brand-new `fleetguard-vs` endpoint returned normally and reported
+`"message": "Delta sync index creation is pending endpoint provisioning.", "ready": false"` —
+expected for the first ~1-2 minutes.
+
+**Symptom.** That message never changed. Polled for 25 minutes (a 5-minute Monitor loop, a
+manual check, then a 12-minute wait, then another manual check) — `ready` stayed `false` the
+entire time, with the identical message throughout. `databricks pipelines get <pipeline_id>`
+showed `state: IDLE` from the moment of creation, and `list-pipeline-events` showed exactly
+one event (`"User ... created pipeline."`) and nothing after it — no update ever started.
+`vector-search-indexes sync-index` (the CLI's own documented way to force a `TRIGGERED`
+pipeline to run) refused: `Vector index ... is not ready.` — a chicken-and-egg: the index
+will not sync because it is not ready, and it is not ready because it never syncs.
+
+**Reproduced clean, ruling out stale state.** Deleted the index and the endpoint entirely,
+recreated both from scratch (`create-endpoint` → `ONLINE` immediately, `create-index` with
+identical JSON) — new endpoint id, new pipeline id, same exact symptom: `IDLE`, one creation
+event, no sync, `ready: false`, for the ~5 minutes observed before stopping deliberately
+rather than retrying a third time blind.
+
+**Not caused by anything specific to this project's config**, as far as checked:
+`columns_to_sync`, `embedding_source_columns`, `pipeline_type: TRIGGERED`, `index_subtype:
+HYBRID` all matched what I-040/I-105 independently confirmed working for the *original*
+index built 2026-08-31. The one variable not yet tested: whether this specific
+`silver_complaint_chunk_smoke10k` scratch table (10K-row `LIMIT` CTAS) has some property —
+row count, file layout, a metadata gap from `LIMIT` rather than a real filter — that a
+115,499-row or 1,746,601-row source table does not share. Not tested because doing so means
+either the real 115K build (real cost exposure if it also stalls) or more time on an
+already-twice-reproduced stall.
+
+**Cost impact: none observed.** An `IDLE` pipeline runs no compute; the only accruing cost
+across both attempts was the flat `fleetguard-vs` endpoint rate (~$0.28/hr) for the total
+observation window. Explicitly checked before deciding how much time to spend on this,
+given the project's stated sensitivity to repeating I-101's ~15K-DBU day.
+
+**Left as-is, not torn down.** Both the second endpoint and its stuck index are still live
+(diagnostic value if picked up again > the ~$0.28/hr while investigating). If resuming:
+first check whether either has spontaneously started (shared-workspace contention on
+first-index provisioning is a plausible, unconfirmed explanation — this project sits in a
+metastore shared with ~296 other students, some presumably hitting the same AI Search
+capacity around the same time). If still stuck, the next real test is whether the *smoke*
+table specifically is the trigger, by pointing a fresh index at
+`silver_complaint_chunk_indexed` directly (skipping the smoke step) rather than at the
+10K-row scratch table — accepting the larger cost exposure that implies.
 
 ### I-111 — AI Search source rescoped to the fleet's make/model, and its rebuild step had never existed
 *Date:* 2026-09-23 · *Status:* resolved
