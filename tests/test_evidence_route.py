@@ -59,6 +59,11 @@ def test_chat_stays_gated(client: TestClient) -> None:
 
 
 def test_signals_stay_gated(client: TestClient) -> None:
-    # Signals read fleet exposure. Evidence is the *only* public route; if this ever
-    # returns 200 the exemption has been widened past what §8a permits.
+    # Signals read fleet exposure. `/evidence` and `/corpus` are the only public routes; if
+    # this ever returns 200 the exemption has been widened past what §8a permits.
+    #
+    # `/corpus` was added 2026-09-23 and this comment used to say evidence was the ONLY one.
+    # Updated rather than loosened: the assertion's job is to make a third exemption require
+    # a deliberate edit, so the count is named here and `tests/test_corpus_route.py` carries
+    # the matching argument for why corpus qualifies (cardinality, never contents).
     assert client.get("/api/signals").status_code == 401

@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import {
   api,
+  type Corpus,
   type DepotRisk,
   type Evidence,
   type QueueItem,
   type SignalSummary,
 } from "../lib/api";
+import { FlowDiagram } from "./HomeFlow";
 
 /**
  * The landing page.
@@ -22,6 +24,7 @@ import {
  */
 export function Home({ onNavigate }: { onNavigate: (view: string) => void }) {
   const [evidence, setEvidence] = useState<Evidence | null>(null);
+  const [corpus, setCorpus] = useState<Corpus | null>(null);
   const [queue, setQueue] = useState<QueueItem[] | null>(null);
   const [signals, setSignals] = useState<SignalSummary | null>(null);
   const [depots, setDepots] = useState<DepotRisk[] | null>(null);
@@ -41,6 +44,10 @@ export function Home({ onNavigate }: { onNavigate: (view: string) => void }) {
     // `allSettled` — is enough to know when every attempt has finished, one way or another.
     Promise.all([
       api.evidence().then((e) => live && setEvidence(e)).catch(() => null),
+      // Public like evidence, so it renders signed-out too — but still `.catch`ed, because a
+      // missing snapshot is a 503 by design (routers/corpus.py) and must degrade to "no scale
+      // strip", never to an error page.
+      api.corpus().then((c) => live && setCorpus(c)).catch(() => null),
       api.queue(50).then((q) => live && setQueue(q)).catch(() => null),
       api.signals().then((s) => live && setSignals(s)).catch(() => null),
       api.depotRisk().then((d) => live && setDepots(d)).catch(() => null),
@@ -63,20 +70,71 @@ export function Home({ onNavigate }: { onNavigate: (view: string) => void }) {
 
   return (
     <div className="home">
+      {/* The headline used to be "Built for the fleet safety team — and the leadership they
+          report to", which named the AUDIENCE and never said what the product does. Someone
+          landing cold learned nothing from it. The contrast below is the whole pitch in two
+          lines; the detail that used to be a 90-word grey block is now two short columns
+          nobody has to commit to reading in order. */}
       <section className="panel home-hero">
-        <h2 style={{ marginTop: 0 }}>Built for the fleet safety team — and the leadership they report to</h2>
-        <p className="muted" style={{ maxWidth: "88ch" }}>
-          FleetGuard resolves an NHTSA recall against your fleet's VIN roster in seconds, and
-          watches complaint volume for the same defect patterns <em>before</em> the regulator
-          opens a formal investigation — two capabilities most fleets only get after the fact.
-          The <strong>fleet safety team</strong> works the queue below: scope a campaign, rank by
-          consequence, dispatch work orders under human approval — every action attributed and
-          audited. <strong>Safety leadership</strong> reads the two panels under this one instead
-          — the measured evidence behind the early-warning half, and whether the fleet's open
-          work is actually getting closed. Same NHTSA data and Databricks pipeline underneath,
-          two different jobs.
-        </p>
+        <h2 style={{ marginTop: 0 }}>
+          <span className="home-hero-lede">A recall tells you a defect exists.</span>
+          <span className="home-hero-turn">
+            FleetGuard tells you which of your vehicles it's in.
+          </span>
+        </h2>
+
+        <div className="home-hero-cols">
+          <div>
+            <h4>When a campaign posts</h4>
+            <p className="muted">
+              Scope it against the fleet's own VIN roster, rank by consequence before volume —
+              a do-not-drive defect outranks a larger label recall — then approve and dispatch
+              one work order per exposed vehicle, in a single transaction. Every write runs
+              under the signed-in operator's identity and lands in an append-only audit log.
+            </p>
+          </div>
+          <div>
+            <h4>Before one posts</h4>
+            <p className="muted">
+              Complaint volume is watched for the same defect patterns months before the
+              regulator opens a formal investigation. That half is modest and measured against
+              a placebo control rather than asserted — the numbers are directly below, including
+              the improvements that came back negative.
+            </p>
+          </div>
+        </div>
+
+        <FlowDiagram />
       </section>
+
+      {corpus && (
+        <section className="home-scale" aria-label="Corpus scale">
+          {/* Deliberately lighter than `.stats` — this is context for the panels below, not a
+              fifth competing metric block. Every figure comes from /api/corpus, which is
+              derived by scripts/export_corpus.py and committed with provenance; typing them
+              in here is the exact mistake I-115 removed from README and Assistant.tsx. */}
+          <div className="home-scale-item">
+            <b>{(corpus.complaints / 1e6).toFixed(2)}M</b>
+            <span>NHTSA complaints</span>
+          </div>
+          <div className="home-scale-item">
+            <b>{(corpus.tsbs / 1e6).toFixed(1)}M</b>
+            <span>service bulletins</span>
+          </div>
+          <div className="home-scale-item">
+            <b>{corpus.recalls.toLocaleString()}</b>
+            <span>recall records</span>
+          </div>
+          <div className="home-scale-item">
+            <b>{corpus.fleet_vehicles.toLocaleString()}</b>
+            <span>fleet vehicles</span>
+          </div>
+          <div className="home-scale-item">
+            <b>{corpus.fleet_depots}</b>
+            <span>depots</span>
+          </div>
+        </section>
+      )}
 
       {evidence ? (
         <section className="panel">

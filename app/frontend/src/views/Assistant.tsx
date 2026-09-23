@@ -74,9 +74,9 @@ export function Assistant() {
     <div className="panel assistant">
       <h3>Assistant</h3>
       <p className="muted" style={{ marginTop: 0, fontSize: 12.5 }}>
-        Searches 1.75M complaint narratives and fleet exposure, and can open a defect signal
-        or watch a campaign for tracking. It can <em>propose</em> a service campaign; only
-        you can approve one.
+        Searches NHTSA complaint narratives for the vehicles this fleet operates, plus fleet
+        exposure, and can open a defect signal or watch a campaign for tracking. It can{" "}
+        <em>propose</em> a service campaign; only you can approve one.
       </p>
 
       {gated && (

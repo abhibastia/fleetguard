@@ -78,8 +78,12 @@ above, sourced from the same measurement.
   host ignores `If-None-Match`), `api.nhtsa.gov/recalls/recallsByVehicle` (no conditional-request
   support), and vPIC (`DecodeVINValuesBatch`) for authoritative make/model/year decode. Full
   list, including this console's own REST API, in [`docs/API.md`](docs/API.md).
-- **Semantic retrieval**: Databricks AI Search over 1.7M+ complaint narrative chunks,
-  hybrid (BM25 + embedding) search.
+- **Semantic retrieval**: Databricks AI Search, hybrid (BM25 + embedding) search. The
+  lakehouse holds the full **2.2M+ complaint corpus**; the vector index is deliberately scoped
+  to the make/model pairs this fleet operates — matched in the same `EXACT` / `MODEL_VARIANT`
+  tiers used everywhere else, so NHTSA's `F-250 SD` and vPIC's `F-250` retrieve as one vehicle
+  (I-115). Offline scale and online retrieval scope are separate numbers and are reported
+  separately.
 - **A registered, deployed agent** (Agent Framework, Model Serving), traced with MLflow and
   evaluated against a held-out golden set built from NHTSA's own recall text. Two of its seven
   tools write — always executed by the app under the caller's own identity, never by the

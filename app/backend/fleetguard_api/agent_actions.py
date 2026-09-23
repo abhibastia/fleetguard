@@ -73,12 +73,30 @@ class OpenDefectSignalParams(BaseModel):
     # written to `fleetguard_defect_signal`. See the INSERT below.
     complaint_count: int | None = Field(default=None, ge=0, le=10_000_000)
 
-    @field_validator("component", "make", "model")
+    @field_validator("component", "make", "model", mode="before")
     @classmethod
     def _upper_and_strip(cls, v: str | None) -> str | None:
         """The corpus stores make/model/component upper-cased (silver_recall normalises with
         UPPER(TRIM(...))). Matching that here is what lets an agent-opened signal line up with
-        detector rows and with `fleetguard_vehicle` for the fleet count."""
+        detector rows and with `fleetguard_vehicle` for the fleet count.
+
+        **`mode="before"` is load-bearing, not stylistic** (I-115). Pydantic runs
+        `Field(min_length=1)` as part of the core schema, which happens BEFORE a default
+        `mode="after"` validator. So `component=" "` used to pass the length check, then get
+        stripped to `""` — and an empty component is not a cosmetic problem:
+
+          component=" " -> passes min_length=1 -> stripped to "" -> series_key "" -> NULL
+
+        `series_key` is built from `(make, model, component)` and written as `series_key or
+        None`, so a blank component produced a NULL key. `ux_fg_defect_signal_agent_active` is
+        a partial unique index over `(opened_by, series_key, component)`, and Postgres allows
+        unlimited NULLs in a unique index — so the idempotency guard was defeated and the
+        Emerging tab rendered a blank component in a NOT NULL column.
+
+        Stripping first means the length constraint sees what will actually be stored. A
+        whitespace-only component is now rejected at the edge with a 422, which is the honest
+        answer: the model did not name a component.
+        """
         return v.strip().upper() if isinstance(v, str) else v
 
 

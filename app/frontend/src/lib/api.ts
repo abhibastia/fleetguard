@@ -192,6 +192,26 @@ export interface ModelB {
   test_set_size: number;
 }
 
+/** Corpus scale, served from a committed snapshot (`/api/corpus`, public like `/evidence`).
+ *
+ * Every field is a row count derived by `scripts/export_corpus.py`, never typed by hand —
+ * see `routers/corpus.py` for why. `rag_chunks` is the one expected to move: I-115 widened
+ * the AI Search source to the EXACT + MODEL_VARIANT tiers, a strict superset of the 115,499
+ * this snapshot currently carries, and the job that rebuilds the table runs in Run 2. */
+export interface Corpus {
+  complaints: number;
+  tsbs: number;
+  recalls: number;
+  investigations: number;
+  fleet_vehicles: number;
+  fleet_depots: number;
+  rag_chunks: number;
+  bronze_total: number;
+  source_schema: string;
+  statement: string;
+  generated_at: string;
+}
+
 export interface Evidence {
   real: EvidenceArm;
   placebo: EvidenceArm;
@@ -373,6 +393,7 @@ export const api = {
     request<ChatReply>("/chat", { method: "POST", body: JSON.stringify({ messages }) }),
   signals: (fleetOnly = false) => request<SignalSummary>(`/signals?fleet_only=${fleetOnly}`),
   evidence: () => request<Evidence>("/evidence"),
+  corpus: () => request<Corpus>("/corpus"),
   serviceCampaigns: (limit = 50) =>
     request<ServiceCampaign[]>(`/service-campaigns?limit=${limit}`),
   workOrders: (params?: {

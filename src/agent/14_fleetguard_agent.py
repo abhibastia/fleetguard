@@ -213,16 +213,30 @@ print(f"model : {MODEL_NAME}\nllm   : {LLM_ENDPOINT}\nindex : {INDEX}")
 # MAGIC # `log_model`'s input-example validation and on every serving cold start, and a sleeping
 # MAGIC # warehouse would add tens of seconds to both.
 # MAGIC #
-# MAGIC # On failure, cache the FAILURE too and fall back to a claim with no numbers in it. A
-# MAGIC # qualitative sentence is honest; a stale quantitative one is the exact failure this
-# MAGIC # whole change exists to prevent.
+# MAGIC # On failure, fall back to a claim with no numbers in it. A qualitative sentence is
+# MAGIC # honest; a stale quantitative one is the exact failure this whole change exists to
+# MAGIC # prevent.
+# MAGIC #
+# MAGIC # BOTH OUTCOMES ARE CACHED, BUT NOT FOR THE SAME LENGTH OF TIME (I-115).
+# MAGIC #
+# MAGIC # The failure used to be cached for the life of the process. That made a transient fault
+# MAGIC # permanent: one sleeping warehouse at the first query of a judging window and this agent
+# MAGIC # quotes no measured figures until the container restarts — a 30-second infrastructure
+# MAGIC # blip turned into a session-long degradation of the project's own headline result.
+# MAGIC #
+# MAGIC # So the failure is cached briefly (enough to stop a hammering retry on every turn) and
+# MAGIC # the success is cached for longer (this table changes when the backtest is re-run, which
+# MAGIC # is not something that happens mid-session).
+# MAGIC _EVIDENCE_TTL_OK_S = 900.0     # 15 min — gold_lead_time_summary does not move mid-session
+# MAGIC _EVIDENCE_TTL_FAIL_S = 45.0    # retry soon; a sleeping warehouse wakes in tens of seconds
 # MAGIC _EVIDENCE_UNSET = object()
 # MAGIC _evidence_cache: Any = _EVIDENCE_UNSET
+# MAGIC _evidence_expires_at: float = 0.0
 # MAGIC
 # MAGIC
 # MAGIC def _evidence() -> dict | None:
-# MAGIC     global _evidence_cache
-# MAGIC     if _evidence_cache is not _EVIDENCE_UNSET:
+# MAGIC     global _evidence_cache, _evidence_expires_at
+# MAGIC     if _evidence_cache is not _EVIDENCE_UNSET and time.monotonic() < _evidence_expires_at:
 # MAGIC         return _evidence_cache
 # MAGIC     try:
 # MAGIC         rows = _run_sql(
@@ -238,10 +252,12 @@ print(f"model : {MODEL_NAME}\nllm   : {LLM_ENDPOINT}\nindex : {INDEX}")
 # MAGIC             "control_pct": float(placebo[1]),
 # MAGIC             "lead_days": float(real[2]),
 # MAGIC         }
+# MAGIC         _evidence_expires_at = time.monotonic() + _EVIDENCE_TTL_OK_S
 # MAGIC     except Exception as exc:  # warehouse asleep, table renamed, arms missing
 # MAGIC         print(f"evidence metrics unavailable ({type(exc).__name__}: {exc}) — "
-# MAGIC               "falling back to a claim with no numbers in it")
+# MAGIC               "falling back to a claim with no numbers in it; will retry")
 # MAGIC         _evidence_cache = None
+# MAGIC         _evidence_expires_at = time.monotonic() + _EVIDENCE_TTL_FAIL_S
 # MAGIC     return _evidence_cache
 # MAGIC
 # MAGIC
@@ -303,17 +319,29 @@ print(f"model : {MODEL_NAME}\nllm   : {LLM_ENDPOINT}\nindex : {INDEX}")
 # MAGIC
 # MAGIC @mlflow.trace(span_type=SpanType.RETRIEVER)
 # MAGIC def search_complaints(query: str, limit: int = 5) -> list[dict]:
-# MAGIC     """Hybrid search over 1.75M complaint-narrative chunks."""
+# MAGIC     """Hybrid search over the fleet-scoped complaint-narrative index."""
 # MAGIC     # Clamped like `lookup_emerging_signals`, and tighter. Each hit carries a narrative
 # MAGIC     # chunk, so an unclamped `limit` is simultaneously a latency cost, a token cost and a
 # MAGIC     # load the index endpoint has to absorb — all chosen by model output.
 # MAGIC     limit = max(1, min(int(limit), 10))
+# MAGIC     # OVER-FETCH, BECAUSE THE DEDUPE BELOW IS LOSSY (I-115).
+# MAGIC     #
+# MAGIC     # This asked the index for exactly `limit` rows and *then* deduped by complaint, so a
+# MAGIC     # query for 10 could return 3. That is not a rare edge: multi-component complaints
+# MAGIC     # yield sibling chunks by construction (I-023), and the more relevant a complaint is to
+# MAGIC     # the query the more of its chunks rank highly — so the shrinkage is worst exactly when
+# MAGIC     # retrieval is working best. The model asked for 10 pieces of evidence and silently got
+# MAGIC     # 3, with nothing saying so.
+# MAGIC     #
+# MAGIC     # 3x with a hard ceiling: enough headroom for the observed sibling density without
+# MAGIC     # letting a `limit=10` call pull an unbounded amount of narrative text into the turn.
+# MAGIC     fetch = min(limit * 3, 30)
 # MAGIC     r = w.vector_search_indexes.query_index(
 # MAGIC         index_name=INDEX,
 # MAGIC         columns=["chunk_id", "complaint_id", "make", "model", "component", "any_harm", "chunk_text"],
 # MAGIC         query_text=query,
 # MAGIC         query_type="HYBRID",
-# MAGIC         num_results=limit,
+# MAGIC         num_results=fetch,
 # MAGIC     )
 # MAGIC     # "The retrieval system failed" and "no complaints match" are different claims, and
 # MAGIC     # collapsing them into `[]` is I-050's mistake in the retrieval path: the model would
@@ -328,13 +356,17 @@ print(f"model : {MODEL_NAME}\nllm   : {LLM_ENDPOINT}\nindex : {INDEX}")
 # MAGIC     rows = r.result.data_array or []
 # MAGIC     cols = [c.name for c in r.manifest.columns]
 # MAGIC     out = [dict(zip(cols, row)) for row in rows]
-# MAGIC     # Multi-component complaints yield sibling chunks (I-023); dedupe by complaint.
+# MAGIC     # Multi-component complaints yield sibling chunks (I-023); dedupe by complaint, then
+# MAGIC     # cut to what was actually asked for. Returning fewer than `limit` now means the index
+# MAGIC     # genuinely held fewer distinct complaints, not that siblings crowded them out.
 # MAGIC     seen, deduped = set(), []
 # MAGIC     for d in out:
 # MAGIC         if d.get("complaint_id") in seen:
 # MAGIC             continue
 # MAGIC         seen.add(d.get("complaint_id"))
 # MAGIC         deduped.append(d)
+# MAGIC         if len(deduped) == limit:
+# MAGIC             break
 # MAGIC     return deduped
 # MAGIC
 # MAGIC
@@ -603,7 +635,7 @@ print(f"model : {MODEL_NAME}\nllm   : {LLM_ENDPOINT}\nindex : {INDEX}")
 # MAGIC         "type": "function",
 # MAGIC         "function": {
 # MAGIC             "name": "search_complaints",
-# MAGIC             "description": "Search 1.75M NHTSA complaint narratives by symptom or component.",
+# MAGIC             "description": "Search NHTSA complaint narratives for the make/model pairs this fleet operates, by symptom or component.",
 # MAGIC             "parameters": {
 # MAGIC                 "type": "object",
 # MAGIC                 "properties": {
@@ -883,8 +915,29 @@ print(f"model : {MODEL_NAME}\nllm   : {LLM_ENDPOINT}\nindex : {INDEX}")
 # MAGIC             out, actions = self._run(msgs)
 # MAGIC         finally:
 # MAGIC             _turn_deadline.reset(token)
+# MAGIC         # THE SENTINEL IS STRIPPED OUT OF MODEL-AUTHORED PROSE (I-115).
+# MAGIC         #
+# MAGIC         # Everything in `out` is prose: either the model's own text or one of this class's
+# MAGIC         # own canned refusals. Envelopes are appended separately below, built in Python from
+# MAGIC         # the tool's return value. But the console decided what was an envelope purely by
+# MAGIC         # testing `text.startswith(ACTION_SENTINEL)` — so a model induced to begin its reply
+# MAGIC         # with that literal produced an item the console parsed and EXECUTED, and the
+# MAGIC         # invariant "a model cannot cause an action unless the write-request tool ran" was
+# MAGIC         # not true as written.
+# MAGIC         #
+# MAGIC         # This is not a hypothetical injection surface: `search_complaints` returns NHTSA
+# MAGIC         # complaint narratives, which are public user-submitted free text.
+# MAGIC         #
+# MAGIC         # Replacing rather than dropping the item: a reply that legitimately discusses this
+# MAGIC         # protocol (a judge asking how the write path works) should still be answerable, just
+# MAGIC         # not executable. The console applies a second, independent check on the item id —
+# MAGIC         # neither end trusts the other to have handled it, same shape as the one-action-per-
+# MAGIC         # turn rule.
 # MAGIC         items = [
-# MAGIC             self.create_text_output_item(text=m["content"], id=str(i))
+# MAGIC             self.create_text_output_item(
+# MAGIC                 text=m["content"].replace(ACTION_SENTINEL, "[redacted-sentinel]"),
+# MAGIC                 id=str(i),
+# MAGIC             )
 # MAGIC             for i, m in enumerate(out)
 # MAGIC         ]
 # MAGIC         # Requested actions ride out as extra text items behind a sentinel, built here in

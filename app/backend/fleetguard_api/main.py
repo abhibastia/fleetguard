@@ -26,6 +26,7 @@ from .routers import (
     audit_log,
     auth_routes,
     chat,
+    corpus,
     depots,
     evidence,
     queue,
@@ -102,6 +103,10 @@ api.include_router(recall_api.router)
 api.include_router(approval.router)
 api.include_router(chat.router)
 api.include_router(evidence.router)
+# Public like `evidence` and for the same reason — corpus scale carries no identity-scopable
+# data. See routers/corpus.py; tests/test_evidence_route.py pins that these two and ONLY these
+# two answer without a session.
+api.include_router(corpus.router)
 api.include_router(signals.router)
 api.include_router(work_orders.router)
 api.include_router(technicians.router)

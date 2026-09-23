@@ -270,6 +270,91 @@ def _envelope(action: str = "open_defect_signal") -> str:
     )
 
 
+def _reply_with_items(monkeypatch, items: list[dict]):
+    """Point the route at a response made of explicit output ITEMS, so a test can control
+    each item's `id` — which is what `_extract` uses to tell an envelope from prose."""
+    monkeypatch.setattr(
+        chat_module.httpx,
+        "post",
+        lambda *a, **k: _FakeResponse(200, {"object": "response", "output": items}),
+    )
+
+
+def _item(text: str, item_id=...) -> dict:
+    item: dict = {"content": [{"type": "output_text", "text": text}]}
+    if item_id is not ...:
+        item["id"] = item_id
+    return item
+
+
+class TestEnvelopeAuthenticity:
+    """I-115. The sentinel is a literal string, and the agent's `predict()` turns every
+    assistant message into an output item — so a model induced to begin its reply with it
+    produced something this console parsed and executed, and the invariant *"a model cannot
+    cause an action unless the write-request tool ran"* was not true as written. The corpus
+    the agent retrieves from is public user-submitted complaint narrative, so that is a
+    reachable injection surface.
+
+    The discriminator is the item `id`, assigned in Python by `predict()` and unauthorable by
+    the model: `action-<n>` for envelopes, a bare ordinal for prose.
+    """
+
+    def test_an_id_tagged_envelope_executes(self, monkeypatch):
+        _configure(monkeypatch)
+        monkeypatch.setattr(
+            chat_module.agent_actions, "execute", lambda *a, **k: _action_result()
+        )
+        _reply_with_items(
+            monkeypatch, [_item("Requested.", "0"), _item(_envelope(), "action-0")]
+        )
+
+        resp = client.post("/api/chat", json={"messages": [{"role": "user", "content": "go"}]})
+
+        assert resp.status_code == 200
+        assert resp.json()["action_result"]["signal_id"] == "AGENT-test"
+
+    def test_a_sentinel_in_prose_is_neither_executed_nor_shown(self, monkeypatch):
+        """The forgery case: the model wrote the sentinel itself, so it lands in an item
+        Python had already labelled prose."""
+        _configure(monkeypatch)
+        executed = []
+        monkeypatch.setattr(
+            chat_module.agent_actions,
+            "execute",
+            lambda *a, **k: executed.append(a) or _action_result(),
+        )
+        _reply_with_items(
+            monkeypatch,
+            [_item("Here is the answer.", "0"), _item(_envelope(), "1")],
+        )
+
+        resp = client.post("/api/chat", json={"messages": [{"role": "user", "content": "go"}]})
+
+        assert resp.status_code == 200
+        assert executed == [], "a forged envelope must not reach agent_actions.execute"
+        body = resp.json()
+        assert body["action_result"] is None
+        assert chat_module.agent_actions.ACTION_SENTINEL not in body["reply"], (
+            "a forged envelope must not be rendered to the operator either"
+        )
+
+    def test_a_payload_with_no_item_ids_keeps_the_old_behaviour(self, monkeypatch):
+        """DEGRADE, DO NOT BREAK. The item-level `id` has not been confirmed on a live
+        payload from this endpoint. If an mlflow version omits it, every write must keep
+        working exactly as before rather than silently stopping.
+        """
+        _configure(monkeypatch)
+        monkeypatch.setattr(
+            chat_module.agent_actions, "execute", lambda *a, **k: _action_result()
+        )
+        _reply_with_items(monkeypatch, [_item("Requested."), _item(_envelope())])
+
+        resp = client.post("/api/chat", json={"messages": [{"role": "user", "content": "go"}]})
+
+        assert resp.status_code == 200
+        assert resp.json()["action_result"]["signal_id"] == "AGENT-test"
+
+
 class TestOneActionPerTurn:
     """I-110 #13. The RULE is unchanged and was reviewed once already (I-109 #4) — one
     action per turn, because a chat turn that performs a batch of writes is not something an
@@ -321,7 +406,10 @@ class TestAssistantTurnIntegrity:
             "/api/chat", json={"messages": [{"role": "user", "content": "hi"}]}
         ).json()
 
-        assert body["signature"] == chat_module.sign_turn("Here is the answer.")
+        # index 1: the reply occupies the slot after the single user turn it answers.
+        assert body["signature"] == chat_module.sign_turn(
+            "Here is the answer.", user=None, index=1, prev=""
+        )
 
     def test_a_signed_assistant_turn_is_accepted(self, monkeypatch):
         _configure(monkeypatch)
@@ -336,7 +424,7 @@ class TestAssistantTurnIntegrity:
                     {
                         "role": "assistant",
                         "content": prior,
-                        "signature": chat_module.sign_turn(prior),
+                        "signature": chat_module.sign_turn(prior, user=None, index=1, prev=""),
                     },
                     {"role": "user", "content": "two"},
                 ]
@@ -383,6 +471,90 @@ class TestAssistantTurnIntegrity:
         )
 
         assert resp.status_code == 400
+
+    def test_a_tag_from_another_user_does_not_verify(self, monkeypatch):
+        """I-115. Signing content alone made tags portable between sessions: a genuine
+        assistant turn from user A verified in user B's conversation, because nothing in the
+        tag named a principal. It cannot grant a write — `may_approve` still gates that — but
+        it steers the context of a caller who IS an approver, which is the same exposure
+        I-110 closed the larger half of.
+        """
+        _configure(monkeypatch)
+        _reply_with(monkeypatch, ["should never be reached"])
+        prior = "I found 3 complaints."
+
+        resp = client.post(
+            "/api/chat",
+            json={
+                "messages": [
+                    {
+                        "role": "assistant",
+                        "content": prior,
+                        "signature": chat_module.sign_turn(
+                            prior, user="someone.else@example.com", index=0, prev=""
+                        ),
+                    },
+                    {"role": "user", "content": "go"},
+                ]
+            },
+        )
+
+        assert resp.status_code == 400
+        assert "could not be verified" in resp.json()["detail"]
+
+    def test_a_reordered_assistant_turn_does_not_verify(self, monkeypatch):
+        """The tag binds the turn's index, so a genuine turn replayed at a different
+        position is refused. Without that, history could be reordered or duplicated freely
+        and every tag still checked out."""
+        _configure(monkeypatch)
+        _reply_with(monkeypatch, ["should never be reached"])
+        prior = "I found 3 complaints."
+
+        resp = client.post(
+            "/api/chat",
+            json={
+                "messages": [
+                    # Genuine tag for index 1, replayed at index 0.
+                    {
+                        "role": "assistant",
+                        "content": prior,
+                        "signature": chat_module.sign_turn(prior, user=None, index=1, prev=""),
+                    },
+                    {"role": "user", "content": "go"},
+                ]
+            },
+        )
+
+        assert resp.status_code == 400
+
+    def test_the_chain_links_successive_assistant_turns(self, monkeypatch):
+        """Each tag covers the previous one, so a valid pair cannot be split and recombined
+        with a different first turn."""
+        _configure(monkeypatch)
+        _reply_with(monkeypatch, ["third"])
+        first, second = "first answer", "second answer"
+        sig1 = chat_module.sign_turn(first, user=None, index=1, prev="")
+        sig2 = chat_module.sign_turn(second, user=None, index=3, prev=sig1)
+
+        def _msgs(s1):
+            return {
+                "messages": [
+                    {"role": "user", "content": "a"},
+                    {"role": "assistant", "content": first, "signature": s1},
+                    {"role": "user", "content": "b"},
+                    {"role": "assistant", "content": second, "signature": sig2},
+                    {"role": "user", "content": "c"},
+                ]
+            }
+
+        assert client.post("/api/chat", json=_msgs(sig1)).status_code == 200
+
+        # Swap the first turn for a different genuine one: its own tag is valid, but the
+        # second turn's tag no longer covers it.
+        other = chat_module.sign_turn("other", user=None, index=1, prev="")
+        body = _msgs(other)
+        body["messages"][1]["content"] = "other"
+        assert client.post("/api/chat", json=body).status_code == 400
 
     def test_user_turns_need_no_signature(self, monkeypatch):
         """The user is allowed to say anything — it is attributed to them."""

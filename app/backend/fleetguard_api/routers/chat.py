@@ -43,6 +43,10 @@ AGENT_ENDPOINT = os.getenv(
 # a phantom failure while the endpoint was still working correctly.
 AGENT_TIMEOUT_S = 120.0
 
+# Prefix `src/agent/14_fleetguard_agent.py`'s `predict()` puts on the id of every output item
+# carrying an action envelope. Must stay in sync with it, same as `ACTION_SENTINEL`.
+ACTION_ITEM_ID_PREFIX = "action-"
+
 
 # THE BROWSER SENDS THE CONVERSATION BACK, SO ASSISTANT TURNS MUST BE PROVABLE.
 #
@@ -72,9 +76,33 @@ AGENT_TIMEOUT_S = 120.0
 _HMAC_KEY = os.getenv("FLEETGUARD_CHAT_SIGNING_KEY") or secrets.token_hex(32)
 
 
-def sign_turn(text: str) -> str:
-    """Tag proving this server produced `text` as an assistant turn."""
-    return hmac.new(_HMAC_KEY.encode(), text.encode(), hashlib.sha256).hexdigest()
+def sign_turn(text: str, *, user: str | None = None, index: int = 0, prev: str = "") -> str:
+    """Tag proving this server produced `text` as assistant turn `index` for `user`.
+
+    THE TAG COVERS MORE THAN THE TEXT (I-115). Signing the content alone made every tag
+    portable in two directions that matter:
+
+      * **Across users.** A tag minted in one session verified in anyone else's, because
+        nothing in it named a principal. User A could hand User B a genuine assistant turn
+        and B's session would accept it as its own history.
+      * **Across positions.** Turns could be reordered, replayed, or duplicated within one
+        conversation and every tag still checked out, because nothing in it named a position.
+
+    Neither grants an unauthorised write — `agent_actions.execute` gates on
+    `authz.may_approve` regardless — but both steer the model's context for a caller who IS
+    an approver, which is the same exposure I-110 closed the larger half of.
+
+    So the tag binds four things: the principal, the turn's index in the conversation, the
+    previous assistant turn's tag (a hash chain, which is what makes reordering detectable)
+    and the content. Field-separated with a character that cannot occur in a hex digest or an
+    email, so two different tuples cannot serialise to the same string.
+
+    `user` is `None` under auth modes that resolve no identity. That degrades to the old,
+    unbound behaviour for those modes rather than failing closed — they have no identity to
+    bind to, and the property was never available there.
+    """
+    payload = "\x1f".join([user or "", str(index), prev, text])
+    return hmac.new(_HMAC_KEY.encode(), payload.encode(), hashlib.sha256).hexdigest()
 
 
 class ChatTurn(BaseModel):
@@ -93,23 +121,32 @@ class ChatRequest(BaseModel):
     messages: list[ChatTurn] = Field(min_length=1, max_length=20)
 
 
-def _verify_history(messages: list[ChatTurn]) -> None:
-    """Reject any assistant turn this server cannot prove it produced."""
-    for turn in messages:
+def _verify_history(messages: list[ChatTurn], user: str | None) -> str:
+    """Reject any assistant turn this server cannot prove it produced for THIS caller.
+
+    Returns the chain head — the last verified assistant tag — which the reply is then
+    signed against. An empty string means no assistant turn has been verified yet, which is
+    the correct chain seed for the first reply in a conversation.
+    """
+    prev = ""
+    for i, turn in enumerate(messages):
         if turn.role != "assistant":
             continue
         # `compare_digest` rather than `==`: this compares a client-supplied value against
         # a secret-derived one, which is the textbook timing-oracle shape.
         if not turn.signature or not hmac.compare_digest(
-            turn.signature, sign_turn(turn.content)
+            turn.signature, sign_turn(turn.content, user=user, index=i, prev=prev)
         ):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=(
                     "An assistant turn in this conversation could not be verified. "
-                    "Start a new conversation. (If the app restarted, this is expected.)"
+                    "Start a new conversation. (If the app restarted, or you signed in as "
+                    "a different user, this is expected.)"
                 ),
             )
+        prev = turn.signature
+    return prev
 
 
 class ChatReply(BaseModel):
@@ -133,19 +170,40 @@ def _extract(payload: dict) -> tuple[str, list[dict]]:
     **stripped from the reply**, never shown, and never left in the text the frontend replays
     as conversation history — otherwise the envelope would re-enter the model's context on the
     next turn and could be acted on twice.
+
+    THE SENTINEL ALONE IS NOT PROOF OF ORIGIN (I-115). It is a literal string, and the agent's
+    `predict()` turns every assistant message into an output item — so a model induced to begin
+    its reply with it produced something this function used to parse and hand to
+    `agent_actions.execute`. The corpus the agent retrieves from is public user-submitted
+    complaint narrative, so that is a reachable injection surface, not a thought experiment.
+
+    The discriminator is the item **id**, which the model cannot author: `predict()` stamps
+    envelopes `action-<n>` and prose with a bare ordinal, both assigned in Python from the
+    tool's own return value. The agent independently strips the sentinel out of model-authored
+    prose, so this is the second of two barriers rather than the only one.
+
+    **Absent ids degrade, they do not break.** The item-level `id` has not been confirmed on a
+    live payload from this endpoint, and an mlflow version that omits it must not silently stop
+    every write from working. So: id says `action-` → envelope; id says anything else → the
+    sentinel is in prose that Python labelled prose, which is the forgery case, and the item is
+    dropped entirely rather than executed or displayed; **no id at all → previous behaviour.**
     """
     parts: list[str] = []
     actions: list[dict] = []
     for item in payload.get("output", []):
+        item_id = item.get("id")
         for chunk in item.get("content", []) or []:
             if chunk.get("type") != "output_text":
                 continue
             text = chunk.get("text", "")
             envelope = agent_actions.parse_envelope(text)
-            if envelope is not None:
-                actions.append(envelope)
-            else:
+            if envelope is None:
                 parts.append(text)
+            elif item_id is None or str(item_id).startswith(ACTION_ITEM_ID_PREFIX):
+                actions.append(envelope)
+            # else: a sentinel inside an item Python labelled prose. Dropped from both the
+            # actions and the reply — rendering it would show the operator a forged envelope
+            # as though the assistant had said it.
     return "".join(parts).strip(), actions
 
 
@@ -170,7 +228,7 @@ def chat(principal: CurrentPrincipal, req: ChatRequest) -> ChatReply:
             detail="This deployment has no Databricks credential to query the agent with.",
         )
 
-    _verify_history(req.messages)
+    chain_head = _verify_history(req.messages, principal.user_name)
 
     url = f"{host}/serving-endpoints/{AGENT_ENDPOINT}/invocations"
     # `signature` is this console's own bookkeeping and means nothing to the agent, whose
@@ -294,6 +352,10 @@ def chat(principal: CurrentPrincipal, req: ChatRequest) -> ChatReply:
     return ChatReply(
         reply=text,
         endpoint=AGENT_ENDPOINT,
-        signature=sign_turn(text),
+        # The reply will sit at `len(req.messages)` when the client replays it — the
+        # same index `_verify_history` computes walking the list back.
+        signature=sign_turn(
+            text, user=principal.user_name, index=len(req.messages), prev=chain_head
+        ),
         action_result=action_result,
     )

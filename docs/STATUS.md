@@ -1,5 +1,90 @@
 # FleetGuard — project status
 
+## SESSION 2026-09-23 (later) — third external review triaged; 8 fixes landed offline
+
+**Branch `fix/repo-review-round-3`.** A third external review (`repo-review.md`, gitignored)
+raised 20 items; all 20 were checked against `main` before anything was accepted. Full triage
+in `docs/ISSUES.md` **I-115** — 8 fixed, 4 outstanding, 4 corrected, 5 already-deferred
+re-raises, 3 rejected.
+
+**The finding that reframed the round.** I-111's rescope — committed hours earlier the same
+day — invalidated the stated reason for three of I-110's five deferrals. Each said *"~7 h to
+re-embed 1,746,601 chunks, no retry budget before 4 October"*; the source is now 115,499
+chunks at ~39 min. The reasons were correct when written and nobody revisited them when the
+number underneath changed by 15×. **Deferrals carry a cost, and the cost can expire without
+the decision being revisited.**
+
+**The most serious item was functional, not security.** `27_build_chunk_index_source.py`
+joined the fleet roster on exact make/model spelling, so **every one of the fleet's 2,116
+F-250s was excluded from the retrieval corpus** — NHTSA writes `F-250 SD`, vPIC writes
+`F-250`. I-030 was fixed in the gold layer, I-075 in the agent write path and I-079 in the
+emerging detector; retrieval was the one path that never got it. The predicate is now copied
+verbatim from `10_emerging_signals.py` so all four agree by construction.
+
+**Landed (offline only — nothing is live):**
+- Action-envelope authenticity, **two independent barriers**: the agent strips the sentinel
+  from model-authored prose, and the console keys on the item `id` that `predict()` stamps in
+  Python. Deliberately not the review's signed-envelope design, which needs a shared secret
+  between a serving endpoint and the App. **The console half degrades to previous behaviour
+  when no `id` is present** — the item-level id has not been confirmed on a live payload.
+- AI Search source widened to `EXACT` + `MODEL_VARIANT`, with `match_basis` carried on the
+  table (not synced — that would change the Run 1-proven index-creation command).
+- Evidence cache TTL'd. It used to cache a *failure* for the life of the process, so one
+  sleeping warehouse at the first query of a judging window meant no measured figures until
+  restart.
+- `search_complaints` over-fetches 3× before deduping — a request for 10 could return 3,
+  worst exactly when retrieval was working best (sibling chunks, I-023).
+- HMAC assistant turns bound to principal + index + previous tag; they were portable between
+  users and positions.
+- `component=" "` no longer reaches the database: `Field(min_length=1)` ran *before* the
+  stripping validator, yielding a blank component and a NULL `series_key` that defeated
+  `ux_fg_defect_signal_agent_active`. Fixed with `mode="before"` — no Lakebase migration.
+- Stale `1.75M` claims cleared from `README`, `Assistant.tsx` (+ console bundle rebuilt),
+  `ARCHITECTURE` and the e2e diagram.
+- The frozen proposal's contradictions table gained the row it was missing: §5/§8.3's
+  sub-minute business-event → analytics claim is **unreachable** (I-081's >60 s floors),
+  measured 2.5–4.5 min. The existing row recorded only the capture latency, which read as
+  confirmation.
+
+**⚠️ RUN 2 MUST RE-MEASURE THE CHUNK COUNT.** The widened join makes **115,499 stale** — it
+is a strict superset, and the real figure has not been measured because the warehouse is torn
+down. The build script's assert is now **bounded** (floor 115,499, ceiling 1,000,000 as a
+blown-anchor detector) and prints the EXACT/MODEL_VARIANT split. Record the measured number
+in this file and restore an exact assert. `ARCHITECTURE.md`, `EVIDENCE.md` and `DEMO.md` all
+now say "measured in Run 2" rather than carrying a figure that is about to be wrong.
+
+**Verified offline only:** 562 pytest passed / 24 skipped, 149 vitest, ruff clean, typecheck
+clean, console bundle rebuilt. **No workspace calls were made this session.**
+
+### Next session — finish I-115's round (4 items, in this order)
+
+**The first half of this round is already on `main`** (squash-merged 2026-09-23) — the eight
+I-115 fixes, the print/forced-colors CSS and the Home redesign. Start these four on a **new
+branch**. None of them need the workspace to *write*, and the first two are the ones that pay
+off before Run 2 rather than after it.
+
+1. **`/readyz`** — `main.py`'s `/healthz` reports process liveness only, so it answers `ok`
+   with AI Search deleted, the agent stopped and Lakebase unreachable, which is *exactly the
+   state everything is in right now*. Check Lakebase, the agent endpoint, the index and the
+   evidence snapshot. Best cost-to-benefit item in the review and it directly de-risks Run 2's
+   own verification step.
+2. **`scripts/provision_search.sh`** — idempotent wrapper over the Run 1-proven commands in
+   `docs/RUNBOOK.md`, with polling and a retrieval smoke test. **Declarative management is
+   impossible, not merely unbuilt:** DABs exposes only `apps`, `dashboards`, `jobs`,
+   `pipelines`, so a script is the ceiling. Write it offline; it first *runs* in Run 2.
+3. **RAG retrieval evaluation** — the harness can be written offline, but it cannot produce
+   numbers until the index is live, so it lands *in* Run 2. Even 50 questions with Recall@5 /
+   MRR beats "Vector Search is implemented". Publish what it measures, including if it is
+   poor — same rule I-111 applied to the hybrid-query probe.
+4. **Split the CDF fingerprint** into a per-trigger lightweight assertion plus a periodic full
+   reconciliation. Correct, and genuinely low priority: the trigger is `PAUSED`, so the cost
+   is not being paid today.
+
+**Do not start these by rebuilding anything.** Everything above is offline work; the index and
+the agent stay down until Run 2 (2–3 October) by design.
+
+---
+
 ## SESSION 2026-09-23 — Run 1 executed end to end, then torn down; corpus rescoped; workspace cleaned up
 
 **`fix/repo-review-round-2` merged to `main`** (I-110's 11 fixes), then Phase 0 of the

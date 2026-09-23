@@ -14,6 +14,7 @@ no error and passed the obvious check.
 
 | ID | Area | Issue | Status |
 |---|---|---|---|
+| I-115 | Review | Third external review triaged. **8 fixed offline** (branch `fix/repo-review-round-3`), incl. the exact-match AI Search join that excluded all 2,116 F-250s from retrieval. **None are live** — they take effect at Run 2's agent redeploy and index rebuild. **The widened join makes 115,499 a stale figure: Run 2 must measure and record the new count**, and the build script's assert is bounded, not exact, until it does. Outstanding: `/readyz`, `provision_search.sh`, RAG eval, CDF fingerprint split. | **open** |
 | I-112 | Phase 1 | Smoke index stuck at `ready: false` on two fresh attempts, **self-cleared** on the second — root cause unconfirmed, best guess is shared-workspace contention on a *first* index on a fresh endpoint (the real 115K build, on an already-warm endpoint, hit no stall at all same session). If it recurs in Run 2: wait, don't delete-and-recreate. | **watch** |
 | I-028 | Phase 5 | **RESOLVED 2026-08-31.** User confirmed authorisation to use the existing CDF mapping `databricks_postgres.bootcamp_students` → `bootcamp_students.bootcamp_cdc`. Naming decided as `fleetguard_<entity>` → `lb_fleetguard_<entity>_history` (see I-036). Phase 5 unparked. | ✅ resolved |
 | I-018 | Cost | **Sized (see I-025).** Embedding is ~275M tokens ≈ **$28–36 one-off** — not the problem. The AI Search *endpoint* is **~$403/month recurring** and is the real exposure. Mitigation is index lifecycle (billing stops 24h after the last index is deleted), not corpus trimming. Still open only as a decision on how long to leave the index up. | **open** |
@@ -28,6 +29,266 @@ no error and passed the obvious check.
 ---
 
 ## Tooling / process
+
+### I-115 — a third external review, triaged claim-by-claim: the rescope had already invalidated three of I-110's deferral reasons
+*Date:* 2026-09-23 · *Status:* **8 fixed offline, 4 outstanding, 4 corrected, 5 already-deferred re-raises, 3 rejected.**
+
+> **Applied on `fix/repo-review-round-3`:** the action-envelope barriers (both ends), the
+> AI Search variant join, the evidence TTL, the `search_complaints` over-fetch, the HMAC
+> binding, the blank-component validator, the stale `1.75M` sweep + console rebuild, and the
+> frozen proposal's missing contradiction row. Verified offline only: 562 pytest / 149 vitest
+> / ruff clean. **Nothing is live** — the agent-source and index-source halves take effect at
+> Run 2's redeploy and rebuild, which is the whole reason they were done now.
+>
+> **Outstanding from this round:** `/readyz`, `scripts/provision_search.sh`, RAG retrieval
+> evaluation, and splitting the CDF fingerprint. The first two are worth doing before Run 2;
+> the third needs the index live; the fourth is not costing anything while the trigger is
+> `PAUSED`.
+
+**Found by** a third external review of an exported zip (`repo-review.md`, gitignored), same
+shape as I-109 and I-110. It raised 20 items. Every one was checked against the code on
+`main` before being accepted, because the previous two rounds each contained a finding that
+was right about the mechanism and wrong about the consequence.
+
+The review is **substantially accurate** — the line references are real and the mechanisms
+are as described. But it read a zip, so it could not see the workspace, the schedule, or
+`ISSUES.md` itself, and the four corrections below all come from that blind spot.
+
+---
+
+#### The finding the review could not make, and the reason this round is urgent
+
+**I-111's rescope, committed hours before this review was written, invalidated the stated
+reason for three of I-110's five deferrals.** Each of *RAG retrieval evaluation*, *PII
+masking in the indexed representation* and (indirectly) the agent-scope item was deferred
+with the same cost: **"~7 h to re-embed 1,746,601 chunks, no retry budget before 4 October."**
+
+The index source is now **115,499 chunks, measured at ~39 min** to build (I-111, and the Run 1
+build that confirmed it). The deferral reasons are stale. They were correct when written and
+nobody revisited them when the number underneath them changed by 15×.
+
+This compounds with the schedule rather than merely coexisting with it:
+
+- **Agent-source changes are currently free.** The agent is redeployed in Run 2 regardless
+  (action plan step 1.4). Anything landing in `src/agent/14_fleetguard_agent.py` before then
+  rides a redeploy already committed to, exactly as I-109's and I-110's seven fixes did.
+- **Index-source changes are currently near-free.** The index is rebuilt in Run 2 regardless,
+  and at 39 min rather than 7 h.
+
+Both windows close after Run 2 (targeted 2–3 October). **The correct reading of this review is
+therefore the opposite of its own framing** — it advises "stop adding architecture", but the
+items with a genuine deadline are the ones it ranks as stretch goals.
+
+---
+
+#### The four the review got wrong
+
+**1. The proposed fix for the NHTSA freshness bug would double the corpus.** The bug itself is
+real and is already logged (I-099, `STATUS.md:1196`): `01_download_flat_files.py` overwrites
+`cmpl/FLAT_CMPL.txt` in place, Auto Loader keys on path, so *ingestion success + stale data* is
+reachable and **was observed**. But the recommended fix — immutable `snapshot=<date>/` landing
+paths — is the one I-099 already considered and rejected on the record: these are **full
+snapshots and silver does not dedupe**, so versioned paths and `allowOverwrites` both re-ingest
+2.24 M + 5.8 M rows as *new* rows. The cheap fix stays what I-099 named and did not build:
+**remove the silence, not the limitation** — fail the download step when a changed upstream
+snapshot lands on a path Auto Loader has already committed.
+
+**2. The action-envelope fix is over-engineered, and a cheaper barrier already exists in the
+code.** The vulnerability is real (below). The proposed remedy — a cryptographically signed
+envelope — needs a shared secret between a Model Serving endpoint and the App, i.e. a secret
+scope, key distribution, and a new failure mode on demo eve. It is unnecessary: `predict()`
+already stamps a discriminator **the model cannot author**, because prose items are built as
+`create_text_output_item(..., id=str(i))` and envelopes as `id=f"action-{j}"`. The id is
+assigned in Python from the tool's own return value, never from model output.
+
+**3. The `series_key` NULL gap is real but not by the mechanism claimed.** The review's path —
+`make=NULL, model=NULL` — cannot reach it: `series_key` is built from
+`(make, model, component)` and `component` is `Field(min_length=1)`, so the key is never
+empty for want of make/model. The actually-reachable path is different and was confirmed
+locally:
+
+```
+component=' '  → passes Field(min_length=1)  (constraint runs BEFORE a mode="after" validator)
+               → _upper_and_strip strips it → component=''
+               → series_key=''               → written NULL → ux_fg_defect_signal_agent_active defeated
+```
+
+So the fix is **not** two partial indexes on Lakebase. It is `mode="before"` on
+`_upper_and_strip` (`agent_actions.py:76`), which closes the NULL gap *and* stops a blank
+string reaching a NOT NULL column the Emerging tab renders. App-side, no migration, no
+Lakebase DDL, no agent redeploy — strictly less work than the recommendation, and it fixes
+more.
+
+**4. "Don't claim sub-minute end-to-end" describes a position this project already holds** —
+`STATUS.md:1340-1347` states it in those words, and I-081 records the platform floors that
+make it impossible. The surviving sub-minute language is in `FleetGuard_Proposal.md`, which is
+**frozen by convention**, not stale by accident.
+
+> **But the review stumbled onto a real gap here.** The frozen document's contradictions table
+> records §8.3 as *"capture latency ~15 s (documented, unmeasured) → measured 7.1–15.6 s"*,
+> which reads as **confirmation**. It does not record the larger contradiction the build
+> actually produced: §8.3 and §5 claim a sub-minute *business-event → analytics* path, the
+> platform's >60 s trigger floors make that unreachable (I-081), and the measured chain is
+> **2.5–4.5 min**. That row belongs in the table — the header exists precisely to tabulate
+> this, and it is the strongest available answer to the obvious judge question. One line.
+
+---
+
+#### CONFIRMED, accepted for fix
+
+**1. The action sentinel is forgeable.** `parse_envelope` tests only
+`text.startswith(ACTION_SENTINEL)` (`agent_actions.py:134`), while `predict()` turns **every**
+assistant message into an output text item (`14_fleetguard_agent.py:886-889`). A model induced
+to begin its reply with the sentinel produces an item the console parses as an envelope, so
+the invariant *"a model cannot cause an action unless the write-request tool ran"* does not
+hold as stated. The retrieval corpus is public user-submitted narrative text, so the injection
+surface is not hypothetical.
+
+**Severity is bounded, and the review did not credit the existing layers**: `authz.may_approve`
+gates execution, `make_n == 0` rejects makes the fleet does not operate, one-action-per-turn is
+enforced at both ends, and both writes are observations rather than dispatches. **P1, not P0.**
+Fix in two independent halves, neither needing a secret:
+
+- *Agent side, unconditionally safe:* neutralise `ACTION_SENTINEL` inside model-authored prose
+  before emitting. One line.
+- *Console side:* prefer `item["id"].startswith("action-")`, and **fall back to current
+  behaviour when `id` is absent** — the item-level `id` is not present in any committed test
+  fixture (only the response-level one, `tests/test_chat.py:137`) and has not been observed on
+  a live payload, so it must degrade rather than break every action if the shape differs.
+
+**2. The AI Search index can exclude the fleet's own complaints — the most serious *functional*
+finding.** `27_build_chunk_index_source.py:57-63` joins `v.make = c.make AND v.model = c.model`,
+exact only, while this project's own measurement says **all 2,116 F-250s match only as
+`MODEL_VARIANT`** (`F-250 SD` is NHTSA's dominant spelling). So the fleet's most numerous truck
+can have its complaints excluded from the retrieval corpus, and the agent searching
+"brake failure F-250" never sees them. This is I-030 reaching the *retrieval* path, after it
+was already fixed in the gold layer (I-030), the agent write path (I-075) and the emerging
+detector (I-079) — three of four paths agree and the fourth does not.
+
+Canonical SQL already exists at `10_emerging_signals.py:157-160` and should be ported verbatim
+rather than rewritten. **Measure the new chunk count first** (free — Delta only): variant
+matching over-matches in documented places (`PROMASTER` → `PROMASTER CITY`), and the
+`assert n_chunks == 115_499` must be replaced with the newly measured figure, never deleted.
+
+**3. `_evidence()` caches its own failure for the life of the process.**
+`14_fleetguard_agent.py:223-247` sets `_evidence_cache = None` on any exception. The docstring
+argues this is deliberate, and the *fallback* is right — a qualitative sentence beats a stale
+number. What is wrong is its **permanence**: one sleeping warehouse at the first query of the
+judging window means the agent quotes no measured figures until the container restarts. TTL it
+(success 5–15 min, failure 30–60 s). Rides the Run 2 redeploy.
+
+**4. Deduplication silently shrinks the result set.** `search_complaints` requests
+`num_results=limit` and *then* dedupes by `complaint_id` (lines 316, 331-338), so a query
+asking for 10 can return 3 when sibling chunks dominate — the multi-component case I-023
+already documents as normal for this corpus. Over-fetch (`min(limit * 3, 30)`), dedupe, then
+truncate to `limit`. One line, and it improves retrieval quality at no cost.
+
+**5. HMAC assistant turns are not bound to a principal or a position.** `sign_turn`
+(`chat.py:75-77`) covers the text alone, so a valid tag from one user's session verifies in
+another's, and turns can be reordered or replayed within a conversation. I-110's fix closed
+the larger hole (arbitrary forged history); this is the remainder. Bind principal +
+turn index + previous signature into the tag. App-side only.
+
+**6. Stale `1.75M` / `1,746,601` claims across 16 files**, created by I-111's rescope hours
+earlier and not swept. Includes three **user-facing** surfaces: `README.md:81`,
+`app/frontend/src/views/Assistant.tsx:77` (and the committed console bundle built from it),
+and `docs/fleetguard_e2e_current.html`. The rubric's grader reads the frontend.
+
+The fix is not a find-and-replace to one number: the two figures describe **different layers**
+and saying so is stronger than either alone — *lakehouse corpus 2.2 M complaints* vs *RAG index
+115,499 fleet-relevant chunks*. Requires `./scripts/build_console.sh` after the `.tsx` edit or
+the App ships the old string while every test passes.
+
+**7. `/healthz` cannot tell a judge whether the demo works.** `main.py:67` reports process
+liveness, auth mode and console presence — it returns `ok` with AI Search deleted, the agent
+stopped and Lakebase unreachable, which is *exactly the state the system was in when this
+review was written*. Add `/readyz` checking Lakebase, the agent endpoint, the index and the
+evidence snapshot. Best cost-to-benefit item in the review, and it directly de-risks Run 2's
+verification step.
+
+**8. AI Search provisioning is a runbook, not a script.** Partially overstated — `docs/RUNBOOK.md`
+holds the exact commands with measured timings, so this is not "reconstruct it from memory".
+But a documented sequence is not idempotent and does not poll. **Declarative management is
+impossible, not merely unbuilt**: `bundle summary` exposes only `apps`, `dashboards`, `jobs`,
+`pipelines` (CLAUDE.md), so DABs has no vector-search resource type. A script is the ceiling.
+Worth building before Run 2 as a wrapper over commands already proven in Run 1.
+
+**9. RAG retrieval evaluation.** Deferred at I-110 for a cost that no longer applies (above).
+The index is live during Run 2 anyway. Even 50 questions with Recall@5 / MRR reads far better
+against the rubric than "Vector Search is implemented" — and the numbers must be published as
+measured, including if they are poor, same rule as I-111 applied to the hybrid-query probe.
+
+**10. The full-history fingerprint runs on every CDF trigger.** `21_cdf_to_gold_facts.py:236-315`.
+The check itself is I-110's fix and is correct; the observation is that scanning full history on
+each incremental run gives back much of what the incremental path bought. Split into a
+lightweight per-trigger assertion plus a periodic full reconciliation. Correct, and **low
+priority here** — the trigger is `PAUSED` and the cost is not being paid today.
+
+**11. Do not tear down for the judging window.** Already the plan (Run 2, 2–3 October, live into
+the 4 October submission). Recorded because the review is right about which resource is the
+dangerous one: the agent scales from zero in seconds, the AI Search index does not — ~39 min at
+the current scope, and I-112 records a fresh endpoint stalling ~25 min before that.
+
+---
+
+#### Re-raised from I-110's deferrals — the reason stands, or is now stale
+
+| Item | Status |
+|---|---|
+| NHTSA snapshot-refresh staleness | Deferred reason **stands**; the review's proposed fix is wrong (correction 1). Cheap "make it loud" fix still unbuilt. |
+| Agent's reads are not caller-scoped | Deferred reason **stands**. See the sharpening below. |
+| RAG retrieval evaluation | Reason **stale** — promoted to fix (#9). |
+| PII masking in the indexed representation | Reason **stale** (115,499 chunks, not 1,746,601), but the work is still real. Left deferred as a judgement call, not on the old arithmetic. |
+| Splitting `may_approve` | **Stands.** Broader than necessary, not unsafe, no graded credit. Post-submission. |
+
+**A sharper claim is available for the agent-scope item than the one currently documented.**
+The existing note says accurately that the agent's reads run as the serving endpoint's service
+principal and that nobody is enrolled in `fleetguard_depot_assignment`. What it does not say,
+and should, is what was checked this round: **every agent SQL tool returns aggregates only.**
+`lookup_fleet_exposure` returns `COUNT(DISTINCT vin)` / `COUNT(DISTINCT depot_id)`,
+`lookup_fleet_models` returns make/model counts, `lookup_emerging_signals` returns series-grain
+rows, and `search_complaints` returns public NHTSA narrative. **No agent tool returns a VIN, a
+depot roster or a work order.** So the agent cannot expose an individual vehicle even on the
+fail-open path. That is a defensible boundary rather than only an admitted gap, and it costs
+nothing to state.
+
+---
+
+#### Rejected
+
+**Independent human adjudication of Model B's golden set (200–300 cases).** The weakness is
+real and the repo already admits it in the right place. But this is 11 days to submission,
+solo, with Run 2 inside the window — and a rushed half-set is worth less to a judge than the
+existing honest caveat. **Counter-offer if the time exists:** adjudicate ~50 stratified pairs
+and report it explicitly as a spot check with n=50 and a wide interval, keeping the caveat.
+
+**Richer agent-action audit columns.** `fleetguard_agent_action` already carries
+`actor_principal`, `on_behalf_of`, `requires_approval`, `trace_id` and an outcome in
+`tool_output`. The observation that `on_behalf_of` always equals `actor_principal` and
+`requires_approval` is always `false` is correct — they are dead columns. But this is a
+**CDF-replicated table**; a schema change propagates to `lb_fleetguard_agent_action_history`
+for cosmetic gain. The story the review wants ("Requested by FleetGuard AI / Executed by …")
+is already tellable from `source='AGENT'` + `opened_by` + `trace_id`.
+
+**Moving approver emails out of `app.yaml`.** The addresses are real and committed, and that
+was a deliberate, documented decision (A2, three judges, each verified live). The proposed
+alternative is not available: group-membership lookup needs `iam.access-control:read`, which
+CLAUDE.md records as **non-assignable** on this account. A secret scope is the only real
+option and it adds a demo-eve failure mode for four addresses that are already
+bootcamp-public.
+
+---
+
+**Lesson.** I-109's was *provisional at one layer, treated as final at the next*. I-110's was
+*a check that describes itself as stronger than it is*. This round's is narrower and about
+process: **a deferral records a decision and its cost, and the cost can expire without the
+decision being revisited.** Three items were carrying a 7-hour price tag that had become 39
+minutes in a commit made the same day, and nothing connected the two — the deferral note and
+the rescope note are four hundred lines apart in this file and neither references the other.
+The reasons were written down, which is why this was recoverable at all; what was missing was
+anything that re-reads them when the number underneath changes. **When a measured quantity
+that justified a deferral changes by an order of magnitude, the deferrals it justified are
+part of the blast radius.**
 
 ### I-114 — Deleted the 7 unbound dead-experiment jobs; found the EXPECTED manifest is stale by 10 tables, none of them safe to delete
 *Date:* 2026-09-23 · *Status:* resolved (jobs), noted (manifest)

@@ -198,7 +198,7 @@ existed, but nothing supplied the id until E-03 was wired (`ISSUES.md`).
 | Complaints corpus | **2,240,289** | `bronze_complaints` |
 | Recall campaigns | 244,925 rows / **15,211** campaigns | `bronze_recalls` |
 | Investigations | 154,367 rows / **5,344** distinct | `bronze_investigations` |
-| Indexed chunks | **115,499** (fleet make/model scope, rescoped 2026-09-23, I-111 — was 1,746,601) | `complaint_chunk_idx` |
+| Indexed chunks | **re-measured in Run 2** — 115,499 was the EXACT-only scope (I-111); the join was widened to `EXACT` + `MODEL_VARIANT` (I-115), which only adds rows. Read it live, never quote this cell | `complaint_chunk_idx` |
 | Fleet | **20,000** vehicles · **60** depots · 47 models | `gold_fleet_vehicle` |
 | Exposure (EXACT) | **118,323** distinct (vin, campaign) | `fleetguard_vehicle_exposure` |
 | `17V629000` | **25** vehicles / **22** depots, EXACT | verified 2026-09-09 |

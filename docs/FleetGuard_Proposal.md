@@ -22,6 +22,7 @@ Prepared as a production architecture specification.
 > | 1, 3, 4.3 | Semantic clustering surfaces defects earlier; *"the semantic half is load-bearing rather than an enhancement"* | **Falsified.** Subdivision lowered detection 13.3%→11.2% and added **0.0 days** of lead on shared detections (I-049). Model A ships volume-anomaly + harm weighting only. |
 > | 4.3 | HDBSCAN over chunk embeddings produces candidate clusters | HDBSCAN labelled **85% of embeddings noise** at every parameterisation tried (I-048). Replaced by k-means subdivision, retained for *aggregation and explanation*, not detection. |
 > | 8.3 | Lakebase CDF capture latency ~15 s *(documented, unmeasured)* | **Measured 7.1–15.6 s**, mean 12.5 s (I-046). |
+> | 5, 8.3 | A **sub-minute** business-event → analytics path, with `table_update` trigger intervals of 15 s and 5 s described as *"tight by design"* | **Unreachable on the platform, not merely missed.** Both intervals are below a hard >60 s floor — `jobs create` rejects them outright — so the design could never have been what §8.3 describes (I-081). Measured end to end: **155 s and 269 s** (n=2), i.e. roughly **2.5–4.5 min**. The sub-minute claim survives for **CDF capture alone** (the row above); it was never true for the derived gold fact, and the two must not be quoted as one number. |
 > | 4.4 | CDF history tables appear on first write | **Wrong** — CDF replicates DDL; all 11 existed at `CREATE TABLE` (I-044). |
 >
 > The proactive claim itself stands and is measured: **16.0% detection at a median 197-day

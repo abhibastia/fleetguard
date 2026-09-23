@@ -193,10 +193,16 @@ WMIs labelled RAM). 400 generated VINs independently verified: 400/400 exact.
 `complaint_chunk_idx` on endpoint `fleetguard-vs` — Delta Sync, **HYBRID**,
 `databricks-gte-large-en` (1024-dim). **Rescoped 2026-09-23 (I-111)** from the post-2010
 investigation series to the fleet's own 47 make/model pairs: **115,499 chunks**
-(`silver_complaint_chunk_indexed`), down from 1,746,601 — same $6.72/day cost under the
+(`silver_complaint_chunk_indexed`) — down from 1,746,601 — same $6.72/day cost under the
 2M-vector threshold (I-035), but both AI Search builds in the submission plan now take
 minutes instead of hours, and retrieval is scoped to vehicles this fleet actually operates.
 Built and confirmed live 2026-09-23: `indexed_row_count: 115,499`, matching source exactly.
+**That figure is the EXACT-only scope and is superseded (I-115):** the join was widened on
+2026-09-23 to the `EXACT` + `MODEL_VARIANT` tiers the rest of the system already uses, because
+exact spelling excluded every one of the fleet's 2,116 F-250s from retrieval. The new count is
+a strict superset and **has not been measured** — the warehouse is torn down between
+submission windows. Run 2 records it; nothing here should quote a figure for the widened scope
+until then.
 
 **Verification status is split by scope.** The three behavioural checks (`columns_to_sync`
 completeness, `any_harm` filter, HYBRID differing from pure ANN) were re-run and passed
@@ -583,7 +589,7 @@ in `src/agent/14_fleetguard_agent.py`; re-check against that file if it changes.
 
 | Tool | Type | Backing table / index | Purpose |
 |---|---|---|---|
-| `search_complaints` | read | `complaint_chunk_idx` (AI Search) | Hybrid search over 1.75M complaint-narrative chunks, deduped by `complaint_id` |
+| `search_complaints` | read | `complaint_chunk_idx` (AI Search) | Hybrid search over the fleet-scoped complaint-narrative index; over-fetches 3x and dedupes by `complaint_id`, so sibling chunks cannot shrink the result set below what was asked for (I-115) |
 | `lookup_fleet_exposure` | read | `gold_fleet_exposure` | Fleet vehicles a campaign touches, by match tier (`EXACT`/`MODEL_VARIANT`) — §7's deterministic guarantee is `EXACT`-only |
 | `lookup_fleet_models` | read | `gold_fleet_vehicle` | What the fleet actually operates, in the fleet's own (vPIC) spelling — closes the NHTSA-vs-vPIC vocabulary gap (I-030) at the source |
 | `lookup_emerging_signals` | read | `gold_emerging_signal` | Defect ramps this system detected that NHTSA hasn't acted on; returns totals alongside rows so the result can't be over-read as fleet-wide |

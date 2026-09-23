@@ -1553,9 +1553,156 @@ thead th.sortable:hover {
   gap: 16px;
 }
 
+/* The hero is the one panel that should not read as "another card". An accent edge and a
+   raised surface are enough — the four panels below were previously identical flat boxes, so
+   nothing on the page told the eye where to start. */
+.home-hero {
+  border-left: 3px solid var(--accent);
+  background: var(--surface-2);
+}
+
 .home-hero h2 {
   font-size: 22px;
   margin-bottom: 8px;
+}
+
+/* Two lines, deliberately different weights: the contrast between them IS the pitch, so the
+   second must land harder than the first rather than reading as one wrapped sentence. */
+.home-hero-lede,
+.home-hero-turn {
+  display: block;
+}
+
+.home-hero-lede {
+  color: var(--muted);
+  font-weight: 560;
+}
+
+.home-hero-turn {
+  font-size: 27px;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  margin-top: 2px;
+}
+
+/* Replaces a 90-word single paragraph. Two columns because there are exactly two capabilities
+   and splitting them lets someone read either one without reading the other. Stacks at the
+   same 900px threshold `.row` already uses — this file keeps one narrow-viewport breakpoint. */
+.home-hero-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 28px;
+  margin-top: 14px;
+}
+
+@media (max-width: 900px) {
+  .home-hero-cols {
+    grid-template-columns: 1fr;
+  }
+}
+
+.home-hero-cols h4 {
+  margin: 0 0 4px;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.home-hero-cols p {
+  margin: 0;
+}
+
+/* ── the six-step flow ──────────────────────────────────────────────────────────────── */
+.home-flow {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  /* The diagram has a natural minimum width; let it scroll in its own box rather than make
+     the page scroll sideways. */
+  overflow-x: auto;
+}
+
+.home-flow-svg {
+  display: block;
+  width: 100%;
+  min-width: 720px;
+  height: auto;
+}
+
+.flow-box {
+  fill: var(--surface);
+  stroke: var(--line-strong);
+  stroke-width: 1;
+}
+
+.flow-box-gate {
+  stroke: var(--accent);
+  stroke-width: 1.5;
+}
+
+.flow-label {
+  fill: var(--text);
+  font-size: 13px;
+  font-weight: 620;
+  text-anchor: middle;
+}
+
+.flow-sub {
+  fill: var(--faint);
+  font-size: 10.5px;
+  text-anchor: middle;
+}
+
+.flow-arrow {
+  stroke: var(--line-strong);
+  stroke-width: 1.5;
+  fill: none;
+}
+
+.flow-arrow-head {
+  fill: var(--line-strong);
+}
+
+/* Present for screen readers always; shown on screen never. Print and forced-colors turn it
+   back on, because an SVG survives neither well — see HomeFlow.tsx. */
+.home-flow-text {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ── corpus scale strip ─────────────────────────────────────────────────────────────── */
+/* Intentionally NOT `.stats`. These are context — what the system runs on — and giving them
+   the same visual weight as the measured claim would make the page read as five metric rows
+   with no priority between them. */
+.home-scale {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 36px;
+  padding: 2px 4px;
+}
+
+.home-scale-item {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+}
+
+.home-scale-item b {
+  font-size: 19px;
+  font-weight: 680;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.home-scale-item span {
+  font-size: 12.5px;
+  color: var(--muted);
 }
 
 /* Two explicit states (2 or 4 columns), not `auto-fit` — auto-fit put three cards on one row
@@ -1630,4 +1777,223 @@ thead th.sortable:hover {
   color: var(--accent);
   cursor: pointer;
   text-decoration: underline;
+}
+
+/* ── print ──────────────────────────────────────────────────────────────────────────── */
+/* An operator printing a recall queue, a work order or an audit-log page is a real thing this
+   console had no answer for: with no print rules the fixed sidebar overlaps the content, the
+   dark theme prints as a solid black page, and interactive chrome (nav, filters, the assistant
+   dock) wastes most of the sheet.
+
+   Adapted from a generated stylesheet reviewed 2026-09-23. Only the parts that survived
+   verification against this app's real markup are here — that sheet hid `nav.tabs`, a
+   horizontal nav this console replaced with `.sidebar-nav` (see the comment above `.sidebar`),
+   and `.signin-*`, which never existed at all. Both would have been silent no-ops.
+
+   `!important` throughout, deliberately: these override themed colours set on more specific
+   selectors, and print is a terminal context with nothing downstream to trample. */
+@media print {
+  @page {
+    margin: 1.5cm;
+    size: A4 portrait;
+  }
+
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation: none !important;
+    box-shadow: none !important;
+  }
+
+  html {
+    background: #fff !important;
+  }
+
+  body {
+    color: #111 !important;
+    font-size: 11px;
+  }
+
+  /* The flow diagram is drawn with themed strokes on a themed surface and does not survive
+     a white page — so print the ordered list HomeFlow.tsx keeps for screen readers instead.
+     This is why that list exists as real content rather than as a fallback. */
+  .home-flow-svg {
+    display: none !important;
+  }
+
+  .home-flow-text {
+    position: static !important;
+    width: auto !important;
+    height: auto !important;
+    clip: auto !important;
+    clip-path: none !important;
+    white-space: normal !important;
+    padding-left: 18px;
+  }
+
+  .home-hero {
+    border-left: 3px solid #333 !important;
+    background: #fff !important;
+  }
+
+  /* Chrome that cannot be acted on from paper. */
+  .sidebar,
+  .scrim,
+  .theme-toggle,
+  .assistant-fab,
+  .assistant-dock,
+  .ask,
+  .filter-row select,
+  .search-box,
+  .filter-checkbox {
+    display: none !important;
+  }
+
+  /* `main` is offset by `margin-left: var(--sidebar-w)` for the fixed rail, which is now
+     hidden — without this the content prints indented by the width of a sidebar that is not
+     on the page, and the right edge is clipped. */
+  main {
+    margin-left: 0 !important;
+    padding: 0 !important;
+    max-width: 100% !important;
+  }
+
+  .panel,
+  .stat,
+  table {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .panel,
+  .stat {
+    border: 1px solid #ddd;
+    background: #fff !important;
+  }
+
+  /* Severity is the one thing that must survive the loss of colour — a printed queue where
+     "Park It" looks like everything else is worse than no printout. Kept as a rule rather
+     than relying on `print-color-adjust`, which browsers may still ignore. */
+  .stat.is-danger {
+    border-left: 3px solid #c00 !important;
+  }
+
+  .stat.is-ok {
+    border-left: 3px solid #060 !important;
+  }
+
+  table {
+    border: 1px solid #ccc;
+  }
+
+  /* RESET THE ROW SURFACE BEFORE STRIPING IT. The dark theme paints backgrounds and text
+     colours on the rows and cells themselves, and the `body` rule above does not reach them —
+     so the first version of this block printed odd rows as near-black bands with near-black
+     text, i.e. half the table unreadable. Caught by rendering the print stylesheet to PDF
+     with Playwright rather than trusting that it worked (2026-09-23); nothing in the test
+     suite can see a print-media regression, so a render is the only check there is. */
+  tbody tr,
+  thead tr {
+    background: #fff !important;
+  }
+
+  td,
+  th,
+  .mono {
+    color: #111 !important;
+  }
+
+  /* `.muted` and `.faint` are mid-greys chosen for contrast against a dark surface. On white
+     paper they come out pale enough to be hard work — most of the hero and every path card is
+     `.muted`. Darkened rather than flattened to #111 so the hierarchy still reads. */
+  .muted,
+  .home-hero-lede,
+  .home-hero-cols h4 {
+    color: #444 !important;
+  }
+
+  thead th {
+    background: #f5f5f5 !important;
+    color: #333 !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  /* After the reset, so the stripe wins on even rows. */
+  tbody tr:nth-child(2n) {
+    background: #fafafa !important;
+  }
+
+  .tag {
+    border: 1px solid currentColor !important;
+    background: transparent !important;
+  }
+
+  /* A printed page cannot be clicked, so a link's destination has to be on the paper. */
+  a {
+    color: #333 !important;
+    text-decoration: underline;
+  }
+
+  a[href^="http"]::after {
+    content: " (" attr(href) ")";
+    font-size: 9px;
+    color: #666;
+  }
+}
+
+/* ── forced colours (Windows High Contrast) ─────────────────────────────────────────── */
+/* Forced-colors mode replaces the palette and **strips `box-shadow` entirely**. This console
+   marks the active nav item with `box-shadow: inset 3px 0 0 var(--accent)` and nothing else,
+   so in high contrast the operator loses the only indication of which page they are on. That
+   is the specific defect this block exists to fix; the rest restores borders on elements whose
+   boundary is carried by a background colour that forced colours also replaces.
+
+   System colour keywords (`CanvasText`, `Highlight`, `ButtonText`) are required here — a
+   literal or a `var(--…)` is ignored in this mode. */
+@media (forced-colors: active) {
+  .sidebar-nav button[aria-current="page"] {
+    border-left: 3px solid Highlight;
+  }
+
+  /* Same class of defect as the nav item above: the hero is distinguished only by an accent
+     border whose colour forced-colors replaces. */
+  .home-hero {
+    border-left: 3px solid Highlight;
+  }
+
+  /* The "Approve" gate is the one step a reader should notice, and forced-colors overrides
+     `stroke` wholesale — so re-assert it in a system colour, or the human gate stops being
+     visually distinct from the other five steps.
+     The text list is deliberately NOT un-hidden here: checked against a real forced-colors
+     render and the SVG stays fully legible, so showing both would just duplicate it. Print
+     is different — there the SVG is hidden and the list is the only version. */
+  .flow-box-gate {
+    stroke: Highlight;
+    stroke-width: 2;
+  }
+
+  .stat,
+  .panel {
+    border: 1px solid CanvasText;
+  }
+
+  .tag {
+    border: 1px solid CanvasText;
+  }
+
+  .who .dot {
+    border: 2px solid CanvasText;
+  }
+
+  button.primary,
+  button.danger {
+    border: 2px solid ButtonText;
+  }
+
+  :focus-visible {
+    outline: 3px solid Highlight;
+    outline-offset: 2px;
+  }
 }

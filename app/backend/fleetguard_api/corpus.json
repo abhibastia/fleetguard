@@ -1,0 +1,13 @@
+{
+  "complaints": 2240289,
+  "tsbs": 5801279,
+  "recalls": 244925,
+  "investigations": 154367,
+  "fleet_vehicles": 20000,
+  "fleet_depots": 60,
+  "rag_chunks": 115499,
+  "bronze_total": 8440860,
+  "source_schema": "bootcamp_students.fleetguard",
+  "statement": "SELECT 'complaints' AS k, COUNT(*) AS n FROM bootcamp_students.fleetguard.bronze_complaints UNION ALL SELECT 'tsbs' AS k, COUNT(*) AS n FROM bootcamp_students.fleetguard.bronze_tsbs UNION ALL SELECT 'recalls' AS k, COUNT(*) AS n FROM bootcamp_students.fleetguard.bronze_recalls UNION ALL SELECT 'investigations' AS k, COUNT(*) AS n FROM bootcamp_students.fleetguard.bronze_investigations UNION ALL SELECT 'fleet_vehicles' AS k, COUNT(*) AS n FROM bootcamp_students.fleetguard.gold_fleet_vehicle UNION ALL SELECT 'fleet_depots' AS k, COUNT(*) AS n FROM bootcamp_students.fleetguard.gold_fleet_depot UNION ALL SELECT 'rag_chunks' AS k, COUNT(*) AS n FROM bootcamp_students.fleetguard.silver_complaint_chunk_indexed",
+  "generated_at": "2026-09-23T19:40:41+00:00"
+}
