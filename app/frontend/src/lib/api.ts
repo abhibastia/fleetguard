@@ -85,6 +85,10 @@ export interface ApprovalResult {
 export interface ChatTurn {
   role: "user" | "assistant";
   content: string;
+  /** HMAC tag the server issued for this assistant turn. Replaying an assistant turn
+   *  without it is refused — the browser sends the conversation back, so the server has
+   *  to be able to prove it produced the turns attributed to it. Absent on user turns. */
+  signature?: string;
 }
 
 /** What the console actually did when the agent requested a write. Distinct from `reply`
@@ -116,6 +120,8 @@ export type AgentActionResult = OpenDefectSignalActionResult | WatchCampaignActi
 export interface ChatReply {
   reply: string;
   endpoint: string;
+  /** Echo this back on the matching `ChatTurn` when replaying the conversation. */
+  signature: string;
   action_result: AgentActionResult | null;
 }
 

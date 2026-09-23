@@ -77,8 +77,10 @@ def test_a_failed_write_rolls_back_rather_than_committing_a_partial_update(monke
     )
     conn = install(monkeypatch, work_orders, cur)
 
+    # IN_PROGRESS, not COMPLETED: this test is about rollback, and OPEN -> COMPLETED is no
+    # longer a legal transition, so it would now fail on the 409 before reaching the UPDATE.
     with pytest.raises(RuntimeError):
-        update_work_order(APPROVER, "WO-1", WorkOrderUpdate(status="COMPLETED"))
+        update_work_order(APPROVER, "WO-1", WorkOrderUpdate(status="IN_PROGRESS"))
 
     assert conn.rolled_back
     assert not conn.committed

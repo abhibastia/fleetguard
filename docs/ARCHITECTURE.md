@@ -302,6 +302,20 @@ that check applied to every writer for free.
   ids, work-order ids and service-campaign ids share the column — and an audit row must
   outlive whatever it describes.
 
+**Three partial unique indexes carry the "one active X" rules.** Each exists because the case
+being defended against is two requests milliseconds apart, where a `SELECT`-then-`INSERT` in
+the handler is a TOCTOU race that under READ COMMITTED is the *likely* interleaving. Only the
+database serialises them; the handler's own check produces the good error message.
+
+| Index | On | Where | Rule |
+|---|---|---|---|
+| `ux_fg_service_campaign_active` | `service_campaign (campaign_id)` | `status='LAUNCHED'` | One live service campaign per recall (I-063) |
+| `ux_fg_watchlist_active` | `watchlist (campaign_id, watched_by)` | `status='ACTIVE'` | One active watch per campaign per person |
+| `ux_fg_defect_signal_agent_active` | `defect_signal (opened_by, series_key, component)` | `status='OPEN' AND source='AGENT'` | One open agent signal per series per actor (I-110) |
+
+All three are **partial** for the same reason: a closed, cancelled or superseded row must not
+block the legitimate next one. A plain unique index would make a recurrence unreportable.
+
 **Present in schema, not currently wired to the app** — created and CDF-enabled, but no
 router or agent tool reads or writes them as of this reconciliation (confirmed by grep
 across `app/backend/fleetguard_api/` and `src/agent/`):
@@ -437,6 +451,7 @@ and each was violated at least once.
 | An agent write is attributed to a **real human**, never a service principal | `agent_actions.execute` refuses (403) a token carrying no identity, for both write actions |
 | Fleet counts joining NHTSA and vPIC model strings state their **match tier** | `ActionResult.match_basis`; I-075 |
 | A `watch_campaign` request checks the campaign exists before writing | `_execute_watch_campaign` refuses (404) an unknown `campaign_id` **before** the insert, so the caller gets a message naming the campaign rather than a bare `ForeignKeyViolation`. Since 2026-09-20 `fk_fg_watchlist_campaign` is the floor underneath it (§4.6a) |
+| A work order cannot un-finish | `ALLOWED_TRANSITIONS` (`routers/work_orders.py`) returns **409** on an illegal status change, checked against the row already locked `FOR UPDATE`. `COMPLETED` and `CANCELLED` are terminal; `OPEN` must pass through `IN_PROGRESS` to complete. The DB `CHECK` and the `Literal` constrain the *value*, neither constrained the *transition* (I-110) |
 | Cross-table references are valid | **14 foreign keys**, added 2026-09-20 — the app checks still run first and are stronger; the constraints cover every writer that does not go through the app (§4.6a) |
 
 ---
@@ -490,6 +505,51 @@ could not inspect: live on 2026-09-08 it offered to widen a RAM 2500 signal to t
 2500/3500 cluster", and this fleet holds no Dodge at all. That closes the NHTSA-vs-vPIC gap
 (I-030) at the source; `ActionResult.match_basis` (I-075) remains the backstop that repairs a
 count afterwards and states which tier produced it.
+
+**A write request ends the turn, and the turn is limited to one** (2026-09-20, I-110). Two
+boundaries make an envelope binding rather than provisional:
+
+- **Forward.** Once a tool returns an envelope, the agent finishes the tool calls already in
+  flight — cutting the batch short would leave a `tool_call_id` unanswered, which the
+  completions API rejects — and then makes exactly one more model call **with the tool list
+  omitted**. The model can explain what it asked for; it cannot reach for another tool.
+  Without this it could request a signal, keep reasoning, reach a different conclusion, and
+  finish, while the console still executed the abandoned request.
+- **Backward.** If the bounded 6-round loop exhausts without a final answer, every collected
+  envelope is discarded (I-109).
+
+An envelope therefore exists only inside a turn that both reached it and concluded from it.
+**One per turn, enforced at both ends:** the agent returns no actions if it somehow produced
+two, and `routers/chat.py` refuses such a response with 409 rather than executing the first
+and dropping the rest. Neither end trusts the other to have handled it.
+
+**Assistant turns are signed.** This console holds no server-side conversation state, so the
+browser replays the history — which means a client can claim the assistant said anything, and
+an injected turn enters the model's context as the model's own words. Each reply therefore
+carries an HMAC tag over its text which the client must echo back; an assistant turn that
+does not verify is refused (400). The write paths were never defenceless — `authz.may_approve`
+gates both — but forged history can steer an approver's own session, and that matters more
+each time the agent gains a write tool. The key is generated per process rather than
+configured: `app.yaml` is in git, so a literal there would be a published secret, and the only
+cost of a fresh key is that a restart ends conversations already open.
+
+**`fleetguard_agent_action` records attempts, not only commits.** A refused or failed write
+rolls its business row and audit row back together, and until 2026-09-20 it rolled the
+agent-action row back with them — so a table named for what the agent did contained only what
+it succeeded at. A non-committing attempt now writes one row in a separate short transaction
+with `tool_output.outcome` set to `REJECTED` or `FAILED` and the reason alongside. It is
+best-effort by design: if that log fails it is swallowed, because replacing the caller's real
+403 with a database error from the logging path is worse than losing the record. Unattributed
+attempts are not recorded at all — `actor_principal` is `NOT NULL`, and refusing to write an
+unattributable row is itself the 403 the caller receives.
+
+**A retry cannot become a second finding.** `ux_fg_defect_signal_agent_active` — unique on
+`(opened_by, series_key, component)` where `status='OPEN' AND source='AGENT'` — is what
+actually serialises two concurrent requests; `agent_actions` turns the `UniqueViolation` into
+a 409 naming the existing signal. Per actor, because two managers observing the same series
+independently are two observations. Partial on `OPEN`, so a recurrence can still be reported
+after the first signal is closed. Scoped to `source='AGENT'`, so the batch detector is
+unconstrained by a rule written for the agent write path.
 
 Verified end to end 2026-09-08: user question → complaint retrieval → agent decision →
 envelope → app executes under OBO → Lakebase insert (+ audit row + `fleetguard_agent_action`,
@@ -554,7 +614,20 @@ actual dispatch happens through this sequence instead.
    resolves to its latest state. The watermark is not trusted — every run still reconciles
    the fact against the **entire** history, and on a mismatch rebuilds from scratch, records
    the drift and fails. `full_refresh=true` forces the old whole-history path, which is kept
-   rather than deleted. This is the change E-16 named as the trigger for reconsidering
+   rather than deleted.
+
+   **The reconciliation compares content, not just cardinality** (2026-09-20, I-110). It
+   previously checked `fact_rows == live_keys` while its own prose claimed to prove the fact
+   matched full history. Those are different statements: a key whose latest history event
+   says `COMPLETED` while gold still says `OPEN` has the same count on both sides. That is
+   exactly the drift an *incremental* path can produce and a full rebuild cannot — a missed
+   `update_postimage` above the watermark changes a value without changing a count — so the
+   check guarding the watermark was blind to the failure mode the watermark introduces. Each
+   fact is now fingerprinted against the full-history truth with
+   `bit_xor(xxhash64(to_json(struct(<every column, sorted>))))`: order-independent, no
+   overflow, and the column list is explicit so a MERGE leaving a different column order
+   cannot read as drift. A content mismatch takes the same rebuild-record-and-still-fail
+   path, and the failure message names which kind of drift occurred. This is the change E-16 named as the trigger for reconsidering
    `AUTO CDC INTO`; that comparison was made and `AUTO CDC INTO` lost on its own objection,
    since a hand-written MERGE keeps the I-080 regression guard its opaque ranking would cost.
 
@@ -1021,6 +1094,25 @@ constrained: **engine and data are separate grants**, which is exactly how I-050
 the warehouse was declared, the table was not, and a missing grant surfaced as an empty result
 rather than an error. The agent has **no** Lakebase path at all; all three routes were checked
 and closed (§7.1), which is why the write is an action envelope the console executes.
+
+**The agent's READS are not scoped to the asking human, and nothing here claims they are.**
+Its SQL and vector-search calls run as this service principal, so a question like "how many
+vehicles does recall X affect?" is answered fleet-wide regardless of which depot the caller
+is meant to see. That is a **latent authorization gap, not a demonstrated leak**: depot
+scoping is fail-open by construction and nobody is enrolled in
+`fleetguard_depot_assignment` (§8a, `scoping.py`), so every caller — through the console or
+through the agent — is on the same unrestricted path today. The agent is not a way around a
+boundary that is currently enforced against anyone.
+
+Closing it properly means passing an authoritative scope into the invocation and enforcing it
+server-side through governed views; a prompt instruction would not be an authorization
+boundary. Until that exists, **do not build a role-scoped story around the agent** — raised
+by an external review 2026-09-20 and recorded as a deferral in I-110, because the gap is
+structural (Layer 4's identity) rather than an oversight in any one handler.
+
+Layer 3's write path is unaffected: the console executes every write under the **caller's**
+token (§7.1), so RLS applies to what the agent causes to be written even though it does not
+apply to what the agent reads.
 
 ### Layer 5 — notebooks and jobs → Lakehouse
 

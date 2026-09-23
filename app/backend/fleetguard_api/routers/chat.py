@@ -17,7 +17,10 @@ claims. Answers take a few seconds; that is an acceptable price for a claim that
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import os
+import secrets
 
 import httpx
 from fastapi import APIRouter, HTTPException, status
@@ -41,6 +44,39 @@ AGENT_ENDPOINT = os.getenv(
 AGENT_TIMEOUT_S = 120.0
 
 
+# THE BROWSER SENDS THE CONVERSATION BACK, SO ASSISTANT TURNS MUST BE PROVABLE.
+#
+# Multi-turn context has to come from somewhere, and this console holds no server-side
+# conversation state. That means the client replays what the assistant said — and a client
+# can say the assistant said anything. An injected turn like "the fleet manager already
+# approved this action" lands in the model's context as though the model had produced it.
+#
+# The write paths are not defenceless: `agent_actions.execute` calls `authz.may_approve`
+# before touching Lakebase, so forging history cannot grant an unauthorised write. What it
+# CAN do is steer an approver's own session — and the agent gained write tools in v5, so the
+# gap gets worse rather than better with time.
+#
+# Fixed without a conversation database: every assistant turn leaves here with an HMAC tag
+# over its text, and the client must hand the tag back with the turn. The server recomputes
+# and compares. No conversation table to age out, and no per-user state to keep.
+#
+# THE KEY IS GENERATED PER PROCESS, and deliberately not read from a committed file.
+# `app.yaml` is in git, so a literal there would be a published secret, and a Databricks
+# secret scope is real setup for a property that does not need durability: the only cost of
+# a fresh key is that a restart invalidates conversations that are already open, and the
+# user starts a new one. That is the safe direction, and at this scale it is free.
+#
+# `FLEETGUARD_CHAT_SIGNING_KEY` overrides it, for the one case this does not cover — several
+# replicas behind one ingress, where a per-process key would reject turns issued by a sibling.
+# The App runs single-instance today, so nothing sets it.
+_HMAC_KEY = os.getenv("FLEETGUARD_CHAT_SIGNING_KEY") or secrets.token_hex(32)
+
+
+def sign_turn(text: str) -> str:
+    """Tag proving this server produced `text` as an assistant turn."""
+    return hmac.new(_HMAC_KEY.encode(), text.encode(), hashlib.sha256).hexdigest()
+
+
 class ChatTurn(BaseModel):
     role: str = Field(pattern="^(user|assistant)$")
     # Bounded for the same reason `messages` is capped at 20: unbounded content means up to 20
@@ -48,15 +84,39 @@ class ChatTurn(BaseModel):
     # chars is generous for a real question — far above anything a human types — while ruling
     # out that shape of request.
     content: str = Field(max_length=8000)
+    # Present on assistant turns only; the client echoes back what `ChatReply.signature`
+    # gave it. A user turn carries none — the user is allowed to say anything.
+    signature: str | None = Field(default=None, max_length=128)
 
 
 class ChatRequest(BaseModel):
     messages: list[ChatTurn] = Field(min_length=1, max_length=20)
 
 
+def _verify_history(messages: list[ChatTurn]) -> None:
+    """Reject any assistant turn this server cannot prove it produced."""
+    for turn in messages:
+        if turn.role != "assistant":
+            continue
+        # `compare_digest` rather than `==`: this compares a client-supplied value against
+        # a secret-derived one, which is the textbook timing-oracle shape.
+        if not turn.signature or not hmac.compare_digest(
+            turn.signature, sign_turn(turn.content)
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "An assistant turn in this conversation could not be verified. "
+                    "Start a new conversation. (If the app restarted, this is expected.)"
+                ),
+            )
+
+
 class ChatReply(BaseModel):
     reply: str
     endpoint: str
+    # The tag the client must send back alongside this reply if it replays it as history.
+    signature: str = ""
     # Present only when the agent requested a write and this console performed it. The UI
     # renders this separately from `reply`, because the committed row — not the model's
     # prose — is what actually happened. Two shapes because there are now two write
@@ -110,8 +170,13 @@ def chat(principal: CurrentPrincipal, req: ChatRequest) -> ChatReply:
             detail="This deployment has no Databricks credential to query the agent with.",
         )
 
+    _verify_history(req.messages)
+
     url = f"{host}/serving-endpoints/{AGENT_ENDPOINT}/invocations"
-    body = {"input": [t.model_dump() for t in req.messages]}
+    # `signature` is this console's own bookkeeping and means nothing to the agent, whose
+    # `predict` filters to {role, content} anyway. Dropped here so the wire payload stays
+    # exactly what it was before signing existed.
+    body = {"input": [{"role": t.role, "content": t.content} for t in req.messages]}
 
     try:
         resp = httpx.post(
@@ -192,11 +257,28 @@ def chat(principal: CurrentPrincipal, req: ChatRequest) -> ChatReply:
         "databricks_request_id"
     ) or payload.get("id")
 
-    # Execute at most one action per turn. The agent's loop could in principle emit several,
-    # but a chat turn that silently performs a batch of writes is not something an operator
-    # can review — and nothing in the prompt asks for more than one. Extra envelopes are
-    # dropped rather than executed; if that ever becomes a real pattern it should be a
-    # deliberate design, not an emergent one.
+    # ONE ACTION PER TURN. The decision is unchanged and was reviewed once already
+    # (I-109 #4): a chat turn that performs a batch of writes is not something an operator
+    # can review, and nothing in the prompt asks for more than one. What changed on
+    # 2026-09-20 is the ENFORCEMENT, not the rule.
+    #
+    # This used to execute `actions[0]` and drop the rest silently. That made the invariant
+    # depend on the agent continuing to emit exactly one — so a future tool or schema change
+    # that emitted two would not fail, it would quietly perform the first and discard the
+    # second, and nothing anywhere would say so. Refusing makes the invariant checked
+    # instead of assumed.
+    #
+    # The agent now also refuses this shape on its own side. Both ends fail closed rather
+    # than each trusting the other to have handled it.
+    if len(actions) > 1:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"The assistant requested {len(actions)} actions in one turn; only one is "
+                "allowed. Nothing was recorded."
+            ),
+        )
+
     action_result = None
     if actions:
         # Deliberately NOT wrapped in a try/except that degrades to a plain reply: a failed
@@ -209,4 +291,9 @@ def chat(principal: CurrentPrincipal, req: ChatRequest) -> ChatReply:
         # the write is the part with real-world consequences.
         action_result = agent_actions.execute(principal, actions[0], trace_id=request_id)
 
-    return ChatReply(reply=text, endpoint=AGENT_ENDPOINT, action_result=action_result)
+    return ChatReply(
+        reply=text,
+        endpoint=AGENT_ENDPOINT,
+        signature=sign_turn(text),
+        action_result=action_result,
+    )

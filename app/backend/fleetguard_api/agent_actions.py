@@ -139,6 +139,52 @@ def parse_envelope(text: str) -> dict | None:
         return None
 
 
+def _record_attempt(
+    principal: Principal, tool: str, params: dict, outcome: str, reason: str,
+    trace_id: str | None,
+) -> None:
+    """Write one `fleetguard_agent_action` row for an attempt that did NOT commit.
+
+    **Why this is a second transaction.** The successful path writes the business row, the
+    audit row and the agent-action row together, so an action that is recorded is an action
+    that happened. The corollary used to be that a REJECTED or FAILED attempt rolled back
+    with them and left no trace in Lakebase at all — the table recorded only successes while
+    reading, from its name, like a record of what the agent did. MLflow still had the trace,
+    but the audit trail and the observability trail are only joinable through `trace_id`, and
+    a row that never existed cannot carry one.
+
+    So: after the rollback, open a fresh connection and record the attempt. It must not share
+    the failed transaction — that one is already aborted — and it must not resurrect any part
+    of the business write, which is why only this one row is written.
+
+    **Best-effort on purpose.** If the attempt log itself fails, swallow it and let the
+    original error surface. Losing the record of a refusal is bad; replacing the caller's
+    real 403 with a confusing database error from the logging path is worse.
+    """
+    if snapshot.is_snapshot():
+        # There is no database in snapshot mode — the refusal this is recording IS that
+        # fact. Calling `connect` here would turn a clean 501 into a connection error, and
+        # `tests/test_agent_actions.py` asserts the snapshot path never opens one.
+        return
+    try:
+        with connect(principal, autocommit=True) as conn, conn.cursor() as cur:
+            cur.execute(
+                f"""INSERT INTO {PG_SCHEMA}.fleetguard_agent_action
+                    (tool, tool_input, tool_output, actor_principal, on_behalf_of,
+                     requires_approval, trace_id)
+                    VALUES (%(tool)s, %(inp)s, %(outp)s, %(actor)s, %(actor)s, false, %(trace)s)""",
+                {
+                    "tool": tool,
+                    "inp": json.dumps(params, default=str),
+                    "outp": json.dumps({"outcome": outcome, "reason": reason}),
+                    "actor": principal.user_name,
+                    "trace": trace_id,
+                },
+            )
+    except Exception:  # noqa: S110 — see the docstring; never mask the caller's real error
+        pass
+
+
 def execute(
     principal: Principal, envelope: dict, trace_id: str | None = None
 ) -> ActionResult | WatchCampaignResult:
@@ -148,11 +194,35 @@ def execute(
     half-written state.
     """
     action = envelope.get("__fleetguard_action__")
-    if action == OPEN_DEFECT_SIGNAL:
-        return _execute_open_defect_signal(principal, envelope, trace_id)
-    if action == WATCH_CAMPAIGN:
-        return _execute_watch_campaign(principal, envelope, trace_id)
-    raise HTTPException(status.HTTP_400_BAD_REQUEST, f"unsupported agent action {action!r}")
+    handler = {
+        OPEN_DEFECT_SIGNAL: _execute_open_defect_signal,
+        WATCH_CAMPAIGN: _execute_watch_campaign,
+    }.get(action)
+    if handler is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"unsupported agent action {action!r}")
+
+    # `fleetguard_agent_action` records ATTEMPTS, not only commits — the outcome is in
+    # `tool_output.outcome`. See `_record_attempt` and ARCHITECTURE §7.1.
+    #
+    # Only attempts by an IDENTIFIED caller are recorded: an unattributable row is the
+    # thing this project refuses to write anywhere, and `_record_attempt` would have no
+    # `actor_principal` to put in it. That refusal is itself the 403 raised below.
+    try:
+        return handler(principal, envelope, trace_id)
+    except HTTPException as exc:
+        if principal.user_name:
+            _record_attempt(
+                principal, action, envelope.get("params") or {},
+                "REJECTED", str(exc.detail), trace_id,
+            )
+        raise
+    except Exception as exc:
+        if principal.user_name:
+            _record_attempt(
+                principal, action, envelope.get("params") or {},
+                "FAILED", f"{type(exc).__name__}: {exc}", trace_id,
+            )
+        raise
 
 
 def _execute_open_defect_signal(
@@ -186,6 +256,10 @@ def _execute_open_defect_signal(
     params = OpenDefectSignalParams(**(envelope.get("params") or {}))
     signal_id = f"AGENT-{uuid.uuid4().hex[:12]}"
     series_key = "|".join(p for p in (params.make, params.model, params.component) if p)
+    # The id is fresh per call, so it makes this write idempotent about nothing. What
+    # serialises a retry is `ux_fg_defect_signal_agent_active` (src/lakebase/
+    # 26_add_defect_signal_idempotency.py) — a partial unique index on
+    # (opened_by, series_key, component) over OPEN agent signals. See the INSERT below.
 
     with connect(principal, autocommit=False) as conn:
         try:
@@ -234,6 +308,30 @@ def _execute_open_defect_signal(
                         {"make": params.make, "model": params.model},
                     )
                     counts = rows_to_dicts(cur)[0]
+
+                    # THE LOOKUP IS AUTHORITATIVE, NOT ADVISORY.
+                    #
+                    # The prompt tells the agent to call `lookup_fleet_models` before naming
+                    # a make, and it generally does. But a prompt is not an enforcement
+                    # mechanism, and a make this fleet does not operate is not a weak signal —
+                    # it is a signal about nothing, recorded under a name an operator will
+                    # read as real. `make_n == 0` means NO vehicle in `fleetguard_vehicle`
+                    # carries this make, which no honest observation about THIS fleet can
+                    # produce.
+                    #
+                    # Note what is NOT rejected: a make that matches with a model that does
+                    # not. That is `match_basis='NONE'`, a legitimate and informative state —
+                    # the fleet runs FORD, and this particular FORD model is not one of them.
+                    # And a NULL make stays allowed entirely: "brake complaints, make not yet
+                    # established" is a real thing to record. What is refused is a make
+                    # asserted and wrong.
+                    if int(counts["make_n"]) == 0:
+                        raise HTTPException(
+                            status.HTTP_422_UNPROCESSABLE_CONTENT,
+                            f"this fleet operates no {params.make} vehicles — call "
+                            "lookup_fleet_models for the makes it does operate",
+                        )
+
                     if params.model is None:
                         fleet_vehicles, match_basis = int(counts["make_n"]), "MAKE_ONLY"
                     elif int(counts["exact_n"]) > 0:
@@ -261,24 +359,45 @@ def _execute_open_defect_signal(
                 # asserted* rather than as fleet data. If a real count is wanted here it has to
                 # be computed, not accepted (I-051's rule: a NULL that says "not measured" beats
                 # a value implying a calibration nobody performed).
-                cur.execute(
-                    f"""INSERT INTO {PG_SCHEMA}.fleetguard_defect_signal
-                        (signal_id, component, make, model, series_key,
-                         fleet_vehicles, status, source, opened_by, rationale)
-                        VALUES (%(sid)s, %(component)s, %(make)s, %(model)s, %(series_key)s,
-                                %(fleet_vehicles)s, 'OPEN', 'AGENT',
-                                %(actor)s, %(rationale)s)""",
-                    {
-                        "sid": signal_id,
-                        "component": params.component,
-                        "make": params.make,
-                        "model": params.model,
-                        "series_key": series_key or None,
-                        "fleet_vehicles": fleet_vehicles,
-                        "actor": actor,
-                        "rationale": params.rationale,
-                    },
-                )
+                # IDEMPOTENT ON RETRY, like the approval path and the watchlist.
+                #
+                # `chat.py` runs on a 120 s timeout and the agent can legitimately take tens
+                # of seconds. A browser that gives up and retries would previously write a
+                # SECOND signal for the same observation — different `signal_id`, identical
+                # meaning — and both would land on the operator's Emerging tab as separate
+                # findings. The agent's own turn budget (90 s) now makes that window much
+                # narrower, but narrower is not closed, and only the database can actually
+                # serialise two concurrent requests: a SELECT-then-INSERT check would let
+                # both reads miss before either write.
+                #
+                # Scoped to OPEN agent signals by the same actor, so re-opening a signal
+                # after it has been closed is still allowed — the index does not see closed
+                # rows. Same shape as `ux_fg_service_campaign_active`.
+                try:
+                    cur.execute(
+                        f"""INSERT INTO {PG_SCHEMA}.fleetguard_defect_signal
+                            (signal_id, component, make, model, series_key,
+                             fleet_vehicles, status, source, opened_by, rationale)
+                            VALUES (%(sid)s, %(component)s, %(make)s, %(model)s, %(series_key)s,
+                                    %(fleet_vehicles)s, 'OPEN', 'AGENT',
+                                    %(actor)s, %(rationale)s)""",
+                        {
+                            "sid": signal_id,
+                            "component": params.component,
+                            "make": params.make,
+                            "model": params.model,
+                            "series_key": series_key or None,
+                            "fleet_vehicles": fleet_vehicles,
+                            "actor": actor,
+                            "rationale": params.rationale,
+                        },
+                    )
+                except UniqueViolation as exc:
+                    raise HTTPException(
+                        status.HTTP_409_CONFLICT,
+                        f"{actor} already has an open {params.component} signal for "
+                        f"{series_key or 'this series'}",
+                    ) from exc
 
                 cur.execute(
                     f"""INSERT INTO {PG_SCHEMA}.fleetguard_audit_log

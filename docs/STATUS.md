@@ -15,6 +15,7 @@ on and start building".
 | Incremental CDF→gold + 2 activity rollups | cat. 5 | trigger fired unattended for an insert *and* a delete; tombstone applied, key not resurrected |
 | Recall API console tab + `scripts/capture_screenshots.py` + `docs/EVIDENCE.md` | cat. 2, evidence gap | route serves live Lakebase; 20 screenshots generated from it, both themes |
 | Three fixes from an external review (I-109) | cat. 4 | offline; the agent half needs a redeploy |
+| **Second external review triaged (I-110): 11 fixed, 2 rejected, 5 deferred** | cat. 4, 5 | offline; 5 of the 11 need the agent redeploy (action plan step 1.4) |
 
 **Three defects found along the way, none previously known:**
 
@@ -34,37 +35,146 @@ on and start building".
 **not universal** — for a table never written to, only the first actual write created the
 destination.
 
+**A second external review landed the same day and was triaged claim-by-claim (I-110).** It
+was largely accurate; 11 findings were fixed, 2 rejected, 5 deferred with the reasoning
+recorded. The two that matter most:
+
+- **A write could execute from a turn the model had moved on from** — the other end of
+  I-109's bug. The agent collected an action envelope and kept looping, so it could request a
+  signal, reason to a different conclusion, finish, and have the console execute the
+  abandoned request anyway. A write request is now terminal and limited to one per turn,
+  enforced at both ends.
+- **The CDF reconciliation was a cardinality check describing itself as a truth check.**
+  `fact_rows == live_keys` cannot see a key holding a stale value, which is precisely the
+  drift the new incremental path can produce. It now fingerprints content against full
+  history.
+
+Also fixed: `open_defect_signal` idempotency (a new partial unique index), fleet-make
+validation, work-order status transitions, HMAC-signed assistant turns, the agent/API timeout
+budget, field-wise tool-result truncation, a retrieval error that read as "no results", an
+unbounded `search_complaints` limit, and the hard-coded `16.0% / 11.1%` evaluation figures —
+now read from `gold_lead_time_summary`, the table the evidence page derives from. **Deferred
+with reasons, not silently:** the NHTSA snapshot-refresh limitation, the agent's unscoped
+reads, RAG retrieval evaluation, PII masking in the index, and splitting `may_approve`.
+
 **Unchanged and still the critical path:** the AI Search index is deleted, the agent endpoint
 is `DEPLOYMENT_STOPPED`, and the App is stopped and has not been redeployed since 2026-09-14.
-`docs/EVIDENCE.md` states what each of those costs to restore. **Two of this session's fixes
-(the agent loop and the tool schema) only take effect on the next `agents.deploy()`.**
+`docs/EVIDENCE.md` states what each of those costs to restore. **Seven of this session's
+fixes now wait on the next `agents.deploy()`** — I-109's two plus I-110's five agent-source
+changes. They ride one redeploy, not two; that redeploy is step 1.4 of the action plan below
+and is not optional.
 
-### Picking this up cold — the run-up to 4 October
+### ACTION PLAN — two online windows, not one (decided 2026-09-20)
 
-Everything below is *restoring and verifying*, not building. The build side of the rubric is
-done; read `docs/EVIDENCE.md` first for what backs each graded line and what is still missing.
+**The strategy: one full end-to-end test now, tear down, bring it back online just before
+submission.** Everything below is *restoring and verifying*, not building. The build side of
+the rubric is done; read `docs/EVIDENCE.md` first for what backs each graded line.
 
-**Nothing here is scheduled and nothing is billing except AI Search once you recreate it.**
+**This doubles the index builds, and that is the whole planning constraint.** Two builds means
+two exposures to I-105's restart-from-zero, and twice the embedding bill. The corpus scope is
+therefore no longer a cost question — below 2M vectors every scope bills the same $6.72/day
+(I-035) — it is a **schedule and risk** question, because sync time is linear in row count at
+the measured 4,336 rows/min (I-041):
+
+| scope | chunks | one build | **two builds** | if it fails |
+|---|---:|---:|---:|---|
+| fleet make/model | 115,499 | ~27 min | ~54 min | retry the same morning |
+| any_harm only | 212,207 | ~49 min | ~1.6 h | retry the same day |
+| **current — post-2010 series** | **1,746,601** | **~6.7 h** | **~13.4 h** | **a lost day, twice** |
+| all chunks | 2,196,091 | ~8.4 h | ~16.8 h | 2 units, $13.44/day |
+
+**I-035 and I-041 were filed the same day and never combined.** I-035 concluded "under 2M
+vectors, subset size is cost-free" — true for $/day, where every option ties — and is silent
+on time. The current scope is ~30x slower than an option costing exactly the same.
+
+**What shrinking costs, in work rather than money** — decide with this in view, it is the one
+judgement here that is not a technical fact:
+- `ARCHITECTURE.md` §4.4, `DEMO.md` and `EVIDENCE.md` all quote **1,746,601 chunks**, and
+  EVIDENCE frames it as "well past the 1M". Those become wrong.
+- Phase 3's done-when evidence (`ops_hybrid_query_test`, quoted in §4.4) must be **re-run
+  against the smaller index and republished as-is**, including if it comes back worse. The
+  paraphrase probe *"car suddenly sped up on its own"* leans on unintended-acceleration
+  complaints concentrated in makes this fleet may not operate.
+- The full corpus stays in Delta either way (2.2M complaints, 5.8M TSBs), so the scale claim
+  survives on the lakehouse side — it is the *vector index* number that changes.
+
+**Also check before rebuilding:** I-105 records the failed rebuild syncing from
+`silver_complaint_chunk` (2,196,091 rows), not `silver_complaint_chunk_indexed` (1,746,601).
+If that is accurate rather than a slip in the write-up, that run was on **2 units / $13.44 a
+day** and 26% longer than it needed to be.
+
+---
+
+#### Phase 0 — free prep. Nothing here bills; finish it before anything comes online
+
+| # | Step | Why now |
+|---|---|---|
+| 0.1 | **Decide the corpus scope** and build the scoped source table | Gates everything below, and Run 1 must use the **identical** scope Run 2 will, or Run 1 did not test what gets submitted |
+| 0.2 | **Merge `fix/repo-review-round-2`** (4 commits, 11 I-110 fixes, full gate green) | Five of those fixes only take effect at step 1.4's `agents.deploy()`; they must be on `main` first |
+| 0.3 | **Run `src/lakebase/26_add_defect_signal_idempotency.py`** | Lakebase only, seconds, no AI Search involved. Creates `ux_fg_defect_signal_agent_active` |
+| 0.4 | **Write the exact commands down** before you need them | This runbook gets executed **twice**, the second time under deadline pressure |
+
+#### Phase 1 — Run 1, the dress rehearsal. Budget a day, not the ~3 h of work
+
+Run 1 is where the bugs surface, and finding one means fixing it and re-testing. With a small
+corpus AI Search is no longer the longest pole, so it moves off the front of the order.
 
 | # | Step | Time | Why it is in this order |
 |---|---|---|---|
-| 1 | **Recreate AI Search** — endpoint `fleetguard-vs` + `complaint_chunk_idx` from `silver_complaint_chunk` | **~7 h**, treat as a floor | Longest pole by far, and I-105 showed a mid-sync failure restarts from row zero rather than resuming. Start it first, early in the day, and budget a retry day. Everything else fits inside its runtime |
-| 2 | **Restore the agent endpoint** (`serving_endpoints.update_config`; there is no `start`) | ~3 min | Check `state.ready` and `deployment_state_message`, **never** `scale_to_zero_enabled` — it reads `True` in both idle states and distinguishes nothing (I-092) |
-| 3 | **Re-register and deploy the agent** (`fleetguard-agent-build`, then `agents.deploy()`) | ~15 min | **Required, not optional this time.** The served v6 predates `watch_campaign` *and* both I-109 fixes — the loop-exhaustion guard and the `complaint_count` schema change are inert until this runs. Re-assert `scale_to_zero_enabled` afterwards; `agents.deploy()` has silently reset it every time |
-| 4 | **Run the agent smoke test** in `14_fleetguard_agent.py` | ~5 min | It dies on `search_complaints` without step 1, which is why the order matters. First run past that point since `watch_campaign` was written |
-| 5 | `./scripts/deploy.sh abhi prod` then `databricks bundle run fleetguard_console` | ~5 min | The second command is the one that ships App code (I-097). The App has lagged `main` since 2026-09-14 and now lags by five more PRs |
-| 6 | **Full dry run** of `docs/DEMO.md`, all nine beats | ~1 h | The thing that has never been done: every change has been verified individually and **nothing in composition**, which is where this project's failures live |
-| 7 | **Generate screenshots** — `scripts/run_local_static_dev.sh 8811`, then `capture_screenshots.py` | ~1 min | Gitignored on purpose (build output, goes stale). Do it *last*, so they match what is being submitted, and include `docs/screenshots/` in the zip |
-| 8 | **Assemble the zip** | — | Repo + `docs/screenshots/`. The requirement PDF and `repo-review.md` are gitignored and not part of it |
+| 1.1 | **10K smoke index** — then delete it | ~2 min | Proves columns, embedding model, HYBRID and the `any_harm` filter **before** committing to the real build. Every config mistake otherwise surfaces at the end of the run |
+| 1.2 | **Build the real index** — endpoint `fleetguard-vs` + `complaint_chunk_idx` | 27 min – 6.7 h by scope | Watch it. Poll for **drops**, not just plateaus: I-105's restart showed up as `indexed_row_count` going *backwards*, and the index API gives no other signal. On a drop, check `pipelines list-pipeline-events`, not `get-index` |
+| 1.3 | **Restore the agent endpoint** (`serving_endpoints.update_config`; there is no `start`) | ~3 min | Check `state.ready` and `deployment_state_message`, **never** `scale_to_zero_enabled` — it reads `True` in both idle states and distinguishes nothing (I-092) |
+| 1.4 | **Re-register and deploy the agent** (`fleetguard-agent-build`, then `agents.deploy()`) | ~15 min | **The step people skip because the endpoint "works".** Served v6 predates `watch_campaign`, both I-109 fixes *and* all five I-110 agent-source fixes — action terminality, the result cap, retrieval error-vs-empty, field-wise truncation, the un-hard-coded evidence figures. All inert until this runs. Re-assert `scale_to_zero_enabled` afterwards; `agents.deploy()` has silently reset it every time |
+| 1.5 | **Run the agent smoke test** in `14_fleetguard_agent.py` | ~5 min | Dies on `search_complaints` without 1.2. First run past that point since `watch_campaign` was written |
+| 1.6 | `./scripts/deploy.sh abhi prod` then `databricks bundle run fleetguard_console` | ~5 min | The **second** command is what ships App code (I-097). The App has lagged `main` since 2026-09-14 |
+| 1.7 | **Full dry run of `docs/DEMO.md`, every beat** | ~1 h | The thing that has never been done: everything is verified individually and **nothing in composition**, which is where this project's failures live |
+| 1.8 | **Generate screenshots** — `scripts/run_local_static_dev.sh 8811`, then `capture_screenshots.py` | ~1 min | Gitignored build output. *After* 1.6, or they show older UI than the code in the zip |
+| 1.9 | **Record the release provenance** — git SHA, bundle deployment, agent model version, App deployment id, index name + row count | ~2 min | Nothing writes these together, so "is the live system the thing in the zip?" today means checking five separate places. Named by the 2026-09-20 review as the single biggest practical risk (I-110) |
 
-**Two things that are easy to get wrong here.** The agent redeploy (step 3) is the one people
-skip because the endpoint "works" — but it serves code without this session's safety fix. And
-the screenshots must come *after* the App redeploy, or they show older UI than the code in the
-zip.
+#### Phase 2 — teardown
 
-**Cost while this runs:** AI Search is ~$6.72/day from the moment step 1 starts. The App is
-stopped between sessions, the agent endpoint is scale-to-zero, and `fleetguard-cdf-to-gold` is
-event-driven and capped at one run/minute.
+| # | Step | Note |
+|---|---|---|
+| 2.1 | **Delete the index** | The one that matters — billing stops **24 h after the last index is deleted** |
+| 2.2 | **Verify the next day that billing actually stopped** | That 24 h rule is load-bearing for this whole plan and is recorded from a single source. Check it once, while there is still time to react |
+| 2.3 | **Stop the App** | |
+| 2.4 | **Leave the agent endpoint on scale-to-zero** | Free idle, and it removes a restore step from Run 2 |
+| 2.5 | **Touch nothing else** | Delta tables, Lakebase rows, the registered UC model version and the bundle deployment all persist — which is exactly why Run 2 is cheap. Never `bundle destroy` |
+
+#### Phase 3 — Run 2, before submission. Much shorter: the UC model registration survives teardown
+
+| # | Step | Time |
+|---|---|---|
+| 3.1 | **Recreate the index — same scope, same config** | 27 min – 6.7 h |
+| 3.2 | **Start the App.** Re-run `bundle run fleetguard_console` **only if code changed** since Run 1 | ~5 min |
+| 3.3 | Agent endpoint wakes on the first call (~47 s measured) — no redeploy unless code changed | — |
+| 3.4 | **Abbreviated verification**, not the full hour: one agent question, one write, confirm it reaches UC | ~15 min |
+| 3.5 | **Fresh screenshots only if the UI changed** | ~1 min |
+| 3.6 | **Update the provenance record**, then assemble the zip (repo + `docs/screenshots/`; the requirement PDF and the review files are gitignored and not part of it) | ~5 min |
+
+#### The rule that makes this work
+
+**Change nothing between Run 1 and Run 2.** Every code change after Run 1 turns Run 2 back
+into Run 1 — a full untested composition, under deadline. If Run 1 surfaces a bug, fix it and
+re-run the affected beats **then**, not in October.
+
+**Timing: Run 1 this week**, so a failed index build still leaves a retry day.
+**Run 2 on 2–3 October**, live into submission on the 4th.
+
+#### Cost
+
+Roughly **$25–35 total at a small corpus**: ~$6.72/day for a one-day Run 1, ~$13–20 for Run 2
+held through submission, plus embedding tokens twice. Token cost scales directly with corpus
+size, so at 115K it is a few percent of the 1.75M build — negligible even doubled. At 1.75M
+you pay the full embedding bill twice, and I-105 shows what one failure does to that. There is
+**no zero-cost path to a live index**; the lever is building small, late, and deleting after
+the evidence is captured.
+
+**Not rebuilding at all remains a real option.** Six of the agent's seven tools never touch AI
+Search — queue, approval, exposure, emerging signals and both write paths all run off the
+warehouse and Lakebase — and `DEMO.md`'s 2026-09-09 decision already lets the Assistant render
+as "offline". What that forfeits is the RAG demonstration, which is a graded category.
+
 
 **Last updated:** 2026-09-20 · previously 2026-09-18 · **MVP target: 7 September — MET** · **Demo: 25–30 September**
 

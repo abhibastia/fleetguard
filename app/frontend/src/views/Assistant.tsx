@@ -39,10 +39,12 @@ export function Assistant() {
     setError(null);
 
     try {
-      const { reply, action_result } = await api.chat(next);
+      const { reply, signature, action_result } = await api.chat(next);
       // `reply` is already stripped of the action envelope server-side, so replaying these
       // turns as history cannot feed an envelope back into the model's context.
-      setTurns([...next, { role: "assistant", content: reply }]);
+      // Carry the server's signature on the turn. The next request replays this history,
+      // and an assistant turn the server cannot verify is rejected rather than trusted.
+      setTurns([...next, { role: "assistant", content: reply, signature }]);
       // The console's own record of what it wrote — kept out of `turns` because it is not
       // conversation, and because the model must never be able to author it.
       if (action_result) setLastAction(action_result);

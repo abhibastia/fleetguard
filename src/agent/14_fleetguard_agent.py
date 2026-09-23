@@ -63,6 +63,7 @@ print(f"model : {MODEL_NAME}\nllm   : {LLM_ENDPOINT}\nindex : {INDEX}")
 # MAGIC
 # MAGIC import json
 # MAGIC import time
+# MAGIC from contextvars import ContextVar
 # MAGIC from typing import Any, Generator
 # MAGIC
 # MAGIC import mlflow
@@ -87,7 +88,9 @@ print(f"model : {MODEL_NAME}\nllm   : {LLM_ENDPOINT}\nindex : {INDEX}")
 # MAGIC
 # MAGIC w = WorkspaceClient()
 # MAGIC
-# MAGIC SYSTEM_PROMPT = """You are FleetGuard's recall-response assistant, used by fleet safety
+# MAGIC # A TEMPLATE, not a constant. `{evidence_sentence}` is filled from the measured backtest
+# MAGIC # at call time — see `_evidence()` below for why it is not hard-coded here.
+# MAGIC SYSTEM_PROMPT_TEMPLATE = """You are FleetGuard's recall-response assistant, used by fleet safety
 # MAGIC managers who act on what you tell them.
 # MAGIC
 # MAGIC Rules you must never break:
@@ -102,9 +105,7 @@ print(f"model : {MODEL_NAME}\nllm   : {LLM_ENDPOINT}\nindex : {INDEX}")
 # MAGIC    There is a THIRD state below both: an *emerging signal* is a statistical anomaly
 # MAGIC    this system detected in complaint volume. NHTSA has not acted on it at all. Never
 # MAGIC    describe a signal as a recall, as an investigation, or as a confirmed defect. Say
-# MAGIC    "we detected" — not "there is". When the detector does fire, it fires a median 197
-# MAGIC    days before NHTSA opens the case — a real head start — but it only fires on roughly
-# MAGIC    one investigation in six (16.0%, against 11.1% on a matched control). Lead with the
+# MAGIC    "we detected" — not "there is". {evidence_sentence} Lead with the
 # MAGIC    head start when explaining what a signal is worth; state the miss rate in the same
 # MAGIC    breath. An edge, not an oracle, and saying so is required, not optional.
 # MAGIC 4. You may PROPOSE a service campaign. You cannot launch one — a human approves it.
@@ -132,6 +133,27 @@ print(f"model : {MODEL_NAME}\nllm   : {LLM_ENDPOINT}\nindex : {INDEX}")
 # MAGIC """
 # MAGIC
 # MAGIC
+# MAGIC # ONE DEADLINE FOR THE WHOLE TURN, set below the caller's HTTP timeout.
+# MAGIC #
+# MAGIC # `routers/chat.py` gives up at 120 s. This loop could previously outlive that: 50 s of
+# MAGIC # synchronous wait plus a 120 s polling deadline is ~170 s, so the browser could time out
+# MAGIC # while the agent was still working — and a client that retries a turn whose write is
+# MAGIC # still in flight is exactly how duplicate signals get created. So the agent budgets
+# MAGIC # itself *below* the client: 90 s per turn, of which any single warehouse query may spend
+# MAGIC # at most 60 s, against the client's 120 s. A ContextVar rather than a module global
+# MAGIC # because a serving container may handle concurrent requests in one process.
+# MAGIC TURN_BUDGET_S = 90.0
+# MAGIC QUERY_BUDGET_S = 60.0
+# MAGIC _turn_deadline: ContextVar[float | None] = ContextVar("fleetguard_turn_deadline", default=None)
+# MAGIC
+# MAGIC
+# MAGIC def _remaining() -> float:
+# MAGIC     """Seconds left in this turn. Unbounded outside a turn, so the notebook smoke tests
+# MAGIC     and any direct call to a tool function behave exactly as they did before."""
+# MAGIC     end = _turn_deadline.get()
+# MAGIC     return float("inf") if end is None else end - time.monotonic()
+# MAGIC
+# MAGIC
 # MAGIC def _run_sql(statement: str, params: list) -> list:
 # MAGIC     """Run a warehouse query and REFUSE to return rows unless it actually succeeded.
 # MAGIC
@@ -145,16 +167,28 @@ print(f"model : {MODEL_NAME}\nllm   : {LLM_ENDPOINT}\nindex : {INDEX}")
 # MAGIC     So: poll to a terminal state, and raise on anything that is not SUCCEEDED. The tool
 # MAGIC     loop turns the exception into an error the model can see and report honestly.
 # MAGIC     """
+# MAGIC     budget = min(QUERY_BUDGET_S, _remaining())
+# MAGIC     if budget < 5:
+# MAGIC         # The API floor for `wait_timeout` is 5 s, and there is no point starting a
+# MAGIC         # statement the turn cannot wait for. Raising here surfaces to the model as a
+# MAGIC         # tool error it can report honestly, which is the same contract as a failed query.
+# MAGIC         raise TimeoutError(
+# MAGIC             f"not enough time left in this turn to run a warehouse query ({budget:.0f}s)"
+# MAGIC         )
+# MAGIC     deadline = time.monotonic() + budget
 # MAGIC     stmt = w.statement_execution.execute_statement(
 # MAGIC         warehouse_id=_cfg.get("warehouse_id"),
 # MAGIC         statement=statement,
 # MAGIC         parameters=params,
-# MAGIC         wait_timeout="50s",  # API maximum for the synchronous wait
+# MAGIC         # 50 s is the API maximum for the synchronous wait; never ask for more time than
+# MAGIC         # the turn has left.
+# MAGIC         wait_timeout=f"{int(min(50, budget))}s",
 # MAGIC     )
-# MAGIC     deadline = time.monotonic() + 120
 # MAGIC     while stmt.status and stmt.status.state in (StatementState.PENDING, StatementState.RUNNING):
 # MAGIC         if time.monotonic() > deadline:
-# MAGIC             raise TimeoutError(f"warehouse query still {stmt.status.state} after 170s")
+# MAGIC             raise TimeoutError(
+# MAGIC                 f"warehouse query still {stmt.status.state} after {budget:.0f}s"
+# MAGIC             )
 # MAGIC         time.sleep(2)
 # MAGIC         stmt = w.statement_execution.get_statement(stmt.statement_id)
 # MAGIC
@@ -165,9 +199,115 @@ print(f"model : {MODEL_NAME}\nllm   : {LLM_ENDPOINT}\nindex : {INDEX}")
 # MAGIC     return (stmt.result.data_array or []) if stmt.result else []
 # MAGIC
 # MAGIC
+# MAGIC # ONE SOURCE FOR THE PUBLISHED NUMBERS.
+# MAGIC #
+# MAGIC # The detection rate, the control rate and the median lead used to be typed into the
+# MAGIC # system prompt and into `lookup_emerging_signals`'s return value. Re-running the backtest
+# MAGIC # would have moved the evidence page and left the agent quoting the old figures, with
+# MAGIC # nothing to make the divergence visible — the agent would simply be confidently wrong
+# MAGIC # about this project's own headline result. So they are read from the table the evidence
+# MAGIC # page is itself derived from (`scripts/export_evidence.py` reads the same one) and the
+# MAGIC # REAL/PLACEBO prefix match is deliberately identical to that script's.
+# MAGIC #
+# MAGIC # Read lazily and cached for the process, NOT at import: import happens during
+# MAGIC # `log_model`'s input-example validation and on every serving cold start, and a sleeping
+# MAGIC # warehouse would add tens of seconds to both.
+# MAGIC #
+# MAGIC # On failure, cache the FAILURE too and fall back to a claim with no numbers in it. A
+# MAGIC # qualitative sentence is honest; a stale quantitative one is the exact failure this
+# MAGIC # whole change exists to prevent.
+# MAGIC _EVIDENCE_UNSET = object()
+# MAGIC _evidence_cache: Any = _EVIDENCE_UNSET
+# MAGIC
+# MAGIC
+# MAGIC def _evidence() -> dict | None:
+# MAGIC     global _evidence_cache
+# MAGIC     if _evidence_cache is not _EVIDENCE_UNSET:
+# MAGIC         return _evidence_cache
+# MAGIC     try:
+# MAGIC         rows = _run_sql(
+# MAGIC             f"""SELECT arm, detect_rate_pct, median_lead_days
+# MAGIC                 FROM {CATALOG}.{SCHEMA}.gold_lead_time_summary""",
+# MAGIC             [],
+# MAGIC         )
+# MAGIC         arms = {str(r[0]): r for r in rows}
+# MAGIC         real = next(v for k, v in arms.items() if k.startswith("REAL"))
+# MAGIC         placebo = next(v for k, v in arms.items() if k.startswith("PLACEBO"))
+# MAGIC         _evidence_cache = {
+# MAGIC             "detect_pct": float(real[1]),
+# MAGIC             "control_pct": float(placebo[1]),
+# MAGIC             "lead_days": float(real[2]),
+# MAGIC         }
+# MAGIC     except Exception as exc:  # warehouse asleep, table renamed, arms missing
+# MAGIC         print(f"evidence metrics unavailable ({type(exc).__name__}: {exc}) — "
+# MAGIC               "falling back to a claim with no numbers in it")
+# MAGIC         _evidence_cache = None
+# MAGIC     return _evidence_cache
+# MAGIC
+# MAGIC
+# MAGIC def _evidence_sentence() -> str:
+# MAGIC     ev = _evidence()
+# MAGIC     if ev is None:
+# MAGIC         return (
+# MAGIC             "When the detector does fire it gives a real head start on NHTSA, but it "
+# MAGIC             "misses most investigations entirely; the measured figures are on the "
+# MAGIC             "evidence page and you should not quote numbers for them here."
+# MAGIC         )
+# MAGIC     return (
+# MAGIC         f"When the detector does fire, it fires a median {ev['lead_days']:.0f} days "
+# MAGIC         f"before NHTSA opens the case — a real head start — but it only fires on "
+# MAGIC         f"{ev['detect_pct']:.1f}% of investigations, against {ev['control_pct']:.1f}% "
+# MAGIC         f"on a matched control."
+# MAGIC     )
+# MAGIC
+# MAGIC
+# MAGIC def _system_prompt() -> str:
+# MAGIC     return SYSTEM_PROMPT_TEMPLATE.format(evidence_sentence=_evidence_sentence())
+# MAGIC
+# MAGIC
+# MAGIC # TRUNCATE FIELDS, NEVER THE SERIALISED OBJECT.
+# MAGIC #
+# MAGIC # This used to be `json.dumps(result)[:6000]`, which cuts mid-token and hands the model a
+# MAGIC # JSON document with its closing braces missing. The model then has to guess at a
+# MAGIC # malformed tool result — and the one thing this agent must not do is guess about tool
+# MAGIC # output. Shortening the longest list instead keeps the document well-formed and says
+# MAGIC # explicitly what was dropped, so "there were 84 and you are seeing 10" is legible rather
+# MAGIC # than indistinguishable from "there were 10".
+# MAGIC MAX_TOOL_CHARS = 6000
+# MAGIC
+# MAGIC
+# MAGIC def _encode_tool_result(result: Any) -> str:
+# MAGIC     out = json.dumps(result, default=str)
+# MAGIC     if len(out) <= MAX_TOOL_CHARS or not isinstance(result, dict):
+# MAGIC         return out[:MAX_TOOL_CHARS]
+# MAGIC     trimmed = dict(result)
+# MAGIC     # Shorten list fields longest-first, halving each pass, until it fits. Lists are what
+# MAGIC     # actually grow here (complaint hits, signal rows); scalars are bounded by construction.
+# MAGIC     for _ in range(12):
+# MAGIC         lists = [(k, v) for k, v in trimmed.items() if isinstance(v, list) and len(v) > 1]
+# MAGIC         if not lists:
+# MAGIC             break
+# MAGIC         k, v = max(lists, key=lambda kv: len(kv[1]))
+# MAGIC         trimmed[k] = v[: max(1, len(v) // 2)]
+# MAGIC         trimmed["truncated"] = True
+# MAGIC         trimmed["total_available"] = {
+# MAGIC             kk: len(vv) for kk, vv in result.items() if isinstance(vv, list)
+# MAGIC         }
+# MAGIC         out = json.dumps(trimmed, default=str)
+# MAGIC         if len(out) <= MAX_TOOL_CHARS:
+# MAGIC             return out
+# MAGIC     # Backstop only. Reaching it means a single scalar field is itself oversized, which
+# MAGIC     # nothing in the current tool set produces.
+# MAGIC     return out[:MAX_TOOL_CHARS]
+# MAGIC
+# MAGIC
 # MAGIC @mlflow.trace(span_type=SpanType.RETRIEVER)
 # MAGIC def search_complaints(query: str, limit: int = 5) -> list[dict]:
 # MAGIC     """Hybrid search over 1.75M complaint-narrative chunks."""
+# MAGIC     # Clamped like `lookup_emerging_signals`, and tighter. Each hit carries a narrative
+# MAGIC     # chunk, so an unclamped `limit` is simultaneously a latency cost, a token cost and a
+# MAGIC     # load the index endpoint has to absorb — all chosen by model output.
+# MAGIC     limit = max(1, min(int(limit), 10))
 # MAGIC     r = w.vector_search_indexes.query_index(
 # MAGIC         index_name=INDEX,
 # MAGIC         columns=["chunk_id", "complaint_id", "make", "model", "component", "any_harm", "chunk_text"],
@@ -175,8 +315,18 @@ print(f"model : {MODEL_NAME}\nllm   : {LLM_ENDPOINT}\nindex : {INDEX}")
 # MAGIC         query_type="HYBRID",
 # MAGIC         num_results=limit,
 # MAGIC     )
-# MAGIC     rows = (r.result.data_array or []) if r.result else []
-# MAGIC     cols = [c.name for c in r.manifest.columns] if r.manifest else []
+# MAGIC     # "The retrieval system failed" and "no complaints match" are different claims, and
+# MAGIC     # collapsing them into `[]` is I-050's mistake in the retrieval path: the model would
+# MAGIC     # report a broken index as an all-clear. A real zero-hit query still returns a
+# MAGIC     # `result` (with no rows) — an ABSENT `result` is an unexpected response, so raise and
+# MAGIC     # let the tool loop surface it as an error the model must report honestly.
+# MAGIC     if r.result is None or r.manifest is None:
+# MAGIC         raise RuntimeError(
+# MAGIC             "RETRIEVAL_ERROR: vector search returned no result object — the index may be "
+# MAGIC             "deleted or not ready. This is NOT 'no complaints found'."
+# MAGIC         )
+# MAGIC     rows = r.result.data_array or []
+# MAGIC     cols = [c.name for c in r.manifest.columns]
 # MAGIC     out = [dict(zip(cols, row)) for row in rows]
 # MAGIC     # Multi-component complaints yield sibling chunks (I-023); dedupe by complaint.
 # MAGIC     seen, deduped = set(), []
@@ -346,8 +496,8 @@ print(f"model : {MODEL_NAME}\nllm   : {LLM_ENDPOINT}\nindex : {INDEX}")
 # MAGIC             for r in rows
 # MAGIC         ],
 # MAGIC         "what_this_is": "Statistical anomalies detected by FleetGuard. NOT recalls, NOT "
-# MAGIC                         "NHTSA investigations, NOT confirmed defects. Detection rate is "
-# MAGIC                         "16.0% vs 11.1% on a matched control.",
+# MAGIC                         "NHTSA investigations, NOT confirmed defects. "
+# MAGIC                         + _evidence_sentence(),
 # MAGIC         "harm_share_note": "Descriptive only. Not an input to detection, not a confidence.",
 # MAGIC     }
 # MAGIC
@@ -610,7 +760,7 @@ print(f"model : {MODEL_NAME}\nllm   : {LLM_ENDPOINT}\nindex : {INDEX}")
 # MAGIC         one: the envelope only exists if the tool function actually ran.
 # MAGIC         """
 # MAGIC         client = self._client()
-# MAGIC         convo = [{"role": "system", "content": SYSTEM_PROMPT}, *messages]
+# MAGIC         convo = [{"role": "system", "content": _system_prompt()}, *messages]
 # MAGIC         emitted: list[dict] = []
 # MAGIC         actions: list[dict] = []
 # MAGIC
@@ -639,9 +789,55 @@ print(f"model : {MODEL_NAME}\nllm   : {LLM_ENDPOINT}\nindex : {INDEX}")
 # MAGIC                     {
 # MAGIC                         "role": "tool",
 # MAGIC                         "tool_call_id": call.id,
-# MAGIC                         "content": json.dumps(result, default=str)[:6000],
+# MAGIC                         "content": _encode_tool_result(result),
 # MAGIC                     }
 # MAGIC                 )
+# MAGIC
+# MAGIC             # A WRITE REQUEST ENDS THE TOOL PHASE. THIS TURN IS NOW TERMINAL.
+# MAGIC             #
+# MAGIC             # Without this the model could request `open_defect_signal`, keep calling
+# MAGIC             # tools, reason its way to a different conclusion, and finish — while
+# MAGIC             # `routers/chat.py` still executed the envelope from the abandoned line of
+# MAGIC             # reasoning. I-109 fixed the same class of bug at the *exhaustion* boundary;
+# MAGIC             # this is the other end of it. An action envelope is a request until the turn
+# MAGIC             # concludes, and the turn has to conclude close enough to the request that the
+# MAGIC             # two cannot disagree.
+# MAGIC             #
+# MAGIC             # Note where this sits: AFTER the inner loop, not inside it. Every tool call
+# MAGIC             # in the batch was requested in one model turn, and the completions API
+# MAGIC             # rejects the next message if any `tool_call_id` went unanswered — so the
+# MAGIC             # batch is always finished, and only the NEXT round is cut off.
+# MAGIC             if actions:
+# MAGIC                 if len(actions) > 1:
+# MAGIC                     # Never reached by the current prompt or tool set. If it ever is, the
+# MAGIC                     # safe reading is that the turn is confused, not that the operator
+# MAGIC                     # wanted a batch of writes — so take the same direction as the
+# MAGIC                     # exhaustion path and write nothing. `routers/chat.py` refuses this
+# MAGIC                     # shape too; both ends fail closed rather than trusting the other.
+# MAGIC                     print(f"discarding {len(actions)} action envelopes from one turn")
+# MAGIC                     emitted.append(
+# MAGIC                         {
+# MAGIC                             "role": "assistant",
+# MAGIC                             "content": (
+# MAGIC                                 "I tried to request more than one action in a single turn, "
+# MAGIC                                 "which is not allowed. Nothing was recorded — please ask "
+# MAGIC                                 "for one action at a time."
+# MAGIC                             ),
+# MAGIC                         }
+# MAGIC                     )
+# MAGIC                     return emitted, []
+# MAGIC
+# MAGIC                 # One final call with `tools` OMITTED, so the model can only write prose.
+# MAGIC                 # It still gets to explain what it asked for and why, which is the part
+# MAGIC                 # the operator reads — it just cannot reach for another tool first.
+# MAGIC                 final = client.chat.completions.create(model=LLM_ENDPOINT, messages=convo)
+# MAGIC                 emitted.append(
+# MAGIC                     {
+# MAGIC                         "role": "assistant",
+# MAGIC                         "content": final.choices[0].message.content or "",
+# MAGIC                     }
+# MAGIC                 )
+# MAGIC                 return emitted, actions
 # MAGIC
 # MAGIC         # LOOP EXHAUSTED — RETURN NO ACTIONS.
 # MAGIC         #
@@ -680,7 +876,13 @@ print(f"model : {MODEL_NAME}\nllm   : {LLM_ENDPOINT}\nindex : {INDEX}")
 # MAGIC             {k: v for k, v in m.model_dump(exclude_none=True).items() if k in ALLOWED_KEYS}
 # MAGIC             for m in request.input
 # MAGIC         ]
-# MAGIC         out, actions = self._run(msgs)
+# MAGIC         # Start this turn's clock. Reset in `finally` so a ContextVar left over from a
+# MAGIC         # previous request can never shorten the next one.
+# MAGIC         token = _turn_deadline.set(time.monotonic() + TURN_BUDGET_S)
+# MAGIC         try:
+# MAGIC             out, actions = self._run(msgs)
+# MAGIC         finally:
+# MAGIC             _turn_deadline.reset(token)
 # MAGIC         items = [
 # MAGIC             self.create_text_output_item(text=m["content"], id=str(i))
 # MAGIC             for i, m in enumerate(out)

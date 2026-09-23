@@ -565,3 +565,167 @@ def test_model_supplied_complaint_count_is_not_written_to_the_signal(monkeypatch
     assert 4242 not in cur.params_for(INSERT_SIGNAL).values()
     # Still preserved as provenance: what the model claimed, on the action record.
     assert "4242" in str(cur.params_for(INSERT_AGENT_ACTION).values())
+
+
+class TestFleetValidation:
+    """A make the fleet does not operate is a signal about nothing (I-110 #7).
+
+    The prompt tells the agent to call `lookup_fleet_models` first and it generally does —
+    but a prompt is not an enforcement mechanism, and the row this would write carries an
+    attacker- or hallucination-chosen make into the operator's Emerging tab.
+    """
+
+    def test_unknown_make_is_refused(self, monkeypatch):
+        cur = _cursor(exact=0, variant=0, make=0)
+        install(monkeypatch, agent_actions, cur)
+
+        envelope = json.loads(json.dumps(VALID))
+        envelope["params"]["make"] = "NONEXISTENT"
+        with pytest.raises(HTTPException) as exc:
+            execute(USER, envelope)
+
+        assert exc.value.status_code == 422
+        assert "lookup_fleet_models" in exc.value.detail
+        assert all(INSERT_SIGNAL not in sql for sql, _ in cur.executed), (
+            "nothing may be written for a make this fleet does not operate"
+        )
+
+    def test_known_make_with_unknown_model_is_still_written(self, monkeypatch):
+        """`match_basis='NONE'` is a legitimate, informative state — the fleet runs this
+        make, and this particular model is not one of them. Only the make is validated."""
+        cur = _cursor(exact=0, variant=0, make=4200)
+        install(monkeypatch, agent_actions, cur)
+
+        result = execute(USER, VALID)
+
+        assert result.match_basis == "NONE"
+        assert result.fleet_vehicles == 0
+
+    def test_a_signal_with_no_make_is_unaffected(self, monkeypatch):
+        """"Brake complaints, make not yet established" is a real observation. The fleet
+        lookup does not even run without a make, so there is nothing to validate."""
+        cur = _cursor()
+        install(monkeypatch, agent_actions, cur)
+
+        envelope = json.loads(json.dumps(VALID))
+        envelope["params"].pop("make")
+        envelope["params"].pop("model")
+        result = execute(USER, envelope)
+
+        assert result.match_basis == "NONE"
+        assert cur.sql_for(INSERT_SIGNAL)
+
+
+class TestIdempotency:
+    """A retried write must not become a second finding (I-110 #6).
+
+    `ux_fg_defect_signal_agent_active` is what actually serialises two concurrent requests
+    (src/lakebase/26_add_defect_signal_idempotency.py); this is the error message.
+    """
+
+    def test_duplicate_open_signal_returns_409(self, monkeypatch):
+        cur = FakeCursor(
+            {VEHICLE_COUNT_Q: [_counts()]},
+            raise_on=(INSERT_SIGNAL, UniqueViolation("duplicate key")),
+        )
+        install(monkeypatch, agent_actions, cur)
+
+        with pytest.raises(HTTPException) as exc:
+            execute(USER, VALID)
+
+        assert exc.value.status_code == 409
+        assert "already has an open" in exc.value.detail
+
+
+class TestAttemptAudit:
+    """`fleetguard_agent_action` records ATTEMPTS, not only commits (I-110 #8).
+
+    A refused or failed write used to roll back together with its audit row, so the table
+    read like a record of what the agent did while holding only what it succeeded at.
+    """
+
+    def _attempt_rows(self, cur) -> list[tuple[str, dict]]:
+        return [(sql, p) for sql, p in cur.executed if INSERT_AGENT_ACTION in sql]
+
+    def test_a_rejected_action_is_recorded(self, monkeypatch):
+        cur = _cursor(exact=0, variant=0, make=0)
+        install(monkeypatch, agent_actions, cur)
+
+        envelope = json.loads(json.dumps(VALID))
+        envelope["params"]["make"] = "NONEXISTENT"
+        with pytest.raises(HTTPException):
+            execute(USER, envelope)
+
+        rows = self._attempt_rows(cur)
+        assert len(rows) == 1, "a refusal must leave exactly one attempt row"
+        outcome = json.loads(rows[0][1]["outp"])
+        assert outcome["outcome"] == "REJECTED"
+        assert "NONEXISTENT" in outcome["reason"]
+        assert rows[0][1]["actor"] == USER.user_name
+
+    def test_an_unexpected_failure_is_recorded_as_failed(self, monkeypatch):
+        cur = FakeCursor(
+            {VEHICLE_COUNT_Q: [_counts()]},
+            raise_on=(INSERT_SIGNAL, RuntimeError("connection reset")),
+        )
+        install(monkeypatch, agent_actions, cur)
+
+        with pytest.raises(RuntimeError):
+            execute(USER, VALID)
+
+        rows = self._attempt_rows(cur)
+        assert len(rows) == 1
+        outcome = json.loads(rows[0][1]["outp"])
+        assert outcome["outcome"] == "FAILED"
+        assert "RuntimeError" in outcome["reason"]
+
+    def test_a_successful_action_records_the_real_row_not_an_attempt(self, monkeypatch):
+        """The committed path is unchanged: one agent-action row, carrying the outcome of
+        the write rather than an `outcome` field."""
+        cur = _cursor()
+        install(monkeypatch, agent_actions, cur)
+
+        execute(USER, VALID)
+
+        rows = self._attempt_rows(cur)
+        assert len(rows) == 1
+        assert "outcome" not in json.loads(rows[0][1]["outp"])
+
+    def test_an_unidentified_caller_leaves_no_attempt_row(self, monkeypatch):
+        """An unattributable row is the thing this project refuses to write anywhere —
+        and `actor_principal` is NOT NULL. The 403 is itself that refusal."""
+        cur = _cursor()
+        install(monkeypatch, agent_actions, cur)
+
+        with pytest.raises(HTTPException) as exc:
+            execute(ANON, VALID)
+
+        assert exc.value.status_code == 403
+        assert self._attempt_rows(cur) == []
+
+    def test_a_failing_attempt_log_does_not_mask_the_real_error(self, monkeypatch):
+        """Losing the record of a refusal is bad; replacing the caller's real 403 with a
+        database error from the logging path is worse."""
+        cur = _cursor(exact=0, variant=0, make=0)
+        install(monkeypatch, agent_actions, cur)
+
+        # Fail the attempt log's own connection — patching `_record_attempt` itself would
+        # bypass the try/except inside it, which is the thing under test.
+        calls = {"n": 0}
+
+        real_connect = agent_actions.connect
+
+        def flaky(*a, **k):
+            calls["n"] += 1
+            if calls["n"] > 1:  # the first connect is the write; the second is the log
+                raise OSError("attempt log connection refused")
+            return real_connect(*a, **k)
+
+        monkeypatch.setattr(agent_actions, "connect", flaky)
+
+        envelope = json.loads(json.dumps(VALID))
+        envelope["params"]["make"] = "NONEXISTENT"
+        with pytest.raises(HTTPException) as exc:
+            execute(USER, envelope)
+
+        assert exc.value.status_code == 422

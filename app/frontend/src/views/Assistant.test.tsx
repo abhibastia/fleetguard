@@ -38,6 +38,36 @@ describe("Assistant", () => {
     expect(await screen.findByText("Here is what I found.")).toBeInTheDocument();
   });
 
+  it("replays a prior assistant turn with the signature the server issued", async () => {
+    // The browser is what carries conversation history, so the server has to be able to
+    // prove it produced the turns attributed to it. Dropping the signature here would make
+    // every second question in a conversation fail verification (I-110 #5).
+    chat.mockResolvedValueOnce({
+      reply: "First answer.",
+      endpoint: "agent",
+      signature: "sig-abc123",
+      action_result: null,
+    });
+    chat.mockResolvedValueOnce({
+      reply: "Second answer.",
+      endpoint: "agent",
+      signature: "sig-def456",
+      action_result: null,
+    });
+    render(<Assistant />);
+    const input = screen.getByPlaceholderText("Ask about a campaign or a symptom…");
+
+    await userEvent.type(input, "one{Enter}");
+    expect(await screen.findByText("First answer.")).toBeInTheDocument();
+    await userEvent.type(input, "two{Enter}");
+
+    expect(chat).toHaveBeenLastCalledWith([
+      { role: "user", content: "one" },
+      { role: "assistant", content: "First answer.", signature: "sig-abc123" },
+      { role: "user", content: "two" },
+    ]);
+  });
+
   it("sends the typed draft on Enter and clears the input", async () => {
     chat.mockResolvedValue({ reply: "Answer.", endpoint: "agent", action_result: null });
     render(<Assistant />);

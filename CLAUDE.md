@@ -549,5 +549,5 @@ claim you then have to keep true; rejected experiments belong in `src/` and `doc
   both themes). They were committed once and that was reversed: images go stale the moment the
   UI changes, and a stale screenshot still looks like evidence. **Generate them last**, after
   the App redeploy, so they match the code being submitted. An empty `docs/screenshots/` on a
-  cold start is the expected state. Full sequence in `docs/STATUS.md` → *Picking this up cold*;
+  cold start is the expected state. Full sequence in `docs/STATUS.md` → *ACTION PLAN* (step 1.8);
   what each screenshot is evidence *for* is in `docs/EVIDENCE.md`.

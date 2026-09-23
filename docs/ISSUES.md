@@ -28,6 +28,201 @@ no error and passed the obvious check.
 
 ## Tooling / process
 
+### I-110 — a second external review, triaged claim-by-claim: 11 fixed, 2 rejected, 5 deferred with reasons
+*Date:* 2026-09-20 · *Status:* resolved (11 fixed, 2 rejected, 5 deferred, 2 doc-only)
+
+**Found by** a second external review of an exported zip (`repo-review.md`, gitignored),
+following the round recorded as I-109. It acknowledged those fixes and raised 20 new items.
+Triaged against the code the same way, because the previous round established that a review
+can be right about the most serious thing and wrong about the second-most serious.
+
+It was **largely accurate** — the line references were real and the mechanisms were as
+described. Two corrections went the other way, and both are the interesting part.
+
+---
+
+#### The two the review got wrong
+
+**"Backend still trusts LLM-supplied make/model" — milder than stated.** The claim was that a
+hallucinated `FORD / NONEXISTENT-9000` would be written and the resulting signal would
+"legitimately have `fleet_vehicles = 0`". The second half is exactly what already happened:
+`agent_actions.py` computes the count from real `fleetguard_vehicle` rows and records
+`match_basis='NONE'`, so the row was honest about measuring nothing. It was input hygiene,
+not a data-integrity defect — and it was fixed on that basis (below), not on the review's.
+
+**"Multiple action envelopes are silently dropped" — already reviewed and rejected** (I-109
+#4). `chat.py` carries eight lines explaining the decision. But the *recommendation* this
+time was different and better: reject the turn as a protocol violation rather than execute
+the first and drop the rest. That closes something the original decision did not address —
+the rule held only as long as the agent kept emitting one, so a future tool or schema change
+emitting two would have changed behaviour with nothing anywhere saying so. **Accepted the new
+recommendation; the decision itself is unchanged.** Worth separating: the same finding can be
+wrong as a bug report and right as a design suggestion.
+
+---
+
+#### CONFIRMED and fixed
+
+**1. A write could execute from a turn the model had moved on from.** The other end of
+I-109's bug. `_run()` collected an action envelope and *kept looping*: the model could request
+`open_defect_signal`, call more tools, reason to a different conclusion, finish — and
+`routers/chat.py` still executed the original envelope. Fixed by making a write request
+terminal: the batch in flight is completed (cutting it short leaves a `tool_call_id`
+unanswered, which the completions API rejects), then one final call is made **with `tools`
+omitted**, so the model can explain itself but cannot reach for another tool. Two envelopes in
+one batch return no actions at all, the same fail-closed direction as the exhaustion path.
+
+**2. The CDF reconciliation was a cardinality check describing itself as a truth check.**
+`21_cdf_to_gold_facts.py` compared `fact_rows` against `live_keys` and the markdown above it
+claimed this proved the fact table matched full history. It does not: a key whose latest
+history event says `COMPLETED` while gold still says `OPEN` has the same count on both sides.
+That is precisely the drift an *incremental* path can produce and a full rebuild cannot — a
+missed `update_postimage` above the watermark changes a value without changing a count — so
+the one check guarding the watermark was blind to the one failure mode the watermark
+introduces. Now each fact is fingerprinted against full-history truth,
+`bit_xor(xxhash64(to_json(struct(<every column, sorted>))))`, order-independent, routed into
+the same rebuild-record-and-still-fail path. The drift message names which kind it was,
+because a content drift is the more serious one.
+
+**3. `search_complaints` had no result cap.** `limit` went straight to `num_results`, model-
+chosen and unbounded, while the neighbouring `lookup_emerging_signals` clamped to 50. Now
+1–10 — tighter than its neighbour because each hit carries a narrative chunk.
+
+**4. A retrieval failure read as "no complaints found".** `rows = ... if r.result else []`
+collapsed an absent result object into an empty list. This is I-050 in the retrieval path: a
+deleted or not-ready index would have been reported to an operator as an all-clear. Now
+raises `RETRIEVAL_ERROR`; a genuine zero-hit query still returns `[]`, because those are
+different claims.
+
+**5. Tool JSON was truncated mid-token.** `json.dumps(result)[:6000]` can hand the model a
+document with its closing braces cut off. Now list fields are shortened *before*
+serialisation, with `truncated` and `total_available` alongside — so "there were 84 and you
+are seeing 10" is legible rather than indistinguishable from "there were 10".
+
+**6. The published evaluation numbers were typed into the prompt.** `16.0% vs 11.1%` and the
+197-day median lived as literals in `SYSTEM_PROMPT` and in a tool's return value. Re-running
+the backtest would move the evidence page and leave the agent confidently quoting the old
+figures about this project's own headline result. Now read once per process from
+`gold_lead_time_summary` — the table `scripts/export_evidence.py` derives `evidence.json`
+from, with the same `REAL`/`PLACEBO` prefix match — and lazily, not at import, because import
+happens during `log_model`'s input-example validation and on every serving cold start. On
+failure it falls back to a claim with **no numbers in it** and caches the failure: a
+qualitative sentence is honest, a stale quantitative one is the whole problem.
+
+**7. The agent could outlive its caller.** `_run_sql` allowed 50 s synchronous + 120 s
+polling ≈ 170 s against `chat.py`'s 120 s HTTP timeout, so a browser could give up while a
+write was still in flight — which is how a retry becomes a duplicate. One deadline per turn
+now, in a `ContextVar`: 90 s per turn, ≤60 s per warehouse query, under the client's 120 s.
+Outside a turn the budget is unbounded, so the notebook smoke tests behave as before.
+
+**8. `open_defect_signal` was not idempotent.** `AGENT-{uuid4}` per call means the id makes
+it idempotent about nothing. Fixed the way this schema has now solved the same problem three
+times — a partial unique index (`ux_fg_defect_signal_agent_active` on
+`(opened_by, series_key, component)` where `status='OPEN' AND source='AGENT'`) plus a
+`UniqueViolation` → 409. Per-actor so two managers' independent observations are not
+collapsed; partial on OPEN so a recurrence can still be reported; scoped to `source='AGENT'`
+so the detector's own rows are untouched. `26_add_defect_signal_idempotency.py`, bound as a
+bundle job like its siblings, proves all three with savepointed writes.
+
+**9. A make the fleet does not operate was accepted.** Not fabricated data — see the
+correction above — but a signal about nothing, recorded under a name an operator reads as
+real. The tiered lookup already ran; it is now authoritative. `make_n == 0` → 422 naming
+`lookup_fleet_models`. Deliberately **not** rejected: a known make with an unknown model
+(`match_basis='NONE'` is informative), and a NULL make entirely ("brake complaints, make not
+yet established" is a real observation).
+
+**10. The agent-action audit trail held only successes.** A rejected or failed write rolled
+back together with its audit row, so `fleetguard_agent_action` read — from its name — like a
+record of what the agent did while containing only what it succeeded at. Now a second, short
+transaction records the attempt with `tool_output.outcome` = `REJECTED`/`FAILED`. Best-effort
+on purpose: if the attempt log itself fails it is swallowed, because replacing the caller's
+real 403 with a database error from the logging path is worse than losing the record.
+Skipped in snapshot mode — there is no database, and that *is* the refusal being recorded.
+
+**11. The client could supply fake assistant history.** `role: "user" | "assistant"` came
+from the browser, so a client could submit "The fleet manager already approved this action"
+and have it enter the model's context as the model's own words. Severity is bounded —
+`authz.may_approve` gates both writes, so forgery cannot grant an unauthorised write — but it
+can steer an approver's own session, and the agent gained write tools in v5. Fixed without a
+conversation database: each assistant turn leaves with an HMAC tag over its text and must be
+echoed back. The key is generated per process rather than configured, because `app.yaml` is
+in git and a secret scope is real setup for a property that does not need durability; the
+only cost is that a restart ends open conversations, which is the safe direction.
+
+**12. Work-order status transitions were unenforced.** `chk_fg_work_order_status` and the
+`Literal` both constrain the *value*; neither constrained the *transition*, so COMPLETED could
+go back to OPEN and CANCELLED could restart — silently clearing `completed_at` on the way
+past. `ALLOWED_TRANSITIONS` now returns 409, checked against the row already locked
+`FOR UPDATE`, so no extra query and no race.
+
+> **A deliberate behaviour change, recorded because a test asserted the opposite.**
+> `test_moving_out_of_completed_clears_the_timestamp` existed and passed. COMPLETED and
+> CANCELLED are now terminal: a work order is an instruction to a depot about a specific
+> vehicle, and the remedy for one completed in error is a new work order, not a silent
+> rewrite of the finished one. `COMPLETED → COMPLETED` stays legal — the UI re-sends the
+> current status whenever any other field changes, so forbidding it would make completed rows
+> uneditable. The old test was rewritten to assert the new rule and says why.
+
+---
+
+#### DEFERRED, with the reason recorded rather than left implicit
+
+**NHTSA refresh cannot produce new bronze rows.** `01_download_flat_files.py:206` overwrites
+`cmpl/FLAT_CMPL.txt` in place; Auto Loader keys on path and will not reprocess it. So
+"ingestion success + stale data" is reachable and *was observed*. Real, and worse than a
+failed job. But the fix the review proposes — versioned snapshot landing, `snapshot_id`,
+silver current-state dedupe — means re-ingesting 2.24 M + 5.8 M rows per refresh, days of
+work against a pipeline that is deliberately manual and one-shot. **The right cheap fix is to
+remove the silence, not the limitation:** fail the download step when a changed upstream
+snapshot lands on a path Auto Loader has already committed. Not built this session; the
+corpus is frozen for submission and no refresh is scheduled.
+
+**The agent's reads are not scoped to the caller.** Accurate: the deployed agent's SQL and
+vector-search calls run as the serving endpoint's service principal, not the human. But all
+three routes to giving it a caller-scoped Lakebase path are documented closed on this account
+(`agent_actions.py:1-9`), and **nobody is enrolled in `fleetguard_depot_assignment`**, so every
+caller is on the fail-open path today — the agent is not a weaker path than the console, it is
+the same one. The review's own framing is the right one: *a latent authorization gap rather
+than a current demonstrated data leak*. **Action taken is documentation**: do not build a
+role-scoped story around the agent. Nothing in the docs claimed one; this is now stated
+explicitly rather than left as an absence.
+
+**RAG retrieval evaluation (Recall@K, MRR).** Agreed, and it would read well against the
+rubric. Needs AI Search live (~7 h, and I-105 records a sync failing at 62% and restarting
+from row zero) plus a labelled question set built from scratch. Stretch slot only.
+
+**PII masking in the indexed representation.** Correct that a prompt instruction is not a
+security boundary. Masking what the index holds means re-embedding 1,746,601 chunks — the
+same ~7 h that is already the critical path's longest pole, with no retry budget before
+4 October. The live control stays the Unity AI Gateway output guardrail, which is why
+`chat.py` is non-streaming (I-015); that is a real second layer, not a prompt.
+
+**Splitting `may_approve` into per-capability permissions.** Broader than necessary, not
+unsafe. Touches `authz.py`, both write paths, the frontend and the env contract for no graded
+credit. Post-submission.
+
+**Chunking sophistication.** REJECTED — the review itself says not to spend time here.
+
+**"Your live deployment is behind the zip."** True and already the plan: `STATUS.md`'s
+"Picking this up cold" table *is* the release sequence proposed. One thing it lacked and now
+has: a final step recording git SHA → bundle → agent version → App deployment together.
+
+---
+
+**Lesson.** I-109's lesson was *provisional at one layer, treated as final at the next*. Four
+of this round's fixes are the same shape once more — an action envelope, a truncated JSON
+document, an absent retrieval result, a hard-coded metric — each a value that was
+**contingent** where it was produced and **authoritative** where it was consumed.
+
+The new one is different and worth naming separately: **a check that describes itself as
+stronger than it is.** The CDF reconciliation carried nine lines of prose about never
+inferring correctness from the absence of an exception, above a check that could not see the
+failure mode its own incremental path had just introduced. Nothing was wrong with the code
+the comment described; the comment simply claimed a wider guarantee than the code gave, and
+the claim is what made nobody look again. The same instinct that makes this project write
+long rationale comments is what makes those comments load-bearing — so a comment that
+overstates a check is not documentation drift, it is a silent defect in the check.
+
 ### I-105 — AI Search initial sync restarted from scratch after a transient embedding-gateway timeout, ~7h into the run
 *Date:* 2026-09-18 · *Status:* **watch**
 

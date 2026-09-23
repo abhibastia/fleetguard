@@ -207,10 +207,52 @@ for fact, (history, key) in FACTS.items():
 # MAGIC absence of an exception. For a change stream the checkable invariant is
 # MAGIC **distinct keys = live keys + deleted keys**, with no key on both sides. If that holds,
 # MAGIC the split is right; if it does not, the ranking is wrong and the fact table is a guess.
+# MAGIC
+# MAGIC ### Counting rows is not checking them
+# MAGIC
+# MAGIC That invariant, and the `fact_rows == live_keys` check below it, are both **cardinality**
+# MAGIC tests — and this cell used to describe them as though they proved the fact table matched
+# MAGIC the history. They do not. Consider:
+# MAGIC
+# MAGIC ```
+# MAGIC history: signal X -> OPEN, then signal X -> COMPLETED
+# MAGIC gold:    signal X -> OPEN
+# MAGIC ```
+# MAGIC
+# MAGIC One key, one row, on both sides. Every count agrees. The fact table is wrong.
+# MAGIC
+# MAGIC This is exactly the drift an incremental path can produce and a full rebuild cannot —
+# MAGIC a missed `update_postimage` above the watermark changes a value without changing a
+# MAGIC count — so the one check guarding the watermark has to compare **content**, not just how
+# MAGIC much of it there is. Below, each fact is fingerprinted against the full-history truth:
+# MAGIC every column, hashed per row, combined with `bit_xor` so the comparison does not depend
+# MAGIC on row order. Same rule as the counts — on a mismatch, rebuild, record, and still fail.
 
 # COMMAND ----------
 
-drift: dict[str, tuple[int, int]] = {}
+drift: dict[str, str] = {}
+
+
+def fingerprints(fact: str, history: str, key: str) -> tuple[int | None, int | None]:
+    """(truth, fact) content fingerprints — order-independent, over every column.
+
+    `bit_xor` rather than a sum: it cannot overflow, and it does not depend on the order
+    rows come back in. Columns are listed **explicitly and sorted**, not `struct(*)`, so
+    the two sides cannot disagree merely because a MERGE left the fact table's column
+    order different from the history's.
+
+    Returns `(None, None)` for an empty pair — `bit_xor` over no rows is NULL, and two
+    empty tables genuinely do agree.
+    """
+    cols = ", ".join(f"`{c}`" for c in sorted(spark.table(fact).columns))
+    spark.sql(latest_per_key(history, key)).createOrReplaceTempView("_truth")
+    row = spark.sql(f"""
+        SELECT
+          (SELECT bit_xor(xxhash64(to_json(struct({cols})))) FROM _truth)  AS truth_fp,
+          (SELECT bit_xor(xxhash64(to_json(struct({cols})))) FROM {fact})  AS fact_fp
+    """).collect()[0]
+    return row.truth_fp, row.fact_fp
+
 
 for fact, (history, key) in FACTS.items():
     r = spark.sql(f"""
@@ -244,19 +286,33 @@ for fact, (history, key) in FACTS.items():
     # fail. Repairing silently would make an incremental path that quietly drifts look
     # identical to one that works — which is precisely the failure mode this whole notebook
     # was written in response to (I-080).
+    truth_fp, fact_fp = fingerprints(fact, history, key)
+    print(f"    fingerprint truth={truth_fp} fact={fact_fp}")
+
+    reasons = []
     if r.fact_rows != r.live_keys:
-        drift[fact] = (r.fact_rows, r.live_keys)
-        print(
-            f"    DRIFT — incremental left {r.fact_rows} rows but {r.live_keys} keys are "
-            f"live. Rebuilding {fact} from full history."
-        )
+        reasons.append(f"cardinality ({r.fact_rows} rows for {r.live_keys} live keys)")
+    if truth_fp != fact_fp:
+        # The case counts cannot see: right number of rows, wrong values in them.
+        reasons.append(f"content (fingerprint {fact_fp} != {truth_fp})")
+
+    if reasons:
+        drift[fact] = " and ".join(reasons)
+        print(f"    DRIFT — {drift[fact]}. Rebuilding {fact} from full history.")
         spark.sql(f"CREATE OR REPLACE TABLE {fact} AS {latest_per_key(history, key)}")
         rebuilt = spark.table(fact).count()
         assert rebuilt == r.live_keys, (
             f"{fact}: even a full rebuild wrote {rebuilt} rows for {r.live_keys} live keys "
             "— the ranking itself is wrong, not the watermark"
         )
-        print(f"    rebuilt to {rebuilt} rows")
+        # Re-fingerprint after the rebuild. If THIS disagrees the derivation itself is
+        # broken, not the watermark, and there is nothing left to fall back on.
+        rebuilt_truth_fp, rebuilt_fact_fp = fingerprints(fact, history, key)
+        assert rebuilt_truth_fp == rebuilt_fact_fp, (
+            f"{fact}: a full rebuild still does not match the history it was built from "
+            f"({rebuilt_fact_fp} != {rebuilt_truth_fp}) — `latest_per_key` is wrong"
+        )
+        print(f"    rebuilt to {rebuilt} rows, fingerprint {rebuilt_fact_fp}")
         fact_rows = rebuilt
     else:
         fact_rows = r.fact_rows
@@ -283,11 +339,13 @@ for fact, (history, key) in FACTS.items():
 if drift:
     raise RuntimeError(
         "incremental CDF->gold drifted from the full history and was rebuilt: "
-        + "; ".join(f"{f} had {got} rows, {want} keys live" for f, (got, want) in drift.items())
+        + "; ".join(f"{f} drifted on {why}" for f, why in drift.items())
         + ". The fact tables are correct now — the rebuild fixed them — but the watermark "
         "path produced a wrong answer, which means an event arrived below a watermark that "
         "had already advanced past it. Investigate before trusting the incremental path; "
-        "re-run with full_refresh=true in the meantime."
+        "re-run with full_refresh=true in the meantime. A CONTENT drift is the more serious "
+        "of the two: the row count was right, so every check this job had before 2026-09-20 "
+        "would have passed while the fact table held stale values."
     )
 
 print("\nall fact tables reconcile")

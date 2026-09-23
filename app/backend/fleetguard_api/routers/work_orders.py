@@ -40,6 +40,30 @@ router = APIRouter(tags=["work-orders"])
 
 STATUSES = ("OPEN", "IN_PROGRESS", "COMPLETED", "CANCELLED")
 
+# WHICH STATUS CHANGES ARE LEGAL, not merely which values are spellable.
+#
+# `chk_fg_work_order_status` (src/lakebase/16_add_work_order_status_check.py) and the
+# `Literal` on `WorkOrderUpdate.status` both constrain the *value*. Neither constrains the
+# *transition*, so the API would happily take a COMPLETED work order back to OPEN, or
+# restart a CANCELLED one — undoing a completion with no trace beyond an audit row saying it
+# happened, and silently clearing `completed_at` on the way past (the CASE expression below
+# nulls it for any non-COMPLETED status).
+#
+# A work order is a real instruction to a depot: "this vehicle needs this remedy". Finishing
+# it and cancelling it are both terminal in the world, so they are terminal here.
+#
+# COMPLETED -> COMPLETED is permitted deliberately. The UI's status control re-sends the
+# current value whenever any field on the row changes, so editing the assignee or the cost
+# of a finished work order arrives as a no-op status change. Forbidding it would make
+# completed rows uneditable; see the `completed_at` COALESCE below, which exists for the
+# same reason.
+ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
+    "OPEN": frozenset({"OPEN", "IN_PROGRESS", "CANCELLED"}),
+    "IN_PROGRESS": frozenset({"IN_PROGRESS", "COMPLETED", "CANCELLED"}),
+    "COMPLETED": frozenset({"COMPLETED"}),
+    "CANCELLED": frozenset({"CANCELLED"}),
+}
+
 
 class WorkOrderOut(BaseModel):
     wo_id: str
@@ -244,6 +268,17 @@ def update_work_order(
                 params: dict = {"wo_id": wo_id}
 
                 if "status" in fields_set:
+                    # Checked against the row we just locked `FOR UPDATE`, so a concurrent
+                    # update cannot slip between the read and the write — one dict lookup,
+                    # no extra query.
+                    permitted = ALLOWED_TRANSITIONS.get(before["status"], frozenset())
+                    if body.status not in permitted:
+                        raise HTTPException(
+                            status.HTTP_409_CONFLICT,
+                            f"{wo_id} is {before['status']}; it cannot move to "
+                            f"{body.status}. Allowed from here: "
+                            f"{', '.join(sorted(permitted)) or 'nothing'}.",
+                        )
                     set_clauses.append("status = %(status)s")
                     # COALESCE, not a bare now(): re-saving a work order that is *already*
                     # COMPLETED must not overwrite when it was completed. The UI's status

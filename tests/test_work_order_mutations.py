@@ -18,6 +18,7 @@ from datetime import UTC, datetime
 
 import pytest
 from fakes import FakeCursor, install
+from fastapi import HTTPException
 from fleetguard_api.auth.tokens import Principal
 from fleetguard_api.routers import work_orders
 from fleetguard_api.routers.work_orders import (
@@ -82,17 +83,29 @@ class TestCompletedAt:
 
         assert "COALESCE(completed_at, now())" in cur.sql_for(UPDATE_STMT)
 
-    def test_moving_out_of_completed_clears_the_timestamp(self, monkeypatch):
-        """A work order reopened is not a completed one. The CASE must still null it, or the
-        row claims a completion date while sitting in OPEN."""
+    def test_completed_is_terminal(self, monkeypatch):
+        """CHANGED 2026-09-20 (I-110 #14). This used to assert the opposite — that moving
+        out of COMPLETED cleared `completed_at` — because the API validated the status
+        *value* and never the *transition*, so un-completing a work order was reachable.
+
+        A work order is an instruction to a depot about a specific vehicle. Finishing it is
+        terminal in the world, so it is terminal here: the remedy for one completed in error
+        is a new work order, not a silent rewrite of the finished one. The `ELSE NULL` branch
+        of the `completed_at` CASE is still there and still correct — it is simply no longer
+        reachable *from* COMPLETED.
+        """
         cur = _cursor(current_status="COMPLETED")
         install(monkeypatch, work_orders, cur)
 
-        update_work_order(APPROVER, "WO-1", WorkOrderUpdate(status="OPEN"))
+        with pytest.raises(HTTPException) as exc:
+            update_work_order(APPROVER, "WO-1", WorkOrderUpdate(status="OPEN"))
 
-        sql = cur.sql_for(UPDATE_STMT)
-        assert "ELSE NULL" in sql
-        assert "completed_at" in sql
+        assert exc.value.status_code == 409
+        assert "cannot move to OPEN" in exc.value.detail
+        # `sql_for` raises when nothing matched, so assert over `executed` directly.
+        assert all(UPDATE_STMT not in sql for sql, _ in cur.executed), (
+            "nothing may be written on a refused transition"
+        )
 
     def test_cost_only_update_does_not_touch_completed_at(self, monkeypatch):
         """Logging a cost against a finished job must not restamp or clear its completion —
@@ -196,3 +209,83 @@ class TestCostBreakdownReconciles:
 
         out = cost_breakdown(APPROVER)
         assert out.by_component == [] and out.by_depot == []
+
+
+class TestStatusTransitions:
+    """I-110 #14. The DB CHECK and the `Literal` both constrain the status *value*; neither
+    constrained the *transition*, so the API would take a COMPLETED work order back to OPEN
+    or restart a CANCELLED one.
+    """
+
+    LEGAL = [
+        ("OPEN", "IN_PROGRESS"),
+        ("OPEN", "CANCELLED"),
+        ("OPEN", "OPEN"),
+        ("IN_PROGRESS", "COMPLETED"),
+        ("IN_PROGRESS", "CANCELLED"),
+        ("IN_PROGRESS", "IN_PROGRESS"),
+        ("COMPLETED", "COMPLETED"),
+        ("CANCELLED", "CANCELLED"),
+    ]
+    ILLEGAL = [
+        ("COMPLETED", "OPEN"),
+        ("COMPLETED", "IN_PROGRESS"),
+        ("COMPLETED", "CANCELLED"),
+        ("CANCELLED", "OPEN"),
+        ("CANCELLED", "IN_PROGRESS"),
+        ("CANCELLED", "COMPLETED"),
+        ("OPEN", "COMPLETED"),
+    ]
+
+    @pytest.mark.parametrize(("before", "after"), LEGAL)
+    def test_legal_transitions_are_written(self, monkeypatch, before, after):
+        cur = _cursor(current_status=before)
+        install(monkeypatch, work_orders, cur)
+
+        update_work_order(APPROVER, "WO-1", WorkOrderUpdate(status=after))
+
+        assert "status = %(status)s" in cur.sql_for(UPDATE_STMT)
+
+    @pytest.mark.parametrize(("before", "after"), ILLEGAL)
+    def test_illegal_transitions_are_409_and_write_nothing(self, monkeypatch, before, after):
+        cur = _cursor(current_status=before)
+        install(monkeypatch, work_orders, cur)
+
+        with pytest.raises(HTTPException) as exc:
+            update_work_order(APPROVER, "WO-1", WorkOrderUpdate(status=after))
+
+        assert exc.value.status_code == 409
+        assert all(UPDATE_STMT not in sql for sql, _ in cur.executed)
+
+    def test_open_to_completed_must_pass_through_in_progress(self, monkeypatch):
+        """Not pedantry: `IN_PROGRESS` is what tells a depot the vehicle is actually off the
+        road. Jumping straight to COMPLETED from OPEN means a work order that was never
+        started reports as finished."""
+        cur = _cursor(current_status="OPEN")
+        install(monkeypatch, work_orders, cur)
+
+        with pytest.raises(HTTPException) as exc:
+            update_work_order(APPROVER, "WO-1", WorkOrderUpdate(status="COMPLETED"))
+
+        assert "IN_PROGRESS" in exc.value.detail
+
+    def test_every_status_has_a_transition_rule(self):
+        """A status missing from the table would fall to `frozenset()` and become a dead
+        end — reachable and then permanently stuck."""
+        assert set(work_orders.ALLOWED_TRANSITIONS) == set(work_orders.STATUSES)
+
+    def test_every_status_permits_itself(self):
+        """The UI re-sends the current status whenever any other field changes, so a no-op
+        status change must never block editing an assignee or a cost."""
+        for s, allowed in work_orders.ALLOWED_TRANSITIONS.items():
+            assert s in allowed, f"{s} cannot be re-saved"
+
+    def test_a_status_free_update_skips_the_check_entirely(self, monkeypatch):
+        """Logging a cost against a COMPLETED work order stays legal — the transition rule
+        applies to `status`, and `status` is not in this request."""
+        cur = _cursor(current_status="COMPLETED")
+        install(monkeypatch, work_orders, cur)
+
+        update_work_order(APPROVER, "WO-1", WorkOrderUpdate(actual_cost=1875.50))
+
+        assert "actual_cost" in cur.sql_for(UPDATE_STMT)
