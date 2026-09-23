@@ -124,7 +124,7 @@ day** and 26% longer than it needed to be.
 | 0.1 | ~~**Decide the corpus scope** and build the scoped source table~~ **DONE 2026-09-23** — fleet make/model, 115,499 chunks, table rebuilt live (I-111) | Gates everything below, and Run 1 must use the **identical** scope Run 2 will, or Run 1 did not test what gets submitted |
 | 0.2 | ~~**Merge `fix/repo-review-round-2`**~~ **DONE 2026-09-23** — squashed into `main` at `40e6864` (5 commits, 11 I-110 fixes, full gate green) | Five of those fixes only take effect at step 1.4's `agents.deploy()`; they must be on `main` first |
 | 0.3 | ~~**Run `src/lakebase/26_add_defect_signal_idempotency.py`**~~ **DONE 2026-09-23** — run `715399558734210`, job + task both `TERMINATED`/`SUCCESS` on the live resource (not just CLI exit). `ux_fg_defect_signal_agent_active` created; the notebook's own asserts proved duplicate-rejection, reopen-after-close, and detector-signals-unaffected, any of which would have failed the run | Lakebase only, seconds, no AI Search involved |
-| 0.4 | **Write the exact commands down** before you need them | This runbook gets executed **twice**, the second time under deadline pressure |
+| 0.4 | ~~**Write the exact commands down**~~ **DONE 2026-09-23** — `docs/RUNBOOK.md`, every Phase 1-3 step below given a runnable CLI/SDK command, cross-checked against live SDK signatures and this session's live endpoint/App state | This runbook gets executed **twice**, the second time under deadline pressure |
 
 #### Phase 1 — Run 1, the dress rehearsal. Budget a day, not the ~3 h of work
 
@@ -576,6 +576,7 @@ loses its integrity; a living doc that doesn't get edited becomes a lie.
 | `FleetGuard_Proposal.md` | What was *proposed*, before the build | **FROZEN** 2026-08-31 |
 | `STATUS.md` | This page — where the build has got to | Living, high-churn |
 | **`DEMO.md`** | **The demo runbook — pre-flight, the nine beats, numbers with sources, what not to claim** | Living |
+| **`RUNBOOK.md`** | **The Run 1 / Run 2 command layer for the two-window action plan below — exact CLI/SDK commands per step** | Living |
 | `ISSUES.md` | Every problem hit, root cause, resolution. **Silent failures flagged.** | Append-only |
 | `../PLAN.md` | Phase sequencing and definitions of done | Living |
 | `../CLAUDE.md` | Verified facts that must not be re-derived | Living |
