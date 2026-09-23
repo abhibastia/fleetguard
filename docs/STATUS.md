@@ -1,5 +1,55 @@
 # FleetGuard — project status
 
+## SESSION 2026-09-23 — Run 1 executed end to end, then torn down; corpus rescoped; workspace cleaned up
+
+**`fix/repo-review-round-2` merged to `main`** (I-110's 11 fixes), then Phase 0 of the
+two-window action plan finished: AI Search rescoped from the post-2010 series to the fleet's
+own 47 make/model pairs (**115,499 chunks**, down from 1,746,601 — I-111, same $6.72/day cost
+under the 2M-vector threshold but ~15× faster to build) and `ux_fg_defect_signal_agent_active`
+created on Lakebase.
+
+**Run 1 (Phase 1) executed live, start to finish:**
+- Smoke index stalled on two independent fresh attempts (~25 min, then ~5 min), self-cleared
+  with no fix applied — root cause unconfirmed, best guess is shared-workspace contention on
+  a *first* index on a *fresh* endpoint (I-112). Validated at 10K scope, then the real
+  115,499-row build completed clean in ~39 min, no drops.
+- Agent rebuilt and redeployed to **v7** (every I-109/I-110 fix now live). The old version
+  stayed `DEPLOYMENT_READY` at 0% traffic exactly as I-050/I-092 predicted — the **fourth**
+  time this has recurred — cleaned up via `update-config`, which also re-asserted
+  `scale_to_zero_enabled`. Verified live via a raw REST call (the CLI truncates this
+  endpoint's response and the SDK's `query()` sends the wrong body shape for
+  `agent/v1/responses` — both newly documented): correct answer, matching the known-good
+  25-vehicle/22-depot/EXACT result for recall `17V629000`.
+- App redeployed; provenance confirmed matching the pushed commit.
+- **All ten `docs/DEMO.md` beats checked against the live App** (I-113) — 9/10 exact match to
+  the decimal ($84,409.68; 16.0/11.1/1.44/z2.62; an unchanged trace-join result). One real
+  finding, fixed in the doc: Beat 6's "44 overdue/28 depots" is a snapshot that had already
+  drifted to **93 overdue/43 depots**, purely from two weeks passing with nothing completed;
+  DEMO.md now says to read it live, never quote the number.
+- Release provenance recorded (git SHA, bundle state, agent version, App deployment id,
+  index row count) — then **Phase 2 teardown**: index + endpoint deleted, App stopped, agent
+  left on scale-to-zero, all confirmed against live resources.
+
+**Workspace cleanup (I-114):** removed 7 unbound dead-experiment jobs (`lead-time-backtest-v2`,
+`semantic-subdivision`, `embed-backtest-complaints`, `hybrid-query-test`,
+`measure-cdf-latency`, `inspect-eval`, `build-backtest-scope`) that `CLAUDE.md` already
+documented as excluded from the bundle — live jobs now match the 29 bound resources exactly.
+Checked tables too: found 10 live objects missing from the `EXPECTED` rebuild manifest, but
+none were orphans (metric views, the agent inference table, two rollups, and evidence tables
+the project already documents) — a stale manifest, not unneeded data, and not fixed this pass.
+
+**Documentation swept for the rescope and version bumps** across `ARCHITECTURE.md`,
+`EVIDENCE.md`, `PLAN.md`, `CLAUDE.md`, `DEMO.md` and this file — chunk counts, job counts,
+agent version, metric-view exception count (four → **five**, a second one was added
+2026-09-17 and nobody had counted it since), and the "no end-to-end test" banner above,
+which Run 1 now supersedes.
+
+**Two-window plan status:** Phase 0 ✅, Phase 1 (Run 1) ✅, Phase 2 (teardown) ✅. Phase 3
+(Run 2) targeted 2–3 October, live into the 4 October submission. Step 2.2 (confirm AI Search
+billing actually stopped) is checkable ~2026-09-24, not yet confirmed same-day.
+
+---
+
 ## SESSION 2026-09-20 — five PRs merged, four rubric gaps closed, three bugs fixed
 
 **Submission moved to 4 October.** The capstone rubric (`capstone-submission-requirement.pdf`,
@@ -98,17 +148,19 @@ seen one rebuild fail outright (I-105); cost is identical to every other sub-2M 
 operate is the weaker demo anyway. Old post-2010-scope table content preserved at Delta
 version 0 if ever needed.
 
+**DONE 2026-09-23:** `ARCHITECTURE.md` §4.4, `DEMO.md` and `EVIDENCE.md` all updated to
+115,499 chunks; EVIDENCE's "well past the 1M" framing corrected to say the *vector index*
+scope is what dropped below 1M, not the corpus.
+
 **What this still owes, not yet done:**
-- `ARCHITECTURE.md` §4.4, `DEMO.md` and `EVIDENCE.md` all still quote **1,746,601 chunks**,
-  and EVIDENCE frames it as "well past the 1M". Update once the index itself is rebuilt at
-  the new scope (Phase 1 — needs the live index, so it waits for that paid step).
 - Phase 3's done-when evidence (`ops_hybrid_query_test`, quoted in §4.4) must be **re-run
   against the smaller index and republished as-is**, including if it comes back worse. The
   paraphrase probe *"car suddenly sped up on its own"* leans on unintended-acceleration
   complaints concentrated in makes this fleet may not operate — pick a probe the new scope
-  can actually answer.
+  can actually answer. This is separate from I-113's beat-by-beat App/data verification,
+  which checked the console's numbers, not this specific retrieval-behaviour sweep.
 - The full corpus stays in Delta either way (2.2M complaints, 5.8M TSBs), so the scale claim
-  survives on the lakehouse side — it is the *vector index* number that changes.
+  survives on the lakehouse side — it is the *vector index* number that changed.
 
 **Also check before rebuilding:** I-105 records the failed rebuild syncing from
 `silver_complaint_chunk` (2,196,091 rows), not `silver_complaint_chunk_indexed` (1,746,601).
@@ -203,14 +255,17 @@ warehouse and Lakebase — and `DEMO.md`'s 2026-09-09 decision already lets the 
 as "offline". What that forfeits is the RAG demonstration, which is a graded category.
 
 
-**Last updated:** 2026-09-20 · previously 2026-09-18 · **MVP target: 7 September — MET** · **Demo: 25–30 September**
+**Last updated:** 2026-09-23 · previously 2026-09-20 · **MVP target: 7 September — MET** · **Two-window plan: Run 1 DONE 2026-09-23, Run 2 targeted 2–3 October**
 
-> **NO END-TO-END TEST WITH BILLABLE RESOURCES SINCE 2026-09-11.** Six PRs merged on 2026-09-14
-> (`watch_campaign`, persona/dashboard, a 32-finding UI/UX pass, follow-up polish, the sidebar
-> nav) were verified only against the local dev server and Lakebase directly. The agent, the
-> Databricks App, and the AI/BI dashboard were not redeployed or re-checked. See
-> [START HERE](#start-here--state-as-of-end-of-2026-09-14) for the full list of what that means
-> before trusting anything here as "live."
+> **RUN 1 COMPLETE 2026-09-23 — the first full end-to-end test with billable resources since
+> 2026-09-11.** AI Search rebuilt at the rescoped fleet make/model scope (115,499 chunks,
+> I-111), agent redeployed to **v7** carrying every I-109/I-110 fix, App redeployed, and all
+> ten `docs/DEMO.md` beats checked against the live App (9/10 exact match, I-113). Then torn
+> down deliberately (Phase 2) — index and endpoint deleted, App stopped, agent left on
+> scale-to-zero — per the two-window plan below. **The release provenance for this run is
+> recorded** in the Phase 1 table (git SHA, bundle state, agent version, App deployment id,
+> index row count). Everything below this banner that describes an "untested since 2026-09-11"
+> state is superseded by Run 1; read the two-window action plan for what's actually current.
 
 > **CHANGED 2026-09-10 — RENDER IS GONE. Two surfaces now, not three.**
 > The supported ways to run FleetGuard are **Databricks Apps** (`fleetguard-console`, the demo
@@ -240,9 +295,9 @@ next-actions list in priority order.** Design lives in `FleetGuard_Proposal.md`,
 
 | Phase | Status | Detail |
 |---|---|---|
-| **1 — Ingestion + bronze/silver/gold** | ✅ **DONE** | Ingest job, bronze (4), silver (9) built and validated. Chunking done — `silver_complaint_chunk_indexed`, 1,746,601 chunks. **`gold_emerging_cluster` is descoped, not outstanding** (checked 2026-09-02): it was cluster-grained and there is no clustering — HDBSCAN abandoned (I-048), semantic subdivision falsified (I-049), and the shipping detector keys on `make|model|comp_top`. Replaced by **`gold_emerging_signal`**, the same rule applied to the current corpus. Ingest is **deliberately manual** — no schedule, to avoid consuming shared-workspace compute before it's needed. |
+| **1 — Ingestion + bronze/silver/gold** | ✅ **DONE** | Ingest job, bronze (4), silver (9) built and validated. Chunking done — `silver_complaint_chunk_indexed`, originally 1,746,601 chunks (post-2010 series), **rescoped 2026-09-23 to 115,499 chunks** (fleet make/model, I-111). **`gold_emerging_cluster` is descoped, not outstanding** (checked 2026-09-02): it was cluster-grained and there is no clustering — HDBSCAN abandoned (I-048), semantic subdivision falsified (I-049), and the shipping detector keys on `make|model|comp_top`. Replaced by **`gold_emerging_signal`**, the same rule applied to the current corpus. Ingest is **deliberately manual** — no schedule, to avoid consuming shared-workspace compute before it's needed. |
 | **2 — Fleet registry** | ✅ **Done** | 20,000 vehicles / 60 depots / ~989k exposure rows. 400 VINs independently vPIC-verified, 400/400 exact. |
-| **3 — Chunking + AI Search** | ✅ **DONE** | Index complete: **1,746,601 chunks, `ready: true`**, matching source exactly. Done-when **re-verified at full corpus** — hybrid differs from ANN on 2 of 3 queries, harm filter 10/10, near-duplicates 10/10 distinct. The earlier check ran at 42% and was repeated before being quoted. |
+| **3 — Chunking + AI Search** | ✅ **DONE** | Index built and torn down twice at the original full-corpus scope (**1,746,601 chunks**, done-when re-verified there — hybrid differs from ANN on 2 of 3 queries, harm filter 10/10, near-duplicates 10/10 distinct). **Rescoped and rebuilt 2026-09-23** at the fleet make/model scope (**115,499 chunks, `ready: true`**, I-111) for Run 1; the three behavioural checks re-passed at a 10K smoke scope (I-112), but the full done-when sweep has not yet been re-run and republished at 115,499 — tracked above. |
 | **4 — Model B + golden set** | ✅ **DONE** | 765-pair golden set from NHTSA's own recall text (real, not synthetic, E-08). Precision **83.7%**, recall **96.3%**, ROC-AUC 0.925 — published on the evidence page. Caught and fixed its own training-feature leakage before reporting (I-060). |
 | **5 — Lakebase + CDF** | ✅ **DONE** | 11 tables, all `REPLICA IDENTITY FULL`; **all 11 CDF history tables exist with exact names, no `_1` suffixes** (I-044 — CDF replicates DDL, correcting an earlier wrong claim). Reference data loaded: depot 60, vehicle 20,000, campaigns 592. **Capture latency measured: 7.1–15.6 s** (I-046). **Exposure loaded** — `EXACT` scope, 263,686 rows deduplicated to **118,323** distinct (vin, campaign) pairs. |
 | **6 — OAuth wiring** | ✅ **DONE — with a login** | Auth seam (E-13) tested on both surfaces, 401 on failure, never an SP fallback. **U2M retired (E-14)** — needs an account-admin OAuth registration we do not have, and OBO on Databricks Apps is stronger with less setup. **Render now has a working sign-in (2026-09-02): GitHub OAuth, `app-login` mode, two-tier authorization (read for anyone signed in; approve only for `FLEETGUARD_APPROVERS`).** Verified end to end in a browser. **U2M code built and flipped live 2026-09-03** (`auth/databricks_oauth.py` + `routers/databricks_auth_routes.py`) — the account-admin OAuth registration landed the same day, closing E-14's blocker, so `render.yaml` on `main` now runs `FLEETGUARD_AUTH_MODE=render-u2m` instead of `app-login`. **The judges have Databricks identities in this shared workspace**, so this is the strong path for them: sign in as themselves, UC/Postgres enforce for real, not simulated. Found and closed the same day, before flipping: the approver allowlist was silently skipped for any real-Databricks-token principal, which would have let any workspace identity (judges included) approve, not just view — `approval.py`'s gate is now unconditional on `FLEETGUARD_APPROVERS`, tested across all four principal sources (`tests/test_approval_gate.py`). **Not yet confirmed:** a real browser completing the login round-trip live — see "Next" item 0. **SUPERSEDED 2026-09-10 — Render removed.** The `render-u2m` login was never confirmed in a browser and now never will be: it was blocked on an account admin granting `all-apis`, and no narrower assignable scope covers Lakebase *and* Model Serving. Both Render auth paths are on `deploy/render`. The seam remains, with two providers (`databricks-apps`, `static-dev`); the approver-gate fix survives unchanged in `authz.py` and is still tested across every source the seam can produce. |
@@ -260,20 +315,19 @@ next-actions list in priority order.** Design lives in `FleetGuard_Proposal.md`,
 
 **Schema:** `bootcamp_students.fleetguard` (owned by `abhisek.bastia17@gmail.com`, inside a
 *shared* bootcamp metastore — never write outside it).
-**46 objects**, counted 2026-09-08 from `databricks tables list` — *everything* the schema
-holds, including the two materialized views, the metric view and the foreign vector index.
-The previous figure ("34 tables, excluding pipeline materialisations and event logs") named an
-exclusion it never listed, so it could not be reproduced; the table below now sums to the
-live count exactly.
+**49 objects**, recounted 2026-09-23 (was 46, counted 2026-09-08 — growth is real additions,
+not drift; see I-114 for the full list of 10 objects the `EXPECTED` rebuild manifest is
+still missing) from `databricks tables list` — *everything* the schema holds, including the
+two materialized views, both metric views and the foreign vector index.
 
 | Layer | Tables | Rows |
 |---|---|---|
 | bronze (4) | `bronze_complaints` · `bronze_recalls` · `bronze_investigations` · `bronze_tsbs` | 2,240,289 · 244,925 · 154,367 · 5,801,279 |
-| silver (11) | `silver_complaint` (+quarantine, +`_chunk`, +`_chunk_indexed`) · `silver_recall` (+q) · `silver_investigation` (+q, +`_case`) · `silver_tsb` (+`_bulletin`) | 2,209,123 · **1,746,601 chunks** · 244,701 · 154,191 · 5,801,279 |
+| silver (11) | `silver_complaint` (+quarantine, +`_chunk`, +`_chunk_indexed`) · `silver_recall` (+q) · `silver_investigation` (+q, +`_case`) · `silver_tsb` (+`_bulletin`) | 2,209,123 · **115,499 chunks** (fleet make/model scope, rescoped 2026-09-23, I-111 — was 1,746,601) · 244,701 · 154,191 · 5,801,279 |
 | gold — fleet (3) | `gold_fleet_vehicle` · `gold_fleet_depot` · `gold_fleet_exposure` | 20,000 · 60 · 989,042 |
 | gold — backtest (10) | `gold_lead_time_backtest` · `_control` · `_summary` · `gold_backtest_scope` · `_complaint` · `_embedding` · **plus the falsified semantic arm** `gold_lead_time_v3` · `_v3_summary` · `gold_backtest_subcluster` · `gold_backtest_cluster` | 777 · 67 · 2 · 6,649 · 205,219 · **205,219 vectors**; the v3/cluster tables back the *published negative* (I-049) and are kept deliberately |
-| gold — signals (1) | `gold_emerging_signal` — live detector output, same rule as the backtest | **48** (9 live · 2 fleet-relevant) |
-| gold — CDF facts (2) | `gold_agent_action` · `gold_defect_signal_current` — current state derived from the Lakebase CDF history by `fleetguard-cdf-to-gold` | 2 · 50, reconciling exactly with live Postgres |
+| gold — signals (1) | `gold_emerging_signal` — live detector output, same rule as the backtest | **48** (9 live · **4** fleet-relevant — confirmed again live 2026-09-23, I-113) |
+| gold — CDF facts (2) | `gold_agent_action` · `gold_defect_signal_current` — current state derived from the Lakebase CDF history by `fleetguard-cdf-to-gold` | **3** · 50, reconciling exactly with live Postgres (checked 2026-09-23) |
 | gold — model B (1) | `gold_model_b_golden_set` | 765 pairs |
 | ops (9) | `ops_ingest_watermark` · `ops_recall_poll_state` · `ops_hybrid_query_test` · `ops_lakebase_load` · `ops_cdf_latency` · `ops_cdf_fact_refresh` · `ops_psycopg_probe` · `ops_pg_privilege_diagnostic` · `ops_hdbscan_sweep` | measurement + cursor state; each is the evidence behind a numbered issue |
 | api (2) | `bronze_recall_api` · `gold_recall_alert` | 2,117 rows / 653 campaigns · 0 alerts (correct — nothing novel) |
@@ -294,12 +348,14 @@ depot, real roster backing work-order assignment) — picked up by CDF automatic
 `fleetguard_work_order.status` also gained a real `CHECK` constraint the same day (previously bare
 `TEXT`, only `'OPEN'` ever written) — see I-066.
 
-**Models:** `bootcamp_students.fleetguard.fleetguard_agent` — **6 registered versions**, **v6 serving** (v1 superseded by I-050's fix, v2 by the signals tool, v3 by the write action, v4 by I-075's match tiers, v5 by the fleet-vocabulary tool + prompt split, I-076/I-077). Only v6 is provisioned; the rest are registered but not served.
+**Models:** `bootcamp_students.fleetguard.fleetguard_agent` — **7 registered versions**, **v7 serving** as of 2026-09-23 (v1 superseded by I-050's fix, v2 by the signals tool, v3 by the write action, v4 by I-075's match tiers, v5 by the fleet-vocabulary tool + prompt split (I-076/I-077), v6 by the I-109/I-110 write-path fixes). Only v7 is provisioned; the rest are registered but not served.
 
-**Compute:** 1 pipeline (`fleetguard-bronze-silver`, IDLE) · **24 `fleetguard-*` jobs — 23
+**Compute:** 1 pipeline (`fleetguard-bronze-silver`, IDLE) · **29 `fleetguard-*` jobs — 28
 manual, 1 event-triggered** (`fleetguard-cdf-to-gold`, `table_update`, UNPAUSED 2026-09-08;
-"all manual" stopped being true then) ·
-1 serverless SQL warehouse · 1 AI Search endpoint.
+"all manual" stopped being true then; count as of 2026-09-23 after I-114 removed 7 unbound
+dead-experiment job objects and added `build-chunk-index-source`) ·
+1 serverless SQL warehouse · **0 AI Search endpoints right now** — deleted in Phase 2
+teardown after Run 1, recreated for Run 2 (Phase 3).
 
 **AI/BI Dashboard & metric view (added 2026-09-03, Operations page added 2026-09-09):**
 `FleetGuard — Fleet & Recall Overview` (`dashboard_id 01f1a7257e801a2ebb71bdc18fc2113a`,

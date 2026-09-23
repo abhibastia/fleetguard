@@ -97,8 +97,8 @@ the streaming question stops being load-bearing for the PII claim.
 ## Tier 1 — adopt: this *is* Phases 4/6/7, built correctly
 
 ### E-02 · `ResponsesAgent` + models-from-code + `agents.deploy()`
-**Status: BUILT.** Agent registered and serving (v6, `agents.deploy()`, `ResponsesAgent`,
-models-from-code). Not an enhancement so much as the correct shape for Phase 7. Our proposal
+**Status: BUILT.** Agent registered and serving (**v7** as of 2026-09-23, `agents.deploy()`,
+`ResponsesAgent`, models-from-code). Not an enhancement so much as the correct shape for Phase 7. Our proposal
 names "Mosaic AI Agent Framework" generically; this is the concrete interface — structured
 tool calling, token usage, multi-turn, OpenAI compatibility, and a serving path that is one
 call. Logging as a `.py` file rather than a pickle also means the agent is reviewable in

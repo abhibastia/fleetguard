@@ -191,11 +191,20 @@ WMIs labelled RAM). 400 generated VINs independently verified: 400/400 exact.
 ### 4.4 Retrieval
 
 `complaint_chunk_idx` on endpoint `fleetguard-vs` — Delta Sync, **HYBRID**,
-`databricks-gte-large-en` (1024-dim), **1,746,601 chunks**, matching source exactly.
+`databricks-gte-large-en` (1024-dim). **Rescoped 2026-09-23 (I-111)** from the post-2010
+investigation series to the fleet's own 47 make/model pairs: **115,499 chunks**
+(`silver_complaint_chunk_indexed`), down from 1,746,601 — same $6.72/day cost under the
+2M-vector threshold (I-035), but both AI Search builds in the submission plan now take
+minutes instead of hours, and retrieval is scoped to vehicles this fleet actually operates.
+Built and confirmed live 2026-09-23: `indexed_row_count: 115,499`, matching source exactly.
 
-Verified at full corpus: hybrid differs from pure ANN on 2 of 3 probe queries, harm-filtered
-retrieval passes 10/10, and near-duplicate retrieval is a non-issue (10/10 distinct
-`complaint_id`) — so the agent's search tool needs no read-time dedupe.
+**Verification status is split by scope.** The three behavioural checks (`columns_to_sync`
+completeness, `any_harm` filter, HYBRID differing from pure ANN) were re-run and passed
+against a 10K-row smoke index at this new scope (I-112) before the full build. The full
+`ops_hybrid_query_test` sweep — near-duplicate retrieval, the specific probe-query pairs —
+was last run against the **old, full-corpus** index; re-running it at the current 115,499-row
+scope and republishing the result as-is is still open (`docs/STATUS.md`'s Phase 1 action
+plan).
 
 **This is the load-bearing use of embeddings.** See §6 for the use that failed.
 
@@ -1155,7 +1164,7 @@ updates them in place and creates nothing:
 | Databricks App | `fleetguard_console` | `fleetguard-console` |
 | Pipeline | `bronze_silver` | `937b9ce4-4fbe-4493-96ad-b76317bf58db` |
 | AI/BI dashboard | `fleetguard_overview` | `01f1a7257e801a2ebb71bdc18fc2113a` |
-| Jobs | every `resources/*.job.yml` | the live / rebuild-from-empty `fleetguard-*` jobs (25 as of 2026-09-17 — count via `ls resources/*.job.yml \| wc -l` rather than trusting a number written here, it has grown before) |
+| Jobs | every `resources/*.job.yml` | the live / rebuild-from-empty `fleetguard-*` jobs (29 as of 2026-09-23, after adding `build_chunk_index_source` and removing 7 unbound dead-experiment job objects that were cluttering the live workspace, I-114 — count via `ls resources/*.job.yml \| wc -l` rather than trusting a number written here, it has grown before) |
 
 The other **7** `fleetguard-*` jobs are excluded on purpose — `lead-time-backtest-v2`,
 `semantic-subdivision` and `embed-backtest-complaints` (the semantic arm §6 measured and

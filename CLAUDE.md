@@ -383,11 +383,15 @@ need this, platform handles it):**
 to rebuild from empty. `databricks.yml`'s `include:` is the unscoped `resources/*.yml`, so a
 job is bound the moment its `.job.yml` file exists there; **count it by running
 `ls resources/*.job.yml | wc -l` rather than trusting a number written here** — it was **17**
-at 2026-09-11 and is **25** as of 2026-09-17, having grown as new jobs were added. The bundle
+at 2026-09-11, **25** as of 2026-09-17, and is **29** as of 2026-09-23. The bundle
 deliberately excludes **7** dead experiments, which have no `resources/*.job.yml` file at all
 and so cannot run: `lead-time-backtest-v2`, `semantic-subdivision`, `embed-backtest-complaints`
 (the arm I-049 rejected), `hybrid-query-test`, `measure-cdf-latency`, `inspect-eval`,
-`build-backtest-scope`. **`create-remaining-tables` was wrongly excluded and was added
+`build-backtest-scope`. **These 7 unbound job *objects* were deleted from the live workspace
+2026-09-23 (I-114)** — they had been sitting live-but-unrunnable since the bundle excluded
+them; deleting the job definition touches no table and no notebook source, so this was pure
+cleanup. If any of them is ever needed again, re-add its `resources/*.job.yml` first — there
+is no job to reuse anymore. **`create-remaining-tables` was wrongly excluded and was added
 2026-09-11** — it creates the other ten Lakebase tables, so it is on the rebuild path, and the
 exclusion had left it as the one job still running a hand-synced copy, 16 lines behind `main`
 and missing the `PSYCOPG_IMPL` guard (I-098); it is now bound like the rest. Bundle YAML is a
@@ -442,9 +446,11 @@ claim you then have to keep true; rejected experiments belong in `src/` and `doc
   `bundle run fleetguard_console` (that restarts the App under its users), and gate on a GitHub
   Environment with required reviewers.
 - Lakebase CDF is still **not** a bundle resource (I-017) — nor are the AI Search
-  endpoint/index, the agent serving endpoint, or the `evidence_metrics` metric view. §8.5's
-  "a single `bundle deploy` produces a consistent environment" has **four** documented
-  exceptions, not one.
+  endpoint/index, the agent serving endpoint, or **either** metric view (`evidence_metrics`
+  and `fleet_exposure_metrics`, added 2026-09-17 — DABs has no `metric_views` resource type
+  at all, confirmed via `bundle summary`'s resource keys: `apps`, `dashboards`, `jobs`,
+  `pipelines`, nothing else). §8.5's "a single `bundle deploy` produces a consistent
+  environment" has **five** documented exceptions, not one.
 
 ## Environment quirks
 

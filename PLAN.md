@@ -87,6 +87,13 @@ does not consume shared-workspace compute before the demo window. Schedule it in
 *Index `complaint_chunk_idx` on endpoint `fleetguard-vs`, **1,746,601 chunks, `ready:
 true`** — matching `silver_complaint_chunk_indexed` exactly. ~7 h to build.*
 
+**RESCOPED 2026-09-23 (I-111).** The source table is now scoped to the fleet's own 47
+make/model pairs — **115,499 chunks**, ~27 min to build — for the two-window submission
+plan's schedule safety, at the same $6.72/day cost (I-035). The done-when checks below were
+proved once at the original full-corpus scope; the current build has been independently
+validated at a 10K-row smoke scope (I-112) but the full `ops_hybrid_query_test` sweep has not
+yet been re-run and republished at the new scope — tracked in `docs/STATUS.md`'s action plan.
+
 **Done-when MET, verified at full corpus** (`ops_hybrid_query_test`). The earlier check ran
 against a 42%-built index and was re-run before being quoted:
 
@@ -308,8 +315,11 @@ plainly in `scoping.py`'s own docstring, not left implicit.
   to the existing objects. This closes the §8.5/§9 promise that had been in the proposal since
   the start and was never built — and it found what the gap had cost: **8 of 16 job notebooks
   were running code behind `main`** (I-096), two of them with bugs that had already been fixed
-  and shipped elsewhere. Four exceptions remain and are documented rather than papered over:
-  Lakebase CDF, AI Search endpoint/index, the agent serving endpoint, the metric view.
+  and shipped elsewhere. **Five exceptions remain** (was four — a second metric view,
+  `fleet_exposure_metrics`, was added 2026-09-17 and is equally unbound; there is no
+  `metric_views` resource type in DABs at all) and are documented rather than papered over:
+  Lakebase CDF, AI Search endpoint/index, the agent serving endpoint, and both metric views
+  (`evidence_metrics`, `fleet_exposure_metrics`).
 - **Done when:** the full pipeline survives an idle-then-cold-start cycle without
   manual intervention.
 

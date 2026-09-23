@@ -85,7 +85,7 @@ plainly which ones need a resource woken up first.
 | Never reaches | `fleetguard_work_order` / `fleetguard_service_campaign` — dispatch stays behind `FLEETGUARD_APPROVERS`, asserted in the build |
 | Tracing / eval | MLflow tracing, inference table `fleetguard_agent_payload`, `mlflow.genai.evaluate` against 10 adversarial cases (E-05) and a 765-pair golden set built from NHTSA's own recall text |
 | Activity analytics | `gold_agent_activity_daily` — requests, write actions, success rate, latency percentiles and tokens by day/tool/actor |
-| **Not verifiable right now** | The serving endpoint is `DEPLOYMENT_STOPPED` and the AI Search index is deleted, so a live question cannot be asked without restoring both (~3 min and ~7 h respectively). The code, tool definitions and past traces are all in the repo; the Assistant screenshot is **deferred** — see below |
+| **Not verifiable right now** | **Verified live 2026-09-23 (Run 1)** — the agent was redeployed to **v7** (carrying every I-109/I-110 write-path fix) and answered correctly on a raw REST call (25 vehicles / 22 depots / EXACT for recall 17V629000). Both the endpoint and the AI Search index were then deliberately torn down again per the two-window plan, so a fresh live question needs both restored: the serving endpoint (~3 min if fully `Stopped`, ~47 s if only scaled to zero) and the AI Search index (~27 min at the current 115,499-row fleet scope, down from ~7 h at the old 1.75M-chunk scope, I-111). The code, tool definitions and past traces are all in the repo; the Assistant screenshot is **deferred** — see below |
 
 ### 5. Analytics pipeline
 
@@ -115,23 +115,30 @@ plainly which ones need a resource woken up first.
 | | |
 |---|---|
 | URL | `https://fleetguard-console-1352785079224954.aws.databricksapps.com` |
-| Deployment | Declarative Automation Bundle — `databricks.yml` + `resources/` own the App, the pipeline, the dashboard and **27 jobs**, all bound to existing objects |
+| Deployment | Declarative Automation Bundle — `databricks.yml` + `resources/` own the App, the pipeline, the dashboard and **29 jobs**, all bound to existing objects |
 | Setup documented | README *Deploying*; ARCHITECTURE §9.1 lists the **five** things the bundle does not cover |
 | Secrets / config | No secrets in the repo. The App holds **no privileges of its own**: `db.py` mints the Lakebase credential from the caller's forwarded token, so every read runs as the signed-in human |
 | Auth | Databricks Apps OBO; scopes declared as code in `resources/fleetguard_console.app.yml` |
-| **State right now** | **STOPPED** to avoid idle billing. `databricks apps start fleetguard-console`, ~2 min; all three reviewers hold `CAN_MANAGE` and can start it themselves. Also **not redeployed since 2026-09-14**, so the live App lags `main` |
+| **State right now** | **STOPPED** to avoid idle billing, per the two-window plan's Phase 2 teardown (`docs/STATUS.md`). **Redeployed and dry-run verified live 2026-09-23** (Run 1) — all 10 `docs/DEMO.md` beats checked against the running App, 9/10 exact match (I-113) — then stopped deliberately once verified, not from neglect. `databricks apps start fleetguard-console`, ~2 min to bring back; all three reviewers hold `CAN_MANAGE` and can start it themselves |
 
 ### 8. Big Data — two of the three Vs
 
 **Volume — demonstrated.** 8.44M bronze rows through a distributed Spark pipeline;
-1,746,601 narrative chunks; 989,042 exposure rows; 118,323 in Lakebase. Well past the 1M
-threshold and processed, not merely stored.
+989,042 exposure rows; 118,323 in Lakebase — the full corpus (2.2M complaints, 5.8M TSBs)
+stays in Delta regardless of AI Search scope. **The vector-index chunk count is now
+115,499**, not the 1,746,601 quoted historically — rescoped 2026-09-23 to the fleet's own
+make/model pairs for schedule safety on the submission's two-build plan (I-111). The
+lakehouse-scale claim survives on the pipeline/corpus side; it is specifically the *indexed*
+figure that dropped below the 1M mark, and that reflects a deliberate retrieval-scope
+decision, not reduced volume processed.
 
 **Variety — demonstrated, with one caveat.** Free-text complaint narratives are chunked,
 embedded, indexed and hybrid-searched (BM25 + vector), and surfaced through the agent's
 `search_complaints` tool into the application workflow. `silver_complaint_chunk_indexed`
-(1.75M chunks) is in Unity Catalog now; **the AI Search index itself is deleted** to cap
-billing, so the retrieval half cannot be demonstrated live until it is rebuilt (~7 h, I-105).
+(115,499 chunks at the current scope) is in Unity Catalog now; **the AI Search index itself
+is deleted** to cap billing between verification runs, so the retrieval half cannot be
+demonstrated live until it is rebuilt (~27 min at this scope, down from ~7 h at the old
+1.75M-chunk scope, I-041/I-111).
 
 **Velocity — partial, and stated honestly in two numbers.** These must never be collapsed:
 
