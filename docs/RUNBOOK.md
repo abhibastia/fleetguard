@@ -18,7 +18,7 @@ default.
 | catalog.schema | `bootcamp_students.fleetguard` |
 | AI Search endpoint | `fleetguard-vs` (`STANDARD`) |
 | AI Search index | `complaint_chunk_idx` |
-| index source table | `bootcamp_students.fleetguard.silver_complaint_chunk_indexed` (115,499 rows, fleet make/model scope — I-111) |
+| index source table | `bootcamp_students.fleetguard.silver_complaint_chunk_indexed` (fleet make/model scope — I-111; **row count re-measured in step 3.0**, was 115,499 under the exact-match scope I-115 replaced) |
 | primary key | `chunk_id` |
 | embedding source column | `chunk_text` |
 | embedding model endpoint | `databricks-gte-large-en` |
@@ -153,7 +153,12 @@ databricks vector-search-indexes create-index \
 ```
 
 **Poll every ~5 min at this scope** (115,499 rows / 4,336 rows-min ≈ 27 min, so unlike the
-1.75M-row run there is no reason to space polls 45 min apart):
+1.75M-row run there is no reason to space polls 45 min apart).
+
+> **Run 2 arrives here from step 3.1 — that 115,499 no longer applies.** I-115 widened the
+> source table, so re-derive the estimate from the count step 3.0 prints. The command block
+> below is unchanged; only the expected duration is.
+
 
 ```bash
 databricks vector-search-indexes get-index bootcamp_students.fleetguard.complaint_chunk_idx --profile abhi
@@ -338,16 +343,67 @@ idle and removes a restore step from Run 2. No command needed unless it drifted 
 
 ## Phase 3 — Run 2 (before submission)
 
-### 3.1 — Recreate the index, identical config
+> ### ⚠️ "CHANGE NOTHING" DID NOT HOLD. READ THIS BEFORE RUNNING ANY STEP BELOW.
+>
+> This phase was written assuming no code changed between Run 1 and Run 2, and every step
+> said so. **That assumption was broken on 2026-09-23**, deliberately, by the I-115 round
+> (merged as `f400331`). Run 2 is therefore **not** the abbreviated restore this section
+> originally described — three things must actually be rebuilt, and the steps below have been
+> rewritten to say so.
+>
+> **Following the original wording would have shipped the pre-I-115 build**: an AI Search
+> index rebuilt from the old exact-match source table, in which every one of the fleet's
+> 2,116 F-250s is missing from retrieval, plus an agent endpoint still on v7. Both would have
+> looked like a clean run.
+>
+> | What changed | Consequence for Run 2 |
+> |---|---|
+> | `src/search/27_build_chunk_index_source.py` — join widened to `EXACT` + `MODEL_VARIANT` | The **source table must be rebuilt first** (new step 3.0). The index is **not** 115,499 rows any more. |
+> | `src/agent/14_fleetguard_agent.py` — 4 fixes (sentinel, evidence TTL, over-fetch, docstrings) | The agent **must** be rebuilt and redeployed (3.3). v7 does not carry them. |
+> | `app/frontend/` + `app/backend/` — Home redesign, `/api/corpus` | `bundle run fleetguard_console` is **required**, not optional (3.2). Screenshots must be retaken (3.5). |
+>
+> The "change nothing" rule itself was right and is worth keeping *after* this line: do not
+> add further changes between Run 2 and submission.
 
-Exact same `create-index` command as step 1.2, unchanged. If `silver_complaint_chunk_indexed`
-was not touched between runs (it should not have been — "change nothing between Run 1 and
-Run 2"), this reproduces the same 115,499-row index.
+### 3.0 — Rebuild the AI Search source table FIRST (new; no equivalent in Run 1)
+
+**Run 1 had no such step because the table already existed from Phase 0.** It is now stale:
+I-115 widened the fleet match from exact model spelling to the `EXACT` + `MODEL_VARIANT` tiers
+the rest of the system uses. Build the index off the old table and the retrieval corpus is
+silently missing the fleet's most numerous vehicle.
+
+This is Delta-only — free, no endpoint involved, a few minutes — and it must complete before
+3.1.
+
+```bash
+databricks bundle run build_chunk_index_source -t prod --profile abhi
+```
+
+The job asserts a **bounded** range rather than an exact count (floor 115,499, ceiling
+1,000,000) precisely because the new figure has never been measured. It prints the count and
+the `EXACT` / `MODEL_VARIANT` split.
+
+**Write the printed count down.** It is needed for the poll estimate in 3.1, and
+`docs/STATUS.md`, `docs/ARCHITECTURE.md`, `docs/EVIDENCE.md` and `docs/DEMO.md` all currently
+say "measured in Run 2" and are waiting for it. Then refresh what the console shows:
+
+```bash
+.venv/bin/python scripts/export_corpus.py --profile abhi   # updates Home's scale strip
+```
+
+### 3.1 — Recreate the index
+
+Same `create-index` command as step 1.2 — the *config* is unchanged. The **row count is not**:
+it now reflects the widened source table from 3.0, so expect more than 115,499.
 
 ```bash
 databricks vector-search-endpoints create-endpoint fleetguard-vs STANDARD --profile abhi
 # then the same create-index command as 1.2
 ```
+
+**Re-derive the poll interval from 3.0's count** at ~4,336 rows/min, rather than reusing Run
+1's ~27 min. A larger corpus takes proportionally longer, and the I-105 drop-detection rule
+below matters more the longer the sync runs.
 
 ### 3.2 — Start the App
 
@@ -355,13 +411,36 @@ databricks vector-search-endpoints create-endpoint fleetguard-vs STANDARD --prof
 databricks apps start fleetguard-console --profile abhi
 ```
 
-Only re-run `databricks bundle run fleetguard_console -t prod --profile abhi` if code changed
-since Run 1 — per the "change nothing" rule, it should not have.
+**`bundle run fleetguard_console` IS REQUIRED this time** — the console changed (Home
+redesign, the new `/api/corpus` route). `apps start` alone re-deploys the *old* source path
+(I-097), so skipping this ships the Run 1 UI:
 
-### 3.3 — Agent endpoint
+```bash
+databricks bundle deploy -t prod --profile abhi          # or ./scripts/deploy.sh abhi prod
+databricks bundle run fleetguard_console -t prod --profile abhi
+```
 
-No action — first call wakes it from scale-to-zero (~47 s measured, I-092). If it drifted to
-fully `Stopped`, repeat 1.3's `update-config` restore.
+### 3.3 — Agent: REBUILD and REDEPLOY, not just wake
+
+**Not "no action" any more.** v7 predates I-115's four agent-source fixes — the forgeable
+action sentinel, the permanently-poisoned evidence cache, the lossy `search_complaints`
+dedupe, and the stale corpus docstrings. Waking v7 ships none of them.
+
+```bash
+databricks bundle run agent_build -t prod --profile abhi     # logs a new UC model version
+databricks bundle run deploy_agent -t prod --profile abhi    # serves it
+```
+
+Then confirm the **new** version is the one taking traffic. I-050/I-092 have recurred four
+times: the previous version stays `DEPLOYMENT_READY` at 0% traffic and the endpoint looks
+healthy either way.
+
+```bash
+databricks serving-endpoints get agents_bootcamp_students-fleetguard-fleetguard_agent --profile abhi
+```
+
+Only if it drifted to fully `Stopped` rather than scale-to-zero, repeat 1.3's `update-config`
+restore first.
 
 ### 3.4 — Abbreviated verification
 
@@ -374,16 +453,21 @@ the resulting row):
 databricks experimental aitools tools query "SELECT * FROM bootcamp_students.fleetguard.gold_agent_action ORDER BY _last_updated DESC LIMIT 3" --profile abhi
 ```
 
-### 3.5 — Fresh screenshots
+### 3.5 — Fresh screenshots — REQUIRED, the UI changed
 
-Only if the UI changed since Run 1 (it should not have). Same two commands as 1.8.
+Home was redesigned on 2026-09-23 (new hero, flow diagram, corpus scale strip), so every Run 1
+screenshot of it is stale. Same two commands as 1.8, and note `scripts/run_local_static_dev.sh`
+mints a token that expires after an hour — if Lakebase routes start 500ing mid-capture, restart
+it rather than debugging.
 
 ### 3.6 — Update provenance, assemble the zip
 
 Same five-command block as 1.9, then:
 
 ```bash
-git rev-parse HEAD   # confirm identical to the 1.9 value if "change nothing" held
+git rev-parse HEAD   # WILL NOT match the 1.9 value — I-115 landed in between (see the
+                     # banner at the top of Phase 3). Record the new SHA; a mismatch here is
+                     # the expected outcome, not an error.
 zip -r fleetguard-submission.zip . -x '.git/*' '*/node_modules/*' '.venv/*' \
   'app/frontend/dist/*' 'capstone-submission-requirement.pdf' 'repo-review.md' \
   'indexing-review.md'

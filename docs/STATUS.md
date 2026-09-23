@@ -307,13 +307,19 @@ table again at step 3.6 (Run 2) — do not append a second table, replace these 
 
 #### Phase 3 — Run 2, before submission. Much shorter: the UC model registration survives teardown
 
+> **⚠️ This table was written assuming "change nothing" held. It did not** — I-115 landed
+> 2026-09-23 (`f400331`), deliberately. Three steps below became mandatory that were optional,
+> and one is entirely new. `docs/RUNBOOK.md` Phase 3 carries the corrected commands and a
+> banner explaining what changed; **read that, not this, when executing.**
+
 | # | Step | Time |
 |---|---|---|
-| 3.1 | **Recreate the index — same scope, same config** | 27 min – 6.7 h |
-| 3.2 | **Start the App.** Re-run `bundle run fleetguard_console` **only if code changed** since Run 1 | ~5 min |
-| 3.3 | Agent endpoint wakes on the first call (~47 s measured) — no redeploy unless code changed | — |
+| **3.0** | **NEW — rebuild `silver_complaint_chunk_indexed` first** (`bundle run build_chunk_index_source`). I-115 widened the fleet match; building the index off the old table leaves all 2,116 F-250s out of retrieval. Record the count — four docs say "measured in Run 2" and are waiting on it — then `scripts/export_corpus.py` | ~5 min |
+| 3.1 | **Recreate the index.** Same config; **not** the same row count — re-derive the poll interval from 3.0's figure | 27 min – 6.7 h |
+| 3.2 | **Start the App**, then `bundle run fleetguard_console` — **REQUIRED**, the console changed (Home redesign, `/api/corpus`). `apps start` alone re-deploys the old source path (I-097) | ~5 min |
+| 3.3 | **Rebuild + redeploy the agent** (`agent_build`, then `deploy_agent`) — **REQUIRED**, v7 predates I-115's four agent fixes. Then confirm the new version actually takes traffic (I-050/I-092, four recurrences) | ~15 min |
 | 3.4 | **Abbreviated verification**, not the full hour: one agent question, one write, confirm it reaches UC | ~15 min |
-| 3.5 | **Fresh screenshots only if the UI changed** | ~1 min |
+| 3.5 | **Fresh screenshots — REQUIRED**, Home was redesigned | ~1 min |
 | 3.6 | **Update the provenance record**, then assemble the zip (repo + `docs/screenshots/`; the requirement PDF and the review files are gitignored and not part of it) | ~5 min |
 
 #### The rule that makes this work
@@ -321,6 +327,17 @@ table again at step 3.6 (Run 2) — do not append a second table, replace these 
 **Change nothing between Run 1 and Run 2.** Every code change after Run 1 turns Run 2 back
 into Run 1 — a full untested composition, under deadline. If Run 1 surfaces a bug, fix it and
 re-run the affected beats **then**, not in October.
+
+> **This rule was broken on purpose, once, and the reasoning is worth keeping visible.** The
+> I-115 round (2026-09-23) changed agent source, index source and the console. The trade was
+> made with the cost understood: the agent redeploy and index rebuild were *already* committed
+> Run 2 steps, so riding them was close to free, whereas the alternative was shipping a
+> retrieval corpus that excluded the fleet's most numerous vehicle. What it genuinely costs is
+> that Run 2 is no longer an abbreviated restore — it is closer to a second Run 1, and the step
+> table above now reflects that.
+>
+> **The rule applies again from here.** Nothing further should change between Run 2 and the
+> 4 October submission.
 
 **Timing: Run 1 this week**, so a failed index build still leaves a retry day.
 **Run 2 on 2–3 October**, live into submission on the 4th.
