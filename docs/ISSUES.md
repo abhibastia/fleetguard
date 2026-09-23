@@ -29,6 +29,50 @@ no error and passed the obvious check.
 
 ## Tooling / process
 
+### I-114 — Deleted the 7 unbound dead-experiment jobs; found the EXPECTED manifest is stale by 10 tables, none of them safe to delete
+*Date:* 2026-09-23 · *Status:* resolved (jobs), noted (manifest)
+
+**Asked to remove jobs/tables under this identity not needed for the project.** Checked
+first rather than deleting on the general instruction, since table deletion on this schema
+is irreversible and the project deliberately keeps several dead-end tables as evidence.
+
+**Jobs — 36 live, all `fleetguard-*`, all created by this identity** (no risk of touching
+another student's job on the shared flat namespace). Diffed against `resources/*.job.yml`'s
+29 bound names: exactly **7 unbound**, and they are precisely the 7 dead experiments
+`CLAUDE.md` already documents as deliberately excluded (`lead-time-backtest-v2`,
+`semantic-subdivision`, `embed-backtest-complaints`, `hybrid-query-test`,
+`measure-cdf-latency`, `inspect-eval`, `build-backtest-scope`). Re-verified
+`creator_user_name` on each immediately before deleting, per the standing rule for this
+namespace. All 7 deleted (`databricks jobs delete <id>` — positional arg, not `--job-id`).
+**Verified against the live resource, not exit code 0:** 29 jobs remain under this identity,
+matching the 29 bound `resources/*.job.yml` files exactly. Job deletion does not touch any
+table or the underlying notebook source (still in `src/`), so this is pure cleanup with no
+data-loss risk.
+
+**Tables — none found safe to delete.** Live `SHOW TABLES`-equivalent returned 49 objects;
+diffed against `00_create_all_objects.py`'s `EXPECTED` manifest (39 keys) found **10 live but
+unlisted**, with nothing in `EXPECTED` missing live (no data loss to worry about). Checked
+each of the 10 individually rather than assuming "not in the manifest" means "not needed":
+- `evidence_metrics`, `fleet_exposure_metrics` (metric views), `fleetguard_agent_payload`
+  (agent inference table — Beat 10's audit/trace join depends on it), `gold_agent_activity_daily`,
+  `gold_api_poll_health` — live product/dashboard tables. `EXPECTED` only tracks
+  rebuild-reproducible tables by design (metric views and the auto-created inference table
+  are explicitly listed elsewhere as "not tables" in `STATUS.md`), and the two rollups are
+  real additions the manifest was never updated for.
+- `ops_pg_privilege_diagnostic`, `ops_psycopg_probe`, `ops_recall_api_sweep` — already
+  named in `STATUS.md`'s own ops-table inventory as evidence behind specific findings.
+- `gold_backtest_cluster`, `ops_hdbscan_sweep` — residue from the abandoned HDBSCAN attempt
+  (I-048). `00_create_all_objects.py`'s own comment says this is deliberate ("a rebuild ...
+  can never produce it, so expecting it would make this verifier permanently report a
+  missing object"), and `STATUS.md`'s live inventory groups it with "the falsified semantic
+  arm ... kept deliberately" — this project's rigor-over-cherry-picking evidence, not litter.
+  **Flagged rather than deleted** — the user reviewed this specific pair and chose to keep
+  them rather than override that documented intent today.
+
+**Net effect:** the real finding is a stale `EXPECTED` manifest (10 tables it should list and
+doesn't), not unneeded data. Not fixed in this pass — recorded so it isn't rediscovered as a
+false "orphan tables" alarm next time.
+
 ### I-113 — Run 1 step 1.7's data verification: DEMO.md's Beat 6 overdue count is a moving target, not a fact
 *Date:* 2026-09-23 · *Status:* resolved (doc fixed) — the underlying mechanism is not a bug
 
