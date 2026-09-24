@@ -30,6 +30,7 @@ from .routers import (
     depots,
     evidence,
     queue,
+    readyz,
     recall_api,
     signals,
     technicians,
@@ -115,6 +116,10 @@ api.include_router(depots.router)
 api.include_router(trends.router)
 api.include_router(watchlist.router)
 api.include_router(auth_routes.router)
+# `/readyz` answers a different question from `/healthz` above — see routers/readyz.py.
+# It is authenticated and lives under `/api` because its Lakebase check must run as the
+# caller; `/healthz` stays unauthenticated and always-200 as the container probe.
+api.include_router(readyz.router)
 app.include_router(api)
 
 

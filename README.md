@@ -51,7 +51,7 @@ cannot wake itself; every other tab is unaffected, and it can be restored on req
 three minutes.
 
 **[`docs/DEMO.md`](docs/DEMO.md) is the guided tour** — pre-flight with measured timings, the
-nine beats worth seeing, every number with its source, and an explicit list of what this project
+ten beats worth seeing, every number with its source, and an explicit list of what this project
 does *not* claim.
 
 **Honest status of this path:** verified end to end, but under the owner's identity, and for the
@@ -95,6 +95,37 @@ above, sourced from the same measurement.
   honest limits: §8a.
 - **A FastAPI + React console**, one service for API and UI, running unchanged on Databricks
   Apps and on a local server behind a single auth seam (`app/backend/fleetguard_api/auth/`).
+
+## Getting set up
+
+Nothing below creates or touches a billable Databricks resource. The tests never reach the
+workspace — the integration layer self-skips without `--run-integration` — which is what makes
+them safe to run on a shared metastore.
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -r requirements-dev.txt     # sources runtime pins from app/backend/
+npm --prefix app/frontend install
+```
+
+`requirements-dev.txt` reads its runtime versions out of `app/backend/requirements.txt`, so
+local and CI cannot drift apart.
+
+**A JVM is required** — `tests/pipelines/` starts a local Spark session. CI pins Temurin 17;
+locally whatever `java` is on `PATH` will do (tested against 8; pyspark 3.5.x supports 8/11/17).
+That Spark session is why the suite takes ~45 s rather than the ~1 s it used to.
+
+The same three commands CI runs, which is what to run before committing:
+
+```bash
+.venv/bin/python -m ruff check src tests app/backend scripts
+.venv/bin/python -m pytest
+npm --prefix app/frontend run typecheck && npm --prefix app/frontend run test
+```
+
+Working against the live workspace additionally needs the Databricks CLI (≥ v1.12.1) and a
+profile. **Always pass `--profile` explicitly** — this is a bootcamp metastore shared with
+~296 other students, and no script here defaults it.
 
 ## Run it locally
 
@@ -155,13 +186,17 @@ the next deploy.
 
 ## Documentation map
 
+**This table is the canonical one.** `docs/STATUS.md` used to carry a second copy; it now
+points here, because two lists of the same nine documents is two things to keep true and the
+other one had already drifted.
+
 Read `docs/STATUS.md` first if you're picking this up cold — it's the one page answering
 "where are we," with next steps in priority order.
 
 | Document | Job |
 |---|---|
 | [`docs/EVIDENCE.md`](docs/EVIDENCE.md) | **What backs each claim** — the artefact, table, job or measured number behind every graded line, and what is deliberately still missing |
-| [`docs/DEMO.md`](docs/DEMO.md) | **Start here to look around** — pre-flight, the nine beats, numbers with sources, what not to claim |
+| [`docs/DEMO.md`](docs/DEMO.md) | **Start here to look around** — pre-flight, the ten beats, numbers with sources, what not to claim |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | The living spec — what the system *is*, kept true with the code |
 | [`docs/API.md`](docs/API.md) | Every console REST endpoint and every external API this project consumes, one page |
 | [`docs/STATUS.md`](docs/STATUS.md) | Where the build has got to, updated every session |

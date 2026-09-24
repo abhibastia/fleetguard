@@ -289,7 +289,12 @@ Both intervals were below the platform floor and both table paths were wrong. As
 accepted (job `fleetguard-cdf-to-gold`, `851598550157757`):
 ```yaml
 trigger:
-  pause_status: PAUSED          # see STATUS — unpausing is a deliberate cost decision
+  pause_status: UNPAUSED        # UNPAUSED since 2026-09-08. This line read PAUSED until
+                                # 2026-09-24 and had been wrong since the job was unpaused;
+                                # a review then quoted it as fact and deferred a fix on the
+                                # strength of it (I-116). `resources/cdf_to_gold.job.yml` is
+                                # the authority — this block is an illustration of the shape,
+                                # not a copy of the resource. Read the file.
   table_update:
     condition: ANY_UPDATED
     table_names:
@@ -383,7 +388,8 @@ need this, platform handles it):**
 to rebuild from empty. `databricks.yml`'s `include:` is the unscoped `resources/*.yml`, so a
 job is bound the moment its `.job.yml` file exists there; **count it by running
 `ls resources/*.job.yml | wc -l` rather than trusting a number written here** — it was **17**
-at 2026-09-11, **25** as of 2026-09-17, and is **29** as of 2026-09-23. The bundle
+at 2026-09-11, **25** as of 2026-09-17, **29** as of 2026-09-23, and is **30** as of
+2026-09-24 (`rag_eval`, I-116). The bundle
 deliberately excludes **7** dead experiments, which have no `resources/*.job.yml` file at all
 and so cannot run: `lead-time-backtest-v2`, `semantic-subdivision`, `embed-backtest-complaints`
 (the arm I-049 rejected), `hybrid-query-test`, `measure-cdf-latency`, `inspect-eval`,
@@ -446,7 +452,8 @@ claim you then have to keep true; rejected experiments belong in `src/` and `doc
   `bundle run fleetguard_console` (that restarts the App under its users), and gate on a GitHub
   Environment with required reviewers.
 - Lakebase CDF is still **not** a bundle resource (I-017) — nor are the AI Search
-  endpoint/index, the agent serving endpoint, or **either** metric view (`evidence_metrics`
+  endpoint/index (`scripts/provision_search.sh` is the ceiling: idempotent, polls, and
+  defaults to a free read-only `--check`; `--create` bills ~$6.72/day — I-116), the agent serving endpoint, or **either** metric view (`evidence_metrics`
   and `fleet_exposure_metrics`, added 2026-09-17 — DABs has no `metric_views` resource type
   at all, confirmed via `bundle summary`'s resource keys: `apps`, `dashboards`, `jobs`,
   `pipelines`, nothing else). §8.5's "a single `bundle deploy` produces a consistent

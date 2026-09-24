@@ -1,6 +1,11 @@
 # FleetGuard — architecture
 
-**Living document. Must be true now.** Last reconciled against the workspace: **2026-09-15**.
+**Living document. Must be true now.** Last reconciled against the workspace: **2026-09-24**.
+
+> Run 1 (2026-09-23) exercised the whole system live end to end and then tore the billable
+> half down again — so "reconciled" below means *reconciled against what Run 1 observed*,
+> not against resources running right now. The AI Search index and the App are deliberately
+> down until Run 2 (2–3 October); `docs/STATUS.md` is the page that tracks which.
 
 Companion documents, each with one job:
 
@@ -50,19 +55,26 @@ against 11.1% on a volume-matched placebo** (1.44×, z ≈ 2.62, p ≈ 0.009).
 
 ## 2. Build state
 
+> **Corrected 2026-09-24.** Three rows below read **"Not started"** until this date — Phases
+> 6, 8 and 11 — while the App had been deployed, verified in a browser and exercised end to
+> end in Run 1. They were written before those phases were built and never revisited, and this
+> is the *living spec*: a reader taking §2 at its word concluded the console did not exist.
+> `docs/STATUS.md`'s phase table was right throughout, which is how the drift went unnoticed —
+> the two were never read against each other.
+
 | Phase | State |
 |---|---|
 | 1 Ingestion + medallion | ✅ Done — `gold_emerging_cluster` **descoped** (cluster-grained, and there is no clustering); replaced by `gold_emerging_signal` |
 | 2 Fleet registry | ✅ Done |
-| 3 Chunking + AI Search | ✅ Done — verified at full corpus |
+| 3 Chunking + AI Search | ✅ Done — **rescoped 2026-09-23** from the post-2010 series to the fleet's own make/model pairs (I-111), then widened again to the `EXACT` + `MODEL_VARIANT` tiers (I-115). Built and torn down twice; the row count is re-measured in Run 2 |
 | 4 Model B + golden set | ✅ Done — precision 83.7% / recall 96.3%, real numbers on the evidence page |
 | 5 Lakebase + CDF | ✅ Done — loaded and latency-measured |
-| 6 OAuth wiring | ⬜ Not started |
+| 6 OAuth wiring | ✅ Done — the auth seam (E-13) with two providers, `databricks-apps` (OBO) and `static-dev`. U2M was built, flipped live, and then **retired with Render** (E-14); it is preserved on the `deploy/render` branch |
 | 7 Agent tools + write path | ✅ Done — seven tools; both writes (`open_defect_signal`, `watch_campaign`) execute in the app under the caller's identity, see §7.1 |
-| 8 App + external surface | ⬜ Not started |
+| 8 App + external surface | ✅ Done — `fleetguard-console` on Databricks Apps, verified in a real browser 2026-09-08 and re-verified across all ten `DEMO.md` beats in Run 1 (I-113). **Stopped between the two online windows by design** |
 | 9 Model A + backtest | ✅ Done — **result is negative**, see §6 |
 | 10 Governance | ✅ Visible slice — Postgres RLS on depot scoping, proved live |
-| 11 Hardening | ⬜ Not started |
+| 11 Hardening | ✅ Done — the `table_update` trigger is built and has fired unattended (§8.3); demo state is seeded through the real API, not direct INSERTs. "Render always-on" left this phase when Render did |
 | 12 Second connector | ❌ Cut for schedule |
 
 Everything lives in one schema, `bootcamp_students.fleetguard`, inside a **shared** bootcamp
@@ -1297,8 +1309,14 @@ rebuild that looks successful and isn't.
 
 **Manual steps no script covers:** Lakebase CDF enablement (UI-only), and AI Search
 endpoint/index creation (kept manual because it is the only recurring cost — it should never
-be resurrected by accident). An index rebuild is ~7 h; never attempt one inside a demo window.
-These are two of the four exceptions in §9.1; the bundle does not close them.
+be resurrected by accident). An index rebuild took **~39 min** at the current fleet scope in
+Run 1 — not the ~7 h this line said until 2026-09-24, which was the figure for the
+superseded 1,746,601-chunk corpus and was the exact stale cost I-115's lesson is about.
+Still never attempt one inside a demo window: I-112 records a fresh endpoint stalling ~25
+min before the build even starts. `scripts/provision_search.sh` now wraps this.
+These are two of the **five** exceptions in §9.1 (which says five — this line said four
+until 2026-09-24, and the fifth had been added a week earlier); the bundle does not close
+them.
 
 **Verification discipline.** Never infer success from a CLI exit code. Three variants have
 been observed in one day: a watcher exiting `0` at 51% complete, `jobs run-now` returning `0`

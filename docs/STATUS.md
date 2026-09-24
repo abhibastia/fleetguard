@@ -1,5 +1,74 @@
 # FleetGuard — project status
 
+## SESSION 2026-09-24 — I-115's four remaining items closed; documentation reconciled
+
+**Branch `fix/i115-remainder`.** Full write-up in `docs/ISSUES.md` **I-116**.
+
+**Cost of this session: ~55 seconds of serverless job compute.** One manual run of
+`fleetguard-cdf-to-gold`, for the one change that could not honestly ship unverified. Nothing
+else touched a billable resource — no AI Search, no agent wake, no App start.
+
+**Built:**
+- **`/api/readyz`** — Lakebase, the agent endpoint, the AI Search index and both committed
+  snapshots, each with its own status/detail/latency; **503 if any is down**. `/healthz` is
+  untouched and still always-200, because it is the container probe. The design point worth
+  keeping: the agent is checked with `serving_endpoints.get`, **never `query()`** — the second
+  wakes a scale-to-zero container and bills until it idles down, so a readiness probe would
+  cost money every time anyone loaded it. A mock in `tests/test_readyz.py` raises on `query`
+  so the cheap-and-wrong version cannot come back quietly.
+- **`scripts/provision_search.sh`** — idempotent, drop-detecting (I-105's signal is
+  `indexed_row_count` going *backwards*, not plateauing), reads the expected row count from the
+  source table instead of carrying a literal, and **defaults to a free read-only `--check`**.
+  Teardown is deliberately not in it.
+- **RAG retrieval evaluation** — `src/search/28_rag_eval.py` + job `fleetguard-rag-eval`, with
+  all the scoring arithmetic extracted to `src/fleetguard/retrieval_metrics.py` and 19 unit
+  tests, so it is not debugged inside a billed window. Two probe families: known-item (Recall@10
+  and MRR are meaningful — one relevant document) and topical (**Precision@10 and hit rate**,
+  because the relevant set runs to thousands of chunks and Recall@10 over it would read as
+  ~0.003 and mean nothing). It also re-runs the three I-040 behavioural checks at the shipped
+  scope, a debt open since the rescope. **Numbers are measured in Run 2**; the harness is what
+  landed today.
+- **The CDF fingerprint split** — cardinality every run, a content fingerprint scoped to the
+  keys above the watermark every run, and the unscoped one every 24 h and on any rebuild. The
+  scoped check is a *complete* check of what the incremental path touched; the unscoped one is
+  kept because a guard that shares its subject's assumption is not a guard.
+
+**One deferral reason was wrong, in the opposite direction to I-115's lesson.** I-115 deferred
+the fingerprint split because *"the trigger is `PAUSED`"*. It is **UNPAUSED**, and has been
+since 2026-09-08 — the claim was copied from `CLAUDE.md`'s stale example block rather than read
+off `resources/cdf_to_gold.job.yml`. The conclusion survived (the cost is near zero *because the
+App is stopped*), which is exactly why nothing caught it: **a right answer reached by a wrong
+reason signals nothing.** It also changed the verification — an unpaused trigger means deployed
+code runs unattended on the next agent write, i.e. during Run 2, so the job was run once by hand
+first.
+
+**Documentation reconciled** — the batch a doc review raised, each figure re-counted rather than
+copied:
+- **`ARCHITECTURE.md` §2 said Phases 6, 8 and 11 were "Not started"** while the App had been
+  deployed, browser-verified and exercised across all ten DEMO beats. This is the living spec;
+  a reader taking it at its word concluded the console did not exist. STATUS's phase table was
+  right throughout — the two were simply never read against each other.
+- `ARCHITECTURE.md` said **"five exceptions"** in §9.1 and **"four"** 78 lines later.
+- **"An index rebuild is ~7 h"** in `ARCHITECTURE.md` and `EVIDENCE.md` — the superseded
+  1.75M-chunk figure, and the exact stale cost I-115's lesson was about. It is ~39 min.
+- Agent **"6 tools" → 7** (`watch_campaign` was added and never counted here).
+- Test counts **341 → 627** and **30 → 153**, and the runtime **~1 s → ~45 s** — the time
+  matters more than the count: `tests/pipelines/` starts a local Spark session, so this is no
+  longer a check you run without noticing.
+- **"nine beats" → ten** in four places.
+- The Phase 6 and 8 cells **opened by announcing a live Render deployment and a dead URL**, with
+  the removal buried hundreds of words later. Current state now leads; the history is kept.
+- **`docs/ISSUES.md` had no I-036 entry** — cited three times as *the* naming decision, so the
+  references made it look documented. Reconstructed from what those citations establish.
+- One canonical documentation map (README); STATUS keeps only the lifecycle table.
+- `docs/API.md` gained `/api/corpus` and `/readyz`, and the reasoning for exactly two public
+  routes.
+
+**Verified offline:** 627 tests (603 passed / 24 skipped), 153 vitest, ruff clean, typecheck
+clean. No frontend changed, so no console rebuild was needed.
+
+---
+
 ## SESSION 2026-09-23 (later) — third external review triaged; 8 fixes landed offline
 
 **Branch `fix/repo-review-round-3`.** A third external review (`repo-review.md`, gitignored)
@@ -56,32 +125,7 @@ now say "measured in Run 2" rather than carrying a figure that is about to be wr
 **Verified offline only:** 562 pytest passed / 24 skipped, 149 vitest, ruff clean, typecheck
 clean, console bundle rebuilt. **No workspace calls were made this session.**
 
-### Next session — finish I-115's round (4 items, in this order)
-
-**The first half of this round is already on `main`** (squash-merged 2026-09-23) — the eight
-I-115 fixes, the print/forced-colors CSS and the Home redesign. Start these four on a **new
-branch**. None of them need the workspace to *write*, and the first two are the ones that pay
-off before Run 2 rather than after it.
-
-1. **`/readyz`** — `main.py`'s `/healthz` reports process liveness only, so it answers `ok`
-   with AI Search deleted, the agent stopped and Lakebase unreachable, which is *exactly the
-   state everything is in right now*. Check Lakebase, the agent endpoint, the index and the
-   evidence snapshot. Best cost-to-benefit item in the review and it directly de-risks Run 2's
-   own verification step.
-2. **`scripts/provision_search.sh`** — idempotent wrapper over the Run 1-proven commands in
-   `docs/RUNBOOK.md`, with polling and a retrieval smoke test. **Declarative management is
-   impossible, not merely unbuilt:** DABs exposes only `apps`, `dashboards`, `jobs`,
-   `pipelines`, so a script is the ceiling. Write it offline; it first *runs* in Run 2.
-3. **RAG retrieval evaluation** — the harness can be written offline, but it cannot produce
-   numbers until the index is live, so it lands *in* Run 2. Even 50 questions with Recall@5 /
-   MRR beats "Vector Search is implemented". Publish what it measures, including if it is
-   poor — same rule I-111 applied to the hybrid-query probe.
-4. **Split the CDF fingerprint** into a per-trigger lightweight assertion plus a periodic full
-   reconciliation. Correct, and genuinely low priority: the trigger is `PAUSED`, so the cost
-   is not being paid today.
-
-**Do not start these by rebuilding anything.** Everything above is offline work; the index and
-the agent stay down until Run 2 (2–3 October) by design.
+### ~~Next session — finish I-115's round (4 items)~~ **ALL FOUR DONE 2026-09-24 — see below**
 
 ---
 
@@ -315,7 +359,8 @@ table again at step 3.6 (Run 2) — do not append a second table, replace these 
 | # | Step | Time |
 |---|---|---|
 | **3.0** | **NEW — rebuild `silver_complaint_chunk_indexed` first** (`bundle run build_chunk_index_source`). I-115 widened the fleet match; building the index off the old table leaves all 2,116 F-250s out of retrieval. Record the count — four docs say "measured in Run 2" and are waiting on it — then `scripts/export_corpus.py` | ~5 min |
-| 3.1 | **Recreate the index.** Same config; **not** the same row count — re-derive the poll interval from 3.0's figure | 27 min – 6.7 h |
+| 3.1 | **Recreate the index** — now `./scripts/provision_search.sh --create --profile abhi` (I-116): idempotent, polls, and treats a *drop* in `indexed_row_count` as fatal rather than waiting through an I-105 restart-from-zero. Same config; **not** the same row count — it reads the expected figure from the table 3.0 rebuilt | ~30-40 min |
+| **3.1a** | **NEW — run the RAG retrieval evaluation** (`bundle run rag_eval`). Needs only the index, so it goes here rather than at the end. Writes `ops_rag_eval`; also re-runs the three I-040 behavioural checks at the shipped scope, open since the rescope. **Record the figures in `EVIDENCE.md` as measured, including if they are poor** | ~10 min |
 | 3.2 | **Start the App**, then `bundle run fleetguard_console` — **REQUIRED**, the console changed (Home redesign, `/api/corpus`). `apps start` alone re-deploys the old source path (I-097) | ~5 min |
 | 3.3 | **Rebuild + redeploy the agent** (`agent_build`, then `deploy_agent`) — **REQUIRED**, v7 predates I-115's four agent fixes. Then confirm the new version actually takes traffic (I-050/I-092, four recurrences) | ~15 min |
 | 3.4 | **Abbreviated verification**, not the full hour: one agent question, one write, confirm it reaches UC | ~15 min |
@@ -357,7 +402,7 @@ warehouse and Lakebase — and `DEMO.md`'s 2026-09-09 decision already lets the 
 as "offline". What that forfeits is the RAG demonstration, which is a graded category.
 
 
-**Last updated:** 2026-09-23 · previously 2026-09-20 · **MVP target: 7 September — MET** · **Two-window plan: Run 1 DONE 2026-09-23, Run 2 targeted 2–3 October**
+**Last updated:** 2026-09-24 · previously 2026-09-23 · **MVP target: 7 September — MET** · **Two-window plan: Run 1 DONE 2026-09-23, Run 2 targeted 2–3 October**
 
 > **RUN 1 COMPLETE 2026-09-23 — the first full end-to-end test with billable resources since
 > 2026-09-11.** AI Search rebuilt at the rescoped fleet make/model scope (115,499 chunks,
@@ -402,9 +447,9 @@ next-actions list in priority order.** Design lives in `FleetGuard_Proposal.md`,
 | **3 — Chunking + AI Search** | ✅ **DONE** | Index built and torn down twice at the original full-corpus scope (**1,746,601 chunks**, done-when re-verified there — hybrid differs from ANN on 2 of 3 queries, harm filter 10/10, near-duplicates 10/10 distinct). **Rescoped and rebuilt 2026-09-23** at the fleet make/model scope (**115,499 chunks, `ready: true`**, I-111) for Run 1; the three behavioural checks re-passed at a 10K smoke scope (I-112), but the full done-when sweep has not yet been re-run and republished at 115,499 — tracked above. |
 | **4 — Model B + golden set** | ✅ **DONE** | 765-pair golden set from NHTSA's own recall text (real, not synthetic, E-08). Precision **83.7%**, recall **96.3%**, ROC-AUC 0.925 — published on the evidence page. Caught and fixed its own training-feature leakage before reporting (I-060). |
 | **5 — Lakebase + CDF** | ✅ **DONE** | 11 tables, all `REPLICA IDENTITY FULL`; **all 11 CDF history tables exist with exact names, no `_1` suffixes** (I-044 — CDF replicates DDL, correcting an earlier wrong claim). Reference data loaded: depot 60, vehicle 20,000, campaigns 592. **Capture latency measured: 7.1–15.6 s** (I-046). **Exposure loaded** — `EXACT` scope, 263,686 rows deduplicated to **118,323** distinct (vin, campaign) pairs. |
-| **6 — OAuth wiring** | ✅ **DONE — with a login** | Auth seam (E-13) tested on both surfaces, 401 on failure, never an SP fallback. **U2M retired (E-14)** — needs an account-admin OAuth registration we do not have, and OBO on Databricks Apps is stronger with less setup. **Render now has a working sign-in (2026-09-02): GitHub OAuth, `app-login` mode, two-tier authorization (read for anyone signed in; approve only for `FLEETGUARD_APPROVERS`).** Verified end to end in a browser. **U2M code built and flipped live 2026-09-03** (`auth/databricks_oauth.py` + `routers/databricks_auth_routes.py`) — the account-admin OAuth registration landed the same day, closing E-14's blocker, so `render.yaml` on `main` now runs `FLEETGUARD_AUTH_MODE=render-u2m` instead of `app-login`. **The judges have Databricks identities in this shared workspace**, so this is the strong path for them: sign in as themselves, UC/Postgres enforce for real, not simulated. Found and closed the same day, before flipping: the approver allowlist was silently skipped for any real-Databricks-token principal, which would have let any workspace identity (judges included) approve, not just view — `approval.py`'s gate is now unconditional on `FLEETGUARD_APPROVERS`, tested across all four principal sources (`tests/test_approval_gate.py`). **Not yet confirmed:** a real browser completing the login round-trip live — see "Next" item 0. **SUPERSEDED 2026-09-10 — Render removed.** The `render-u2m` login was never confirmed in a browser and now never will be: it was blocked on an account admin granting `all-apis`, and no narrower assignable scope covers Lakebase *and* Model Serving. Both Render auth paths are on `deploy/render`. The seam remains, with two providers (`databricks-apps`, `static-dev`); the approver-gate fix survives unchanged in `authz.py` and is still tested across every source the seam can produce. |
-| **7 — Agent tools + write path** | ✅ **DONE** | Write path end to end: `POST /campaigns/{id}/service-campaign` → 1 service campaign + N work orders + audit row in **one transaction** → CDF → UC. Agent: `ResponsesAgent`, **6 tools** (complaint search · fleet exposure · **fleet models** · **emerging signals** · propose campaign · **open defect signal — the write**), MLflow tracing, smoke tests pass against live index + warehouse. *(The sixth, `lookup_fleet_models`, is written and live-verified but **not yet deployed** — the endpoint still serves v5; see "Next" item 0.)* **The agent proposes, never launches** — asserted in the build, so a change that lets it self-launch fails. **The agent now performs a real business write (v5, 2026-09-08):** `open_defect_signal` returns an action envelope; the FastAPI app validates it and executes the insert under the **caller's own OBO token** (the serving endpoint has no Postgres path, and all three routes to giving it one are closed on this account). Verified live from the browser: question → complaint retrieval → agent decision → Lakebase insert + audit row + the first-ever `fleetguard_agent_action` row in one transaction → CDF → UC → Emerging tab. See `ARCHITECTURE.md` §7.1. **Logged, validated, registered and DEPLOYED** 2026-09-02: endpoint `agents_bootcamp_students-fleetguard-fleetguard_agent`, inference tables on (`fleetguard_agent_payload`). Console chat panel wired (`POST /api/chat`, caller's token, non-streaming). **The first deployed version answered a 25-vehicle recall with "no vehicles affected" (I-050)** — undeclared table resource plus an unchecked statement status. **Fixed in version 2, verified live:** returns 25 vehicles / 22 depots / EXACT with the tier stated, and a nonexistent campaign returns a distinguishable "the lookup ran and found zero". |
-| **8 — App + external surface** | 🟡 **Public surface live** | FastAPI serves `/api/*` **and** the built React console from one service — no CORS, SPA deep-link fallback. Four views: queue (+ assistant panel), campaign approval, **Emerging signals**, evidence. Verified end to end against live Lakebase. **Deployed to Render 2026-09-02** — https://fleetguard-console-abhi.onrender.com, chat panel included. **End-to-end review + visual redesign, 2026-09-03** — 8 bugs found and fixed, 49 new tests, console restyled (same colour-rationing rule, more depth/craft); verified against a live headless-browser check of both the local build and the redeployed Render site. **Auth mode flipped 2026-09-03** from `app-login`+snapshot to `render-u2m`+live Lakebase (E-14's account-admin blocker resolved) — the host now holds real per-user Databricks credentials via U2M OAuth rather than none at all. Anonymous visitors still land on Evidence, not a login wall (I-057) — that route is unauthenticated regardless of mode. **THE DATABRICKS APP IS BUILT, DEPLOYED AND VERIFIED IN A REAL BROWSER — 2026-09-08.** `fleetguard-console`, url `https://fleetguard-console-1352785079224954.aws.databricksapps.com`, **currently STOPPED** (brought up to fix I-086, stopped again once verified; `databricks apps start fleetguard-console`, ~2 min, to bring it back). Deployed from `app/backend/` with `app/backend/app.yaml`; the console bundle is committed so no Node build runs on the Apps runtime. **Seven routes verified under a programmatic OBO token that morning** — `/api/me` resolved the caller with `token_source: databricks-apps`, then queue 50 · signals 50 (9 live, 4 fleet-relevant) · service-campaigns 1 · depot-risk 60 · work-orders 25 · evidence 1.44×/z 2.62 — matching the local surface exactly. **That evening the first real *browser* sign-in failed on every Lakebase route** with `403 Forbidden — Invalid scope, required scopes: postgres`, surviving restart, sign-out/sign-in and an explicit re-application of `user_api_scopes`. **Root-caused and FIXED the same evening (I-086):** OBO scope lives in **three** planes, not two — workspace allowlist, app resource, **and a sticky per-user consent grant** that was captured before I-083's scope fix landed and never widened afterwards. Revoking it via the self-service `DELETE /api/2.0/oauth-app-integrations/<id>/user-consent/me` and re-consenting in a fresh browser session fixed it; `user_consented_scopes` now carries `postgres`/`sql`/`model-serving` and the console works end to end in the browser. **Two corrections came out of this:** it was never a regression (the consent record proves no browser session had ever held `postgres` — the morning pass was programmatic, and "verified live" had not recorded which client produced it), and it never needed account-admin access (`/user-consent/me` is self-service; one `Not Found` on a different object had been generalised into a wall on the whole problem). **The App holds no privileges of its own:** `db.py` mints the Lakebase credential from the *caller's* forwarded token, so there is no `database` or `serving-endpoint` resource on the app and every read runs as the signed-in human, with Postgres RLS applying as it does to a UI click. E-13's auth seam did its job — the move needed configuration plus one line, not a rewrite. Three obstacles, none reproducible off-platform: **I-082** (Apps injects `DATABRICKS_CLIENT_ID`/`SECRET`, so passing the caller's token makes the SDK refuse — needs `auth_type="pat"`), **I-083** (`user_authorization` in `app.yaml` is silently ignored; scopes go on the app resource, **and the app must be restarted** or a granted scope returns the identical 403 as a missing one). **HOSTING DIRECTION CHANGED 2026-09-08 — read this before the Render detail above.** Render is **no longer the assumed demo surface**: near-term verification is the **local browser** against live Lakebase (`scripts/run_local_static_dev.sh`, verified end to end and screenshotted 2026-09-08), and **Databricks Apps is now the primary target (~20 Sept)**, not a second surface alongside Render. The Render deployment and all three of its auth paths (`app-login`, `render-u2m`, the GitHub OAuth wiring) are **deliberately kept and still working** — the cost of keeping them is zero, re-adding them later is not — so everything above remains true, just no longer the plan of record. The `render-u2m` browser login is still unconfirmed live and no longer blocks anything. See Phase 11 for the rescope this triggered. **REVERSED 2026-09-10 — Render REMOVED.** "Zero cost to keep" stopped being true once it was clearly never going to be demoed: it meant carrying ~600 lines of OAuth/session/cookie code and a sign-in screen no supported surface could reach, plus Render prose in every living doc, and one auth path that could not be demonstrated at all. Removed from `main`, preserved whole on **`deploy/render`**. The removal touched **no route handler** — E-13's seam claim, tested by an actual removal. |
+| **6 — OAuth wiring** | ✅ **DONE** | **CURRENT STATE (2026-09-24): one auth path ships — Databricks Apps OBO, plus `static-dev` for local work. U2M and the GitHub login are GONE from `main`, preserved on `deploy/render`; every Render URL below is DEAD.** The history is kept because it records two findings that still apply (the approver-gate fix, and why no narrower scope than `all-apis` exists for a custom OAuth integration) — but read it as history, not as state. It is retained *after* this line rather than before it because until 2026-09-24 the cell opened with "Render now has a working sign-in" and buried the removal several hundred words down, which reads as a live deployment to anyone who does not finish the paragraph. Auth seam (E-13) tested on both surfaces, 401 on failure, never an SP fallback. **U2M retired (E-14)** — needs an account-admin OAuth registration we do not have, and OBO on Databricks Apps is stronger with less setup. **Render now has a working sign-in (2026-09-02): GitHub OAuth, `app-login` mode, two-tier authorization (read for anyone signed in; approve only for `FLEETGUARD_APPROVERS`).** Verified end to end in a browser. **U2M code built and flipped live 2026-09-03** (`auth/databricks_oauth.py` + `routers/databricks_auth_routes.py`) — the account-admin OAuth registration landed the same day, closing E-14's blocker, so `render.yaml` on `main` now runs `FLEETGUARD_AUTH_MODE=render-u2m` instead of `app-login`. **The judges have Databricks identities in this shared workspace**, so this is the strong path for them: sign in as themselves, UC/Postgres enforce for real, not simulated. Found and closed the same day, before flipping: the approver allowlist was silently skipped for any real-Databricks-token principal, which would have let any workspace identity (judges included) approve, not just view — `approval.py`'s gate is now unconditional on `FLEETGUARD_APPROVERS`, tested across all four principal sources (`tests/test_approval_gate.py`). **Not yet confirmed:** a real browser completing the login round-trip live — see "Next" item 0. **SUPERSEDED 2026-09-10 — Render removed.** The `render-u2m` login was never confirmed in a browser and now never will be: it was blocked on an account admin granting `all-apis`, and no narrower assignable scope covers Lakebase *and* Model Serving. Both Render auth paths are on `deploy/render`. The seam remains, with two providers (`databricks-apps`, `static-dev`); the approver-gate fix survives unchanged in `authz.py` and is still tested across every source the seam can produce. |
+| **7 — Agent tools + write path** | ✅ **DONE** | Write path end to end: `POST /campaigns/{id}/service-campaign` → 1 service campaign + N work orders + audit row in **one transaction** → CDF → UC. Agent: `ResponsesAgent`, **7 tools** (complaint search · fleet exposure · fleet models · emerging signals · propose campaign · **open defect signal — a write** · **watch campaign — a write**), MLflow tracing, smoke tests pass against live index + warehouse. *(This cell said **6 tools** until 2026-09-24 — `watch_campaign` was added and never counted here. `ARCHITECTURE.md` §7 has said seven throughout, and the deployed v7 serves all seven.)* **The agent proposes, never launches** — asserted in the build, so a change that lets it self-launch fails. **The agent now performs a real business write (v5, 2026-09-08):** `open_defect_signal` returns an action envelope; the FastAPI app validates it and executes the insert under the **caller's own OBO token** (the serving endpoint has no Postgres path, and all three routes to giving it one are closed on this account). Verified live from the browser: question → complaint retrieval → agent decision → Lakebase insert + audit row + the first-ever `fleetguard_agent_action` row in one transaction → CDF → UC → Emerging tab. See `ARCHITECTURE.md` §7.1. **Logged, validated, registered and DEPLOYED** 2026-09-02: endpoint `agents_bootcamp_students-fleetguard-fleetguard_agent`, inference tables on (`fleetguard_agent_payload`). Console chat panel wired (`POST /api/chat`, caller's token, non-streaming). **The first deployed version answered a 25-vehicle recall with "no vehicles affected" (I-050)** — undeclared table resource plus an unchecked statement status. **Fixed in version 2, verified live:** returns 25 vehicles / 22 depots / EXACT with the tier stated, and a nonexistent campaign returns a distinguishable "the lookup ran and found zero". |
+| **8 — App + external surface** | ✅ **DONE — currently stopped on purpose** | **CURRENT STATE (2026-09-24): the surface is `fleetguard-console` on Databricks Apps. It is STOPPED between the two online windows (`databricks apps start fleetguard-console`, ~2 min) and was verified across all ten `DEMO.md` beats in Run 1 (I-113). The Render deployment and its URL below are DEAD — removed 2026-09-10, preserved on `deploy/render`.** Same reordering reason as Phase 6: this cell used to open by announcing a Render deployment and a live URL. FastAPI serves `/api/*` **and** the built React console from one service — no CORS, SPA deep-link fallback. Four views: queue (+ assistant panel), campaign approval, **Emerging signals**, evidence. Verified end to end against live Lakebase. **Deployed to Render 2026-09-02** — https://fleetguard-console-abhi.onrender.com, chat panel included. **End-to-end review + visual redesign, 2026-09-03** — 8 bugs found and fixed, 49 new tests, console restyled (same colour-rationing rule, more depth/craft); verified against a live headless-browser check of both the local build and the redeployed Render site. **Auth mode flipped 2026-09-03** from `app-login`+snapshot to `render-u2m`+live Lakebase (E-14's account-admin blocker resolved) — the host now holds real per-user Databricks credentials via U2M OAuth rather than none at all. Anonymous visitors still land on Evidence, not a login wall (I-057) — that route is unauthenticated regardless of mode. **THE DATABRICKS APP IS BUILT, DEPLOYED AND VERIFIED IN A REAL BROWSER — 2026-09-08.** `fleetguard-console`, url `https://fleetguard-console-1352785079224954.aws.databricksapps.com`, **currently STOPPED** (brought up to fix I-086, stopped again once verified; `databricks apps start fleetguard-console`, ~2 min, to bring it back). Deployed from `app/backend/` with `app/backend/app.yaml`; the console bundle is committed so no Node build runs on the Apps runtime. **Seven routes verified under a programmatic OBO token that morning** — `/api/me` resolved the caller with `token_source: databricks-apps`, then queue 50 · signals 50 (9 live, 4 fleet-relevant) · service-campaigns 1 · depot-risk 60 · work-orders 25 · evidence 1.44×/z 2.62 — matching the local surface exactly. **That evening the first real *browser* sign-in failed on every Lakebase route** with `403 Forbidden — Invalid scope, required scopes: postgres`, surviving restart, sign-out/sign-in and an explicit re-application of `user_api_scopes`. **Root-caused and FIXED the same evening (I-086):** OBO scope lives in **three** planes, not two — workspace allowlist, app resource, **and a sticky per-user consent grant** that was captured before I-083's scope fix landed and never widened afterwards. Revoking it via the self-service `DELETE /api/2.0/oauth-app-integrations/<id>/user-consent/me` and re-consenting in a fresh browser session fixed it; `user_consented_scopes` now carries `postgres`/`sql`/`model-serving` and the console works end to end in the browser. **Two corrections came out of this:** it was never a regression (the consent record proves no browser session had ever held `postgres` — the morning pass was programmatic, and "verified live" had not recorded which client produced it), and it never needed account-admin access (`/user-consent/me` is self-service; one `Not Found` on a different object had been generalised into a wall on the whole problem). **The App holds no privileges of its own:** `db.py` mints the Lakebase credential from the *caller's* forwarded token, so there is no `database` or `serving-endpoint` resource on the app and every read runs as the signed-in human, with Postgres RLS applying as it does to a UI click. E-13's auth seam did its job — the move needed configuration plus one line, not a rewrite. Three obstacles, none reproducible off-platform: **I-082** (Apps injects `DATABRICKS_CLIENT_ID`/`SECRET`, so passing the caller's token makes the SDK refuse — needs `auth_type="pat"`), **I-083** (`user_authorization` in `app.yaml` is silently ignored; scopes go on the app resource, **and the app must be restarted** or a granted scope returns the identical 403 as a missing one). **HOSTING DIRECTION CHANGED 2026-09-08 — read this before the Render detail above.** Render is **no longer the assumed demo surface**: near-term verification is the **local browser** against live Lakebase (`scripts/run_local_static_dev.sh`, verified end to end and screenshotted 2026-09-08), and **Databricks Apps is now the primary target (~20 Sept)**, not a second surface alongside Render. The Render deployment and all three of its auth paths (`app-login`, `render-u2m`, the GitHub OAuth wiring) are **deliberately kept and still working** — the cost of keeping them is zero, re-adding them later is not — so everything above remains true, just no longer the plan of record. The `render-u2m` browser login is still unconfirmed live and no longer blocks anything. See Phase 11 for the rescope this triggered. **REVERSED 2026-09-10 — Render REMOVED.** "Zero cost to keep" stopped being true once it was clearly never going to be demoed: it meant carrying ~600 lines of OAuth/session/cookie code and a sign-in screen no supported surface could reach, plus Render prose in every living doc, and one auth path that could not be demonstrated at all. Removed from `main`, preserved whole on **`deploy/render`**. The removal touched **no route handler** — E-13's seam claim, tested by an actual removal. |
 | **9 — Model A + backtest** | ✅ **DONE — result is negative** | **The semantic hypothesis is falsified (I-049).** Subdivision *lowered* detection 13.3% → 11.2%, left lift flat (1.24× → 1.26×), and gave **0.0 days** extra lead on shared detections. Published result stays the volume-anomaly measurement: **16.0% vs 11.1%, 1.44×, p≈0.009**. Done-when explicitly required publishing a possibly-negative number as-is; met. |
 | **10 — Governance** | ✅ **Visible slice DONE** | Postgres RLS on `fleetguard_vehicle`, `ENABLE`+`FORCE`, proved under real toggled states including the exposure join. Fail-open, nobody enrolled yet — mechanism real, enrollment is future work. Not the full ABAC/DQ-monitor matrix, by design. |
 | **11 — Deployment hardening** | 🟡 **Rescoped 2026-09-08** | **Hosting direction changed: Render is no longer the assumed demo surface.** Near-term verification is the **local browser** against live Lakebase (`scripts/run_local_static_dev.sh`); the eventual target is **Databricks Apps**. ~~**Render integration is deliberately KEPT, not removed**~~ — **reversed 2026-09-10: Render was removed** from `main` and preserved on `deploy/render`. "Render always-on + pinger" left the phase in the 2026-09-08 rescope and the integration itself followed. **The `table_update` trigger is BUILT** (`fleetguard-cdf-to-gold`, job `851598550157757`, notebook `src/lakebase/21_cdf_to_gold_facts.py`) — the last unbuilt link in the data loop. It derives `gold_agent_action` and `gold_defect_signal_current` from the CDF history tables and reconciles exactly against live Postgres (**2 = 2**, **50 = 50**). **UNPAUSED and verified firing on its own, 2026-09-08** — the project's first non-manual job, and the done-when is now met by observation rather than by construction: a real agent write and a real delete each propagated to UC **with no manual intervention**. Two documented "facts" turned out to be wrong on contact (**I-080**, **I-081**). **Measured commit→gold-fact: 155 s and 269 s (n=2, report as ≈2.5–4.5 min).** **Seeded demo state DONE 2026-09-09 — the phase is complete.** `scripts/seed_demo_state.py` drives the **real API**, not direct INSERTs, so every assignment passes the depot-consistency check and every write leaves a genuine `fleetguard_audit_log` row from the handler an operator's click uses. 711 writes; audit log **11 → 723 rows**, work orders **230 → 331** across **3** campaigns, costs **1 → 144** ($84,409.68). Re-running writes **0** — verified, not assumed. |
@@ -622,8 +667,8 @@ Three layers, doing different jobs. Full rationale in `src/pipelines/expectation
 
 | Layer | What | Run |
 |---|---|---|
-| **Unit — backend** (`tests/*.py`, 23 files) | Pure logic, no Databricks: VIN/chunking/naming, the auth seam, scoping, db helpers, the evaluation scorer's negation logic. **341 tests, ~1 s.** | `pytest` |
-| **Unit — frontend** (`app/frontend/src/lib/*.test.ts`, 4 files) | `api.ts`'s error handling, `theme.ts`, `markdown.ts`, and `dates.ts`'s overdue comparison (I-087 — mutation-checked to fail in **both** UTC+2 and UTC-7, so it catches a timezone bug from the timezone where that bug is invisible). Zero frontend tests existed before 2026-09-02. **30 tests.** | `npm --prefix app/frontend run test` |
+| **Unit — backend** (`tests/*.py`) | Pure logic, no Databricks: VIN/chunking/naming, the auth seam, scoping, db helpers, the retrieval scorer, the evaluation scorer's negation logic. **627 tests (603 pass / 24 skip), ~45 s** — measured 2026-09-24. It was "341 tests, ~1 s"; both halves are now wrong, and the *time* matters more than the count: `tests/pipelines/` (2026-09-17) starts a local Spark session, so JVM startup dominates and this is no longer a check you run without noticing. | `pytest` |
+| **Unit — frontend** (`app/frontend/src/lib/*.test.ts`, 4 files) | `api.ts`'s error handling, `theme.ts`, `markdown.ts`, and `dates.ts`'s overdue comparison (I-087 — mutation-checked to fail in **both** UTC+2 and UTC-7, so it catches a timezone bug from the timezone where that bug is invisible). Zero frontend tests existed before 2026-09-02. **153 tests across 23 files** — measured 2026-09-24; this said 30. | `npm --prefix app/frontend run test` |
 | **LDP expectations** (`src/pipelines/**/*.sql`) | Row-level, in-pipeline. Post-routing invariants + explicit `_dq_failures` quarantine split. | runs with the pipeline |
 | **Data quality** (`tests/test_data_quality.py`) | Cross-table invariants against live tables. **21 tests, 73 s.** | `pytest -m integration --run-integration` |
 
@@ -751,18 +796,19 @@ failed during the build or exists because something adjacent to it failed silent
 Each document has exactly one job and a stated lifecycle. A frozen doc that gets edited
 loses its integrity; a living doc that doesn't get edited becomes a lie.
 
-| File | Purpose | Lifecycle |
-|---|---|---|
-| **`ARCHITECTURE.md`** | **What the system is — the living spec** | Living; update with the code |
-| `ENHANCEMENTS.md` | Evaluated backlog — adopt / defer / reject, each with a reason | Living |
-| `FleetGuard_Proposal.md` | What was *proposed*, before the build | **FROZEN** 2026-08-31 |
-| `STATUS.md` | This page — where the build has got to | Living, high-churn |
-| **`DEMO.md`** | **The demo runbook — pre-flight, the nine beats, numbers with sources, what not to claim** | Living |
-| **`RUNBOOK.md`** | **The Run 1 / Run 2 command layer for the two-window action plan below — exact CLI/SDK commands per step** | Living |
-| `ISSUES.md` | Every problem hit, root cause, resolution. **Silent failures flagged.** | Append-only |
-| `../PLAN.md` | Phase sequencing and definitions of done | Living |
-| `../CLAUDE.md` | Verified facts that must not be re-derived | Living |
-| `fleetguard_e2e_current.html` / `fleetguard_identity_current.html` | Diagrams (editable, diffable) | Living |
+**The document map lives in [`README.md`](../README.md#documentation-map) — read it there.**
+A second copy used to sit here, and by 2026-09-24 the two disagreed. Two lists of the same nine
+documents is two things to keep true, and this is the higher-churn page of the pair, so the
+duplicate is the one that goes.
+
+What this page adds, and the README does not, is **lifecycle** — which of them may be edited:
+
+| Lifecycle | Files |
+|---|---|
+| **Living — update with the code** | `ARCHITECTURE.md` (the spec), `DEMO.md`, `RUNBOOK.md`, `ENHANCEMENTS.md`, `../PLAN.md`, `../CLAUDE.md`, the two `*_current.html` diagrams |
+| **Living, high-churn** | `STATUS.md` — this page |
+| **Append-only** | `ISSUES.md` — every problem hit, root cause, resolution; **silent failures flagged** |
+| **FROZEN 2026-08-31 — never "fixed"** | `FleetGuard_Proposal.md` |
 
 The proposal is **not** updated to match findings. Its header tabulates the known
 contradictions with measured results — that gap is the record of what the build taught us,
@@ -1327,7 +1373,7 @@ Everything between here and the pre-submission plan is history, kept for the rec
 | **RLS caveat recorded** | All three judges hold `bypassrls=True` (the owner does not), so Postgres RLS does **not** apply to their sessions — they cannot verify Phase 10 by looking at their own. Recorded in DEMO.md §5 and README. |
 | **Approval timing decided** | Judges may approve **after submission, not before** — a pre-submission approval writes ~200 rows into append-only CDF and permanently alters the state the project is graded on. Raghu's standing instruction is still the blanket "please don't"; it needs superseding explicitly. |
 | **Judges given `CAN_MANAGE`** | Upgraded from `CAN_USE` so they can **start the app themselves** — a bootcamp project should not need the owner awake to be looked at. `CAN_USE` cannot start stopped compute and there is no level in between, so this is the smallest grant that works; it also carries deploy/update/delete. `app.yaml` was checked for secrets first — there are none. |
-| **`docs/DEMO.md` written** | The runbook that did not exist: pre-flight with measured timings, nine beats, every number with its source, and an explicit *what not to claim*. |
+| **`docs/DEMO.md` written** | The runbook that did not exist: pre-flight with measured timings, ten beats, every number with its source, and an explicit *what not to claim*. |
 | **A1 largely retired** | **All three judges already hold Lakebase roles**, so I-084's "succeeds at login, 500s on every data route" cannot happen to the judging audience. What is left is a robustness question no judge can answer. |
 
 **MVP has been complete since 7 September, five days early.** The vertical slice runs end to
@@ -1468,7 +1514,7 @@ Individually verified; **never verified in composition**. A dry run is the only 
 tests the composition, and this project's record is that composition is where it breaks.
 
 Walk `DEMO.md` end to end: start the App (~2 min), warm the agent (first question ~47 s cold),
-then all nine beats and 9 tabs. Budget **~1 hour**. Cost is App compute plus one agent wake.
+then all ten beats and 9 tabs. Budget **~1 hour**. Cost is App compute plus one agent wake.
 
 ### 2. Verify the agent endpoint is *ready*, not merely configured
 

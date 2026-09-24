@@ -1,0 +1,35 @@
+# RAG retrieval evaluation — the measurement, not the wiring.
+#
+# This job only produces numbers while `complaint_chunk_idx` is live, which is a costed window
+# (~$6.72/day, and billing runs 24 h past the last index delete). So it is bound here now, in
+# a free offline session, and first RUN in Run 2 alongside the index rebuild it depends on.
+# Binding it early is the point: the alternative is writing bundle YAML at 11pm on 2 October.
+#
+# NO `base_parameters`, for the same reason `evaluate_agent.job.yml` has none — `bundle
+# generate` will happily copy a widget default out of a live job and pin it forever (I-098,
+# which re-created I-094 one layer up). The notebook's SEED is a module constant precisely so
+# two runs over the same index are comparable; it is not a knob to set per-run, and a run with
+# a different seed is a different evaluation rather than a repeat of this one.
+#
+# Timeout is 1 h: 200 index queries plus three behavioural checks. If it approaches that, the
+# index is the problem, not the notebook.
+
+resources:
+  jobs:
+    rag_eval:
+      name: fleetguard-rag-eval
+      tasks:
+        - task_key: evaluate_retrieval
+          disabled: false
+          email_notifications: {}
+          notebook_task:
+            notebook_path: ../src/search/28_rag_eval.py
+            source: WORKSPACE
+          run_if: ALL_SUCCESS
+          timeout_seconds: 3600
+      email_notifications: {}
+      max_concurrent_runs: 1
+      queue:
+        enabled: true
+      timeout_seconds: 0
+      webhook_notifications: {}

@@ -4,4 +4,4 @@ Pure functions extracted from the Databricks notebooks so they can be unit-teste
 platform. The notebooks are the deployment surface; this package is the specification.
 """
 
-__all__ = ["chunking", "http_retry", "naming", "vin"]
+__all__ = ["chunking", "http_retry", "naming", "retrieval_metrics", "vin"]

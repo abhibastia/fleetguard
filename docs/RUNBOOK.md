@@ -393,17 +393,49 @@ say "measured in Run 2" and are waiting for it. Then refresh what the console sh
 
 ### 3.1 — Recreate the index
 
-Same `create-index` command as step 1.2 — the *config* is unchanged. The **row count is not**:
-it now reflects the widened source table from 3.0, so expect more than 115,499.
+**Use the script (added 2026-09-24, I-116). It did not exist when this runbook was written.**
+
+```bash
+./scripts/provision_search.sh --check  --profile abhi   # free: what exists right now
+./scripts/provision_search.sh --create --profile abhi   # BILLS. prompts before the first charge
+```
+
+It runs exactly the step-1.2 commands below — the *config* is unchanged and was proven in Run 1
+— and adds the three things a command block cannot:
+
+- **idempotent**: `get-endpoint`/`get-index` first, so a re-run after a dropped connection
+  resumes instead of erroring on line one;
+- **reads the expected count** from the table 3.0 just rebuilt, rather than carrying a literal.
+  Do not expect 115,499 — I-115 widened the source and it is a strict superset;
+- **polls with drop detection**, and treats a *decrease* in `indexed_row_count` as fatal. That
+  is I-105's only visible symptom, and it is the failure that costs a day.
+
+The manual path still works and is what the script wraps, if it ever needs to be run by hand:
 
 ```bash
 databricks vector-search-endpoints create-endpoint fleetguard-vs STANDARD --profile abhi
 # then the same create-index command as 1.2
 ```
 
-**Re-derive the poll interval from 3.0's count** at ~4,336 rows/min, rather than reusing Run
-1's ~27 min. A larger corpus takes proportionally longer, and the I-105 drop-detection rule
-below matters more the longer the sync runs.
+Poll interval at ~4,336 rows/min from 3.0's count, not Run 1's ~27 min.
+
+### 3.1a — Run the RAG retrieval evaluation (NEW, 2026-09-24)
+
+Needs the index and nothing else, so it goes here rather than after the App work.
+
+```bash
+databricks bundle run rag_eval -t prod --profile abhi
+```
+
+Writes `ops_rag_eval` and re-runs the three I-040 behavioural checks at the shipped scope — a
+debt open since the rescope. **Record the figures in `docs/EVIDENCE.md` as measured, including
+if they are poor** (I-049 / I-111's rule).
+
+Read family A (known-item) first: it is a floor test, the query text is literally in the corpus,
+and a hit rate below ~0.9 means the *index* is wrong rather than the retriever. Check
+`indexed_row_count` against `silver_complaint_chunk_indexed` before concluding anything about
+retrieval quality. If HYBRID and ANN return identical results on check 3, the index subtype did
+not take and every number above it is void.
 
 ### 3.2 — Start the App
 

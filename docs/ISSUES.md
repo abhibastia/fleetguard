@@ -14,7 +14,8 @@ no error and passed the obvious check.
 
 | ID | Area | Issue | Status |
 |---|---|---|---|
-| I-115 | Review | Third external review triaged. **8 fixed offline** (branch `fix/repo-review-round-3`), incl. the exact-match AI Search join that excluded all 2,116 F-250s from retrieval. **None are live** — they take effect at Run 2's agent redeploy and index rebuild. **The widened join makes 115,499 a stale figure: Run 2 must measure and record the new count**, and the build script's assert is bounded, not exact, until it does. Outstanding: `/readyz`, `provision_search.sh`, RAG eval, CDF fingerprint split. | **open** |
+| I-116 | Review | I-115's four remaining items built offline: `/readyz` (demo readiness, free to poll — state reads only, never a query that would wake the agent), `scripts/provision_search.sh` (idempotent, drop-detecting), the RAG retrieval evaluation (harness + unit-tested metrics now; **numbers measured in Run 2**), and the CDF fingerprint split. Also corrected a wrong reason inside I-115 itself: that trigger is **UNPAUSED**, not paused. Remaining: the RAG numbers, which need the live index. | **open** — pending Run 2 |
+| I-115 | Review | Third external review triaged. **8 fixed offline** (branch `fix/repo-review-round-3`), incl. the exact-match AI Search join that excluded all 2,116 F-250s from retrieval. **None are live** — they take effect at Run 2's agent redeploy and index rebuild. **The widened join makes 115,499 a stale figure: Run 2 must measure and record the new count**, and the build script's assert is bounded, not exact, until it does. **All four outstanding items closed 2026-09-24 — see I-116.** | ✅ resolved |
 | I-112 | Phase 1 | Smoke index stuck at `ready: false` on two fresh attempts, **self-cleared** on the second — root cause unconfirmed, best guess is shared-workspace contention on a *first* index on a fresh endpoint (the real 115K build, on an already-warm endpoint, hit no stall at all same session). If it recurs in Run 2: wait, don't delete-and-recreate. | **watch** |
 | I-028 | Phase 5 | **RESOLVED 2026-08-31.** User confirmed authorisation to use the existing CDF mapping `databricks_postgres.bootcamp_students` → `bootcamp_students.bootcamp_cdc`. Naming decided as `fleetguard_<entity>` → `lb_fleetguard_<entity>_history` (see I-036). Phase 5 unparked. | ✅ resolved |
 | I-018 | Cost | **Sized (see I-025).** Embedding is ~275M tokens ≈ **$28–36 one-off** — not the problem. The AI Search *endpoint* is **~$403/month recurring** and is the real exposure. Mitigation is index lifecycle (billing stops 24h after the last index is deleted), not corpus trimming. Still open only as a decision on how long to leave the index up. | **open** |
@@ -29,6 +30,169 @@ no error and passed the obvious check.
 ---
 
 ## Tooling / process
+
+### I-116 — closing I-115's four open items, and a deferral reason that was wrong in the other direction
+
+*Date:* 2026-09-24 · *Status:* **3 of 4 complete; the fourth produces numbers in Run 2.**
+
+I-115 triaged a third external review and fixed eight things, leaving four. This is those four,
+all built offline, ten days before submission and eight days before Run 2 — which is the whole
+point of doing them now: the agent redeploy and the index rebuild they ride are Run 2 steps
+already committed to.
+
+**Cost of this round: ~55 seconds of serverless job compute**, for the one item that could not
+honestly be shipped unverified. Nothing else touched a billable resource.
+
+---
+
+#### 1. `/readyz` — and the reason it is free to call
+
+`/healthz` reported process liveness, auth mode and whether the console bundle was present. It
+returned `ok` throughout the period when the AI Search index was deleted, the agent endpoint was
+stopped and the App was down — *exactly* the state this project sits in between its two online
+windows. A judge pointing a browser at it learned nothing.
+
+`/api/readyz` checks Lakebase, the agent serving endpoint, the AI Search index and the two
+committed snapshots, reports each with its own status, detail and latency, and returns **503 if
+any of them is down**. `/healthz` is untouched and still always-200: it is the container probe,
+and turning that into something that can fail would be a different bug.
+
+**The design constraint worth recording.** The agent is checked with `serving_endpoints.get`,
+not `query()`. That distinction is invisible at the call site and is the difference between a
+free control-plane read and waking a scale-to-zero Small CPU container that then bills until it
+idles down — a readiness probe that costs money every time anyone loads it. The index is checked
+the same way with `get_index`. `tests/test_readyz.py` has a mock whose `query` raises with that
+explanation, so the cheap-and-wrong version cannot come back quietly.
+
+**It is authenticated, unlike `/healthz`.** The Lakebase check has to run under the *caller's*
+token: this app holds no privileges of its own (§8a), and a readiness check proving the *app's*
+access would be testing something the product does not do. The cost is that `/readyz` cannot
+serve as a container probe. That is the right trade — `/healthz` already is one.
+
+#### 2. `scripts/provision_search.sh`
+
+The review called AI Search provisioning "a runbook, not a script", which I-115 recorded as
+partially overstated: `docs/RUNBOOK.md` holds the exact commands and Run 1 executed them start
+to finish. What a documented sequence is not is *idempotent*, and it does not poll.
+
+The script wraps the Run 1-proven commands — including the `--json`-excludes-positional-args
+form Run 1 discovered the hard way — and adds three things prose cannot:
+
+- **Idempotence.** `get-endpoint` before `create-endpoint`, `get-index` before `create-index`, so
+  a re-run after a dropped connection resumes instead of erroring on the first line.
+- **Drop detection.** I-105's failure signal is `indexed_row_count` going *backwards*, not
+  plateauing, and the index API gives no other signal. A plateau is normal; a decrease means the
+  platform restarted the sync from zero. The poll treats one as fatal and prints the
+  `pipelines list-pipeline-events` command rather than guessing.
+- **A default that does not bill.** A bare invocation runs `--check` (read-only, free).
+  `--create` requires the flag *and* a typed confirmation, after printing the ~$6.72/day cost
+  and the 24-hours-after-the-last-delete rule. Teardown is deliberately **not** in the script:
+  one binary that can both build and delete the demo's retrieval corpus is one flag away from
+  deleting it on submission morning.
+
+**The expected row count is read from the source table, never hard-coded** — it was 1,746,601,
+then 115,499, and I-115 widened the fleet match again. A literal would be wrong by construction.
+A test asserts no such literal appears in the script's code (comments excluded, because the
+header explains the history and that reasoning belongs where the reader is).
+
+**Declarative management is impossible here, not merely unbuilt.** DABs exposes exactly four
+resource keys — `apps`, `dashboards`, `jobs`, `pipelines`. A script is the ceiling.
+`tests/test_provision_search.py` cross-checks the script's index JSON against `RUNBOOK.md`, so
+the two descriptions of one procedure cannot drift — the real risk of shipping both.
+
+#### 3. RAG retrieval evaluation — the harness now, the numbers in Run 2
+
+Deferred at I-110 for a cost (~7 h to re-embed 1,746,601 chunks) that expired the same day
+I-111 rescoped the index. Now built, and split so that only the *measurement* needs the meter
+running: all the scoring arithmetic is in `src/fleetguard/retrieval_metrics.py`, pure Python,
+19 unit tests. The notebook's job is reduced to fetching results and calling it.
+
+**Two probe families, because either alone misleads.**
+
+- **Known-item** — the query is a distinctive excerpt from the *middle* of one narrative (not
+  its opening: openings in this corpus are formulaic `THE CONTACT OWNS A …` boilerplate, so a
+  query built from one measures retrieval of boilerplate). The relevant set has exactly one
+  member, so Recall@10 and MRR mean what they normally mean. This is a **floor test** — the text
+  is literally in the corpus — and is labelled as one.
+- **Topical** — the query is natural language built from a real recall campaign. Here the
+  relevant set runs to thousands of chunks, so **Recall@10 would read as ~0.003 and mean
+  nothing**; the honest metrics are Precision@10 and hit rate. Both are computed for both
+  families anyway, so nobody has to take the notebook's word for which to read.
+
+**The limitation is published with the result, not buried:** relevance is *metadata* agreement —
+right make, right model under the EXACT/MODEL_VARIANT rule, right component — not a human
+judging whether a narrative answers the question. It measures whether retrieval surfaces
+evidence about the right vehicle and the right system. That is a real measurement and it is not
+the same as retrieval quality, and the same honesty the Model B golden set already applies.
+
+The relevance rule uses the project's **own** two-tier match rather than a sixth approximation of
+it. Four paths agreeing and a fifth not is precisely how all 2,116 F-250s came to be missing from
+the retrieval corpus (I-115); a scorer that re-derived the comparison would be the sixth place to
+get it wrong, and would score the fix as a failure.
+
+Section 5 of the notebook also re-runs the three I-040 behavioural checks **at the scope that
+ships** — open since the rescope — with probes the fleet corpus can actually answer. The old
+paraphrase probe (*"car suddenly sped up on its own"*) leans on unintended-acceleration
+complaints concentrated in makes this fleet may not operate, so a poor result there would have
+been unreadable.
+
+**Whatever it returns gets published.** Same rule as I-049's falsified semantic arm and I-111's
+requirement to republish the hybrid probe at the smaller scope including if it came back worse.
+
+#### 4. The CDF fingerprint split — and the deferral reason that was wrong
+
+I-110 made the CDF reconciliation compare *content*, not just cardinality, which was the right
+fix: `fact_rows == live_keys` cannot see a key holding a stale value, and that is exactly the
+drift an incremental path produces. The review's observation was that it ran **unscoped on every
+trigger**, hashing every column of every row of both sides because one agent wrote one row.
+
+It is now two tiers:
+
+| | scope | when | catches |
+|---|---|---|---|
+| cardinality | full history | every run | a key count that does not add up |
+| content fingerprint — scoped | keys above the previous watermark | every run | a wrong value written by *this* run's MERGE |
+| content fingerprint — unscoped | everything | every 24 h, and on any full rebuild | an event that arrived **below** an advanced watermark |
+
+**The scoped check is not a weaker version of the unscoped one.** It is a *complete* check of the
+rows the incremental path actually touched. What it cannot see is the failure the watermark
+itself causes — a late event below the mark is not in a slice defined by that mark — which is
+why the unscoped one is kept on a clock rather than dropped. **A guard that shares its subject's
+assumption is not a guard.** After a drift rebuild the re-check is always unscoped whatever the
+run was using: a rebuild replaces every row, so verifying one slice would leave the rest
+unexamined at the exact moment there is reason to doubt it.
+
+The 24-hour clock is stored in `ops_cdf_fact_refresh` alongside the watermark, so *"when did this
+last fully reconcile?"* is a query rather than someone's recollection. Rows predating the new
+columns carry NULL, which reads as "never" and therefore as "do it now" — the safe direction, the
+same reading `last_watermark()` gives.
+
+**The correction.** I-115 deferred this as low priority because *"the trigger is `PAUSED`, so the
+cost is not being paid today."* That reason was **false**: `resources/cdf_to_gold.job.yml`
+declares `pause_status: UNPAUSED`, and this is the project's only job that runs unasked. The
+claim was copied from `CLAUDE.md`'s example block — which still shows the pre-2026-09-08 value —
+without opening the resource file four lines of `grep` away. The conclusion happened to survive
+(the cost is near zero, because the App is stopped and nothing is writing) but for an entirely
+different reason, and one agent write away from being wrong.
+
+**It also changed how this item had to be verified.** An unpaused trigger means a deployed-but-
+unrun notebook executes unattended on the next agent write — during Run 2, inside the submission
+window. So the change was deployed and the job run **once by hand** before it could fire on its
+own. That is the ~55 seconds of compute this round cost, and it was the right place to spend it.
+
+---
+
+**Lesson.** I-115's was *a deferral records a decision and its cost, and the cost can expire
+without the decision being revisited.* This round found the same failure with the sign flipped:
+a deferral reason that was never true in the first place, quoted out of a stale example in
+`CLAUDE.md` rather than read off the resource that governs the behaviour. Both are the same
+underlying habit — **treating a written-down reason as evidence instead of as a claim with a
+source.** The reason was four lines of `grep` from being checked. What made it survive is that it
+supported a conclusion that was independently correct, so nothing ever pushed back on it.
+**A right answer reached by a wrong reason is the hardest kind to find, because the outcome never
+signals anything.**
+
+---
 
 ### I-115 — a third external review, triaged claim-by-claim: the rescope had already invalidated three of I-110's deferral reasons
 *Date:* 2026-09-23 · *Status:* **8 fixed offline, 4 outstanding, 4 corrected, 5 already-deferred re-raises, 3 rejected.**
@@ -221,8 +385,22 @@ measured, including if they are poor, same rule as I-111 applied to the hybrid-q
 **10. The full-history fingerprint runs on every CDF trigger.** `21_cdf_to_gold_facts.py:236-315`.
 The check itself is I-110's fix and is correct; the observation is that scanning full history on
 each incremental run gives back much of what the incremental path bought. Split into a
-lightweight per-trigger assertion plus a periodic full reconciliation. Correct, and **low
-priority here** — the trigger is `PAUSED` and the cost is not being paid today.
+lightweight per-trigger assertion plus a periodic full reconciliation.
+
+> **CORRECTED 2026-09-24.** The priority note originally written here was *"low priority — the
+> trigger is `PAUSED` and the cost is not being paid today."* **That reason was false.**
+> `resources/cdf_to_gold.job.yml` declares `pause_status: UNPAUSED` and STATUS records it
+> unpaused since 2026-09-08 — it is this project's only job that runs without being asked. The
+> claim came from `CLAUDE.md`'s example block, which still shows `pause_status: PAUSED` from
+> before the job was unpaused, and it was copied without checking the resource file four lines
+> of `grep` away.
+>
+> The *conclusion* survives — the cost genuinely is near zero right now — but for a different
+> reason: the App is stopped, so nothing is writing to the two tables that fire the trigger. It
+> is one agent write away from being paid again, and a wrong reason that reaches the right
+> answer is worse than no reason, because nothing rechecks it. This is I-115's own lesson
+> arriving one issue later: **a deferral's cost has to be re-read, not re-quoted.** Fixed in
+> I-116.
 
 **11. Do not tear down for the judging window.** Already the plan (Run 2, 2–3 October, live into
 the 4 October submission). Recorded because the review is right about which resource is the
@@ -3363,6 +3541,45 @@ injects `spark`, `dbutils`, `display` at runtime), while `src/fleetguard/` stays
 because it is plain importable Python.
 
 ## Phase 5 — Lakebase
+
+### I-036 — the Lakebase table-naming decision (entry reconstructed 2026-09-24)
+
+*Date:* 2026-08-31 · *Status:* ✅ resolved · **This entry was missing until 2026-09-24.**
+
+**Why it is written now, and what that means for trusting it.** I-036 is cited three times in
+this file as *the* naming decision — by I-028, and twice by the Phase 5 write-ups that report it
+surviving contact with the platform — but the entry itself was never written. So for three
+weeks the log's own cross-references pointed at nothing, and a reader following them would have
+concluded the decision was undocumented rather than unrecorded. Reconstructed below **only from
+what those citations and the shipped schema jointly establish**; nothing is inferred beyond
+that, and the reasoning is the reasoning the citations preserve, not a rationalisation written
+after the fact.
+
+**The decision: `fleetguard_<entity>`**, giving CDF destinations `lb_fleetguard_<entity>_history`.
+
+**Why not `fg_<entity>`.** The Postgres schema `databricks_postgres.bootcamp_students` is shared
+by ~296 bootcamp students, and the CDF destination `bootcamp_students.bootcamp_cdc` already held
+354 tables. A two-letter prefix is independently guessable — someone else picks `fg_` for
+something else and the collision is silent. Nobody else is building FleetGuard. It also makes
+`SHOW TABLES LIKE 'lb_fleetguard_%'` return exactly this project's tables out of 354+, which is
+the difference between a scoped destructive operation and an unscoped one on a shared schema.
+
+**Why the name had to be right before the first `CREATE`, not after.** Lakebase CDF auto-suffixes
+on collision (`lb_x_history_1`) **silently**, and renaming a Postgres table *orphans* its history
+table rather than moving it. **105 of the 256 `lb_*` tables then in that schema were exactly such
+orphans** — other people's abandoned first attempts. A naming mistake here is not a rename, it is
+a permanent second table nobody can tell apart from a live one.
+
+**Confirmed by the build, twice.** All eleven tables (later twelve) replicated to
+`lb_fleetguard_*_history` with **exact names and no `_1` suffixes** — recorded at I-044, which
+also corrected an earlier wrong claim about *when* destinations appear. The naming survived the
+round trip intact.
+
+**Lesson, and it is about this log rather than about Postgres.** A decision recorded only as a
+citation in other entries is a decision that has not been recorded. The three references made it
+*look* documented — they are why nobody noticed for three weeks — which is the same shape as the
+silent failures this file exists to catch: a check that passes because it is testing the wrong
+thing. Found by a documentation review, not by needing the information.
 
 ### I-037 — No CREATE privilege on the Postgres schema — RESOLVED
 *Date:* 2026-08-31 · *Status:* resolved

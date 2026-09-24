@@ -10,7 +10,7 @@ generates a live, always-accurate OpenAPI spec from the same code — run the ba
 (`scripts/run_local_static_dev.sh`) and open `/docs` (Swagger UI) or `/redoc` for exact request
 and response models, including every field these tables abbreviate.
 
-**Auth.** Every route except `/healthz` and `/api/evidence` requires the caller's own
+**Auth.** Every route except `/healthz`, `/api/evidence` and `/api/corpus` requires the caller's own
 Databricks identity, arriving via `CurrentPrincipal` (`deps.py`) — Databricks Apps OBO in
 production, a static dev token locally. Nothing here is queried as a service principal; see
 `docs/ARCHITECTURE.md` §7/§8 for the identity model and why it matters for the write paths
@@ -20,9 +20,21 @@ below.
 
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/healthz` | Unauthenticated liveness check — reports auth mode, data mode (live vs. snapshot), and whether the built console is present. |
+| GET | `/healthz` | Unauthenticated **liveness** check — reports auth mode, data mode (live vs. snapshot), and whether the built console is present. Always 200 while the process is up. |
+| GET | `/api/readyz` | **Readiness** — a different question: *would the demo work right now?* Checks Lakebase, the agent serving endpoint, the AI Search index and the two committed snapshots, each with its own status, detail and latency. **200 only if all four pass; 503 otherwise**, with the same body either way. |
 | GET | `/api/me` | The caller's own identity and how it was obtained. Proves the auth seam end to end. |
 | GET | `/api/auth/status` | What auth mode this deployment is running, for the console's own diagnostics. |
+
+**Why both.** `/healthz` returned `ok` for weeks with the index deleted, the agent stopped and
+Lakebase unreachable — it only ever checked the process, so it could not tell anyone whether
+the system worked (I-115). `/readyz` answers that, and is **authenticated** because its Lakebase
+check has to run under the caller's token: this app holds no privileges of its own (§8a), so
+proving the *app's* access would test something the product does not do. That also means
+`/readyz` cannot serve as a container probe, which is fine — `/healthz` is, and it is unchanged.
+
+**It is free to call.** The agent and index are checked with `serving-endpoints get` and
+`get-index`, control-plane reads. Querying the agent instead would wake a scale-to-zero
+container and bill until it idled down — the one thing a readiness probe must not do.
 
 ## Queue & campaign detail — the operator's primary surface
 
@@ -80,6 +92,22 @@ below.
 | GET | `/api/audit-log` | Every campaign launch, work-order change, and cost log, human-readable. |
 | GET | `/api/audit-log/export.csv` | The same, as a CSV download. |
 | GET | `/api/evidence` | The published backtest result. **Deliberately unauthenticated** — it serves a measured result about NHTSA data, not fleet or VIN data, so it works without a Databricks identity. |
+| GET | `/api/corpus` | Corpus scale for the landing page — bronze row counts, the synthetic fleet's cardinality, and the RAG chunk count. **Also deliberately unauthenticated**, on the same test. |
+
+**Both public routes serve a committed snapshot, not a live query, and that is a constraint
+rather than a preference:** the public surface has no Databricks credential at request time
+(§8a), so there is nothing to run `COUNT(*)` under. `scripts/export_evidence.py` and
+`scripts/export_corpus.py` regenerate them with provenance (`generated_at`, the source schema,
+the exact statement). A missing snapshot is a loud **503**, never zeros — a page rendering
+"0 complaints" reads as *this system has no data* rather than *the numbers failed to load*
+(I-050).
+
+**Why these two and no others.** Every figure served here is public NHTSA corpus scale or a
+*cardinality* of the synthetic fleet registry — no VIN, no depot, no campaign, nothing an
+identity could scope. Counting the fleet is public; **reading it is not**, and `/api/queue` and
+`/api/depot-risk` read the same registry and stay gated. `tests/test_evidence_route.py` and
+`tests/test_corpus_route.py` pin the exemption in both directions, so a third public route has
+to be a decision someone makes rather than one that drifts in.
 
 ## External APIs this project consumes
 

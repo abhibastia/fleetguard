@@ -141,7 +141,24 @@ embedded, indexed and hybrid-searched (BM25 + vector), and surfaced through the 
 (fleet make/model scope) is in Unity Catalog now; **the AI Search index itself is deleted**
 to cap billing between verification runs, so the retrieval half cannot be demonstrated live
 until it is rebuilt (~27-39 min at the fleet scope, down from ~7 h at the old 1.75M-chunk
-scope, I-041/I-111).
+scope, I-041/I-111). `scripts/provision_search.sh --create` is the rebuild, idempotent and
+polling for I-105's restart-from-zero.
+
+**Retrieval quality is measured in Run 2, and the harness is committed now.** Until 2026-09-24
+the strongest claim available here was *"AI Search is implemented"* plus a three-query
+behavioural probe — which shows the feature is wired up, not that it works.
+`src/search/28_rag_eval.py` (job `fleetguard-rag-eval`) scores two probe families over the
+live index and writes `ops_rag_eval`: **known-item** (a distinctive excerpt from one narrative;
+Recall@10 and MRR are meaningful because the relevant set has one member) and **topical** (a
+question built from a real recall campaign; Precision@10 and hit rate, because the relevant set
+runs to thousands of chunks and Recall@10 over it would read as ~0.003 and mean nothing). It
+re-runs the three I-040 behavioural checks at the shipped scope in the same pass — a debt open
+since the rescope. **The scoring arithmetic is unit-tested offline**
+(`tests/test_retrieval_metrics.py`), so it is not debugged inside a billed window; only the
+numbers wait for the index. **Whatever it returns gets published**, the rule I-049 and I-111
+already set. The limitation belongs next to the result: relevance here is *metadata* agreement
+— right make, right model under the EXACT/MODEL_VARIANT rule, right component — not a human
+judging whether the narrative answers the question.
 
 **Velocity — partial, and stated honestly in two numbers.** These must never be collapsed:
 
@@ -178,7 +195,7 @@ Named so the gap is bounded rather than discovered.
 
 | Gap | Why | Cost to close |
 |---|---|---|
-| **Assistant screenshot / agent transcript** | Needs the serving endpoint restored *and* the AI Search index rebuilt — `search_complaints` is the agent's primary retrieval tool and fails first without it | ~3 min + ~7 h, with a demonstrated risk of a mid-sync restart |
+| **Assistant screenshot / agent transcript** | Needs the serving endpoint restored *and* the AI Search index rebuilt — `search_complaints` is the agent's primary retrieval tool and fails first without it | ~3 min + **~39 min** (this cell said ~7 h until 2026-09-24 — that was the superseded 1.75M-chunk scope), with a demonstrated risk of a mid-sync restart |
 | **Live App running** | Stopped to avoid idle billing | ~2 min, self-service for all three reviewers |
 | **App serving current code** | Shipping restarts the App under whoever is using it, so it is deliberately manual (I-097) | one command, after the agent work |
 | **CD on merge** | Needs an account-level OIDC federation policy this identity cannot create (I-100). The rejected alternative — a PAT in GitHub secrets, reaching a ~296-student metastore — is recorded rather than quietly adopted | blocked on account access, not effort |

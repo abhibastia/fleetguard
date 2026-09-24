@@ -31,6 +31,8 @@
 
 # COMMAND ----------
 
+from datetime import UTC, datetime
+
 CATALOG, SCHEMA = "bootcamp_students", "fleetguard"
 CDC = "bootcamp_students.bootcamp_cdc"
 UC = f"{CATALOG}.{SCHEMA}"
@@ -166,8 +168,12 @@ def last_watermark(fact: str) -> int | None:
 
 
 modes = {}
+# Kept, not discarded, because the reconciliation below needs to know which slice this run was
+# responsible for. Before the I-115 split it did not — it re-checked everything every time.
+watermarks: dict[str, int | None] = {}
 for fact, (history, key) in FACTS.items():
     wm = None if FULL_REFRESH else last_watermark(fact)
+    watermarks[fact] = wm
     if wm is None or not table_exists(fact):
         reason = "full_refresh requested" if FULL_REFRESH else (
             "no fact table yet" if not table_exists(fact) else "no stored watermark"
@@ -227,13 +233,81 @@ for fact, (history, key) in FACTS.items():
 # MAGIC much of it there is. Below, each fact is fingerprinted against the full-history truth:
 # MAGIC every column, hashed per row, combined with `bit_xor` so the comparison does not depend
 # MAGIC on row order. Same rule as the counts — on a mismatch, rebuild, record, and still fail.
+# MAGIC
+# MAGIC ### The fingerprint runs in two tiers, not on every row every time (I-115)
+# MAGIC
+# MAGIC The check above was written to run **unscoped on every trigger**, which handed back much
+# MAGIC of what the incremental path had just bought: a one-row agent write caused every column
+# MAGIC of every row of both sides to be hashed. External review flagged it, and the deferral
+# MAGIC reason recorded at the time — *"the trigger is PAUSED so the cost is not being paid"* —
+# MAGIC was **wrong**: `resources/cdf_to_gold.job.yml` declares `pause_status: UNPAUSED` and has
+# MAGIC since 2026-09-08. The cost was near zero only because the App was stopped.
+# MAGIC
+# MAGIC So it is split:
+# MAGIC
+# MAGIC | | scope | when | catches |
+# MAGIC |---|---|---|---|
+# MAGIC | cardinality | full history | **every run** | a key count that does not add up |
+# MAGIC | content fingerprint — scoped | keys above the previous watermark | **every run** | a wrong value written by *this* run's MERGE |
+# MAGIC | content fingerprint — unscoped | everything | every `FULL_RECONCILE_HOURS` (24), and on any full rebuild | an event that arrived **below** an advanced watermark |
+# MAGIC
+# MAGIC **The scoped check is not a weaker version of the unscoped one.** It is a complete check
+# MAGIC of the rows the incremental path actually touched. What it cannot see is the failure the
+# MAGIC watermark itself causes — a late event below the mark is not in a slice defined by that
+# MAGIC mark — and that is exactly why the unscoped one is kept on a clock rather than dropped.
+# MAGIC A guard that shares its subject's assumption is not a guard.
+# MAGIC
+# MAGIC After a drift rebuild the re-check is **always unscoped**, whatever the run was using:
+# MAGIC a rebuild replaces every row, so verifying one slice of it would leave the rest
+# MAGIC unexamined at the exact moment there is reason to doubt it.
 
 # COMMAND ----------
 
 drift: dict[str, str] = {}
 
+# How often the EXPENSIVE check runs. The per-trigger check below is scoped to the keys a run
+# actually touched; this is the unscoped one, and 24 h is chosen so that a fact table cannot sit
+# wrong for longer than a day even if every incremental run's scope missed the damage.
+FULL_RECONCILE_HOURS = 24
 
-def fingerprints(fact: str, history: str, key: str) -> tuple[int | None, int | None]:
+
+def full_reconcile_due(fact: str) -> tuple[bool, str]:
+    """Has the unscoped fingerprint run for this fact recently enough?
+
+    Reads `ops_cdf_fact_refresh`, the same table the watermark comes from, so "when did this
+    last fully reconcile?" is answerable from a query rather than from someone's memory. An
+    unreadable or absent history means **due** — the safe direction, and the same reading
+    `last_watermark()` gives a NULL.
+    """
+    if not table_exists("ops_cdf_fact_refresh"):
+        return True, "no refresh history"
+    cols = {f.name for f in spark.table(f"{UC}.ops_cdf_fact_refresh").schema.fields}
+    if "full_reconcile" not in cols:
+        # The column is new; every row written before it exists carries NULL, which cannot be
+        # read as "a full reconcile happened".
+        return True, "refresh history predates full_reconcile"
+    # Age computed in SQL, not in Python. `refreshed_at` comes back through the Spark session
+    # timezone, so subtracting it from a `datetime.now(UTC)` would be right only as long as
+    # that timezone happens to be UTC — a silent, environment-dependent way to get the clock
+    # wrong, and this project has already been bitten once by a timezone comparison that was
+    # invisible from the timezone it was written in (I-087).
+    row = spark.sql(f"""
+        SELECT ROUND(
+                 (BIGINT(current_timestamp()) - BIGINT(MAX(refreshed_at))) / 3600.0, 2
+               ) AS age_h
+        FROM {UC}.ops_cdf_fact_refresh
+        WHERE fact_table = '{fact}' AND full_reconcile = true
+    """).collect()[0]
+    if row.age_h is None:
+        return True, "never fully reconciled"
+    if row.age_h >= FULL_RECONCILE_HOURS:
+        return True, f"last full reconcile {row.age_h} h ago"
+    return False, f"last full reconcile {row.age_h} h ago"
+
+
+def fingerprints(
+    fact: str, history: str, key: str, *, only_keys: str | None = None
+) -> tuple[int | None, int | None]:
     """(truth, fact) content fingerprints — order-independent, over every column.
 
     `bit_xor` rather than a sum: it cannot overflow, and it does not depend on the order
@@ -241,18 +315,26 @@ def fingerprints(fact: str, history: str, key: str) -> tuple[int | None, int | N
     the two sides cannot disagree merely because a MERGE left the fact table's column
     order different from the history's.
 
+    `only_keys` is a SQL predicate restricting BOTH sides to the same key set — that
+    symmetry is what keeps a scoped comparison meaningful. Applied to one side only it
+    would compare a subset against a whole and fail every time.
+
     Returns `(None, None)` for an empty pair — `bit_xor` over no rows is NULL, and two
-    empty tables genuinely do agree.
+    empty tables genuinely do agree. A scoped run where nothing changed lands here, which
+    is correct: there is nothing to disagree about.
     """
     cols = ", ".join(f"`{c}`" for c in sorted(spark.table(fact).columns))
+    where = f" WHERE {only_keys}" if only_keys else ""
     spark.sql(latest_per_key(history, key)).createOrReplaceTempView("_truth")
     row = spark.sql(f"""
         SELECT
-          (SELECT bit_xor(xxhash64(to_json(struct({cols})))) FROM _truth)  AS truth_fp,
-          (SELECT bit_xor(xxhash64(to_json(struct({cols})))) FROM {fact})  AS fact_fp
+          (SELECT bit_xor(xxhash64(to_json(struct({cols})))) FROM _truth{where})  AS truth_fp,
+          (SELECT bit_xor(xxhash64(to_json(struct({cols})))) FROM {fact}{where})  AS fact_fp
     """).collect()[0]
     return row.truth_fp, row.fact_fp
 
+
+scopes: dict[str, str] = {}
 
 for fact, (history, key) in FACTS.items():
     r = spark.sql(f"""
@@ -277,16 +359,36 @@ for fact, (history, key) in FACTS.items():
         "every key must be exactly one of live or deleted"
     )
 
-    # THE WATERMARK CHECK. `live_keys` here is computed over the ENTIRE history, so this
-    # compares the cheap incremental result against the expensive truth on every run. A
-    # watermark assumes nothing ever arrives below it; that is an assumption, and this is
-    # what stops it being an unexamined one.
+    # THE WATERMARK CHECK, in two tiers. `live_keys` above is computed over the ENTIRE history
+    # on every run, so the cardinality half is always unscoped and always cheap. The content
+    # half is the expensive one, and it is the one that got split (I-115): hashing every column
+    # of every row of both sides on each trigger gave back much of what the incremental path
+    # bought.
     #
-    # On a mismatch: repair the data (full rebuild), record that it happened, and still
-    # fail. Repairing silently would make an incremental path that quietly drifts look
-    # identical to one that works — which is precisely the failure mode this whole notebook
-    # was written in response to (I-080).
-    truth_fp, fact_fp = fingerprints(fact, history, key)
+    # Per trigger: fingerprint ONLY the keys this run could have got wrong — those above the
+    # previous watermark. That is not a weaker check of the same thing, it is a complete check
+    # of the thing the incremental path actually risks.
+    #
+    # Periodically: the unscoped fingerprint, because the scoped one shares the watermark's own
+    # assumption. An event arriving BELOW a watermark that has already advanced is invisible to
+    # a slice defined by that watermark — which is precisely the failure being guarded against,
+    # so it cannot be the only guard.
+    wm = watermarks.get(fact)
+    due, why = full_reconcile_due(fact)
+    do_full = due or FULL_REFRESH or modes[fact].startswith("FULL") or wm is None
+    if do_full:
+        scope_sql, scopes[fact] = None, "FULL"
+        reason = "forced" if FULL_REFRESH else ("rebuilt this run" if modes[fact].startswith("FULL") else why)
+        print(f"    full reconcile ({reason})")
+    else:
+        # The keys touched above the watermark, as a predicate both sides are filtered by.
+        scope_sql = (
+            f"{key} IN (SELECT DISTINCT {key} FROM {history} WHERE _sort_by > {wm})"
+        )
+        scopes[fact] = "SCOPED"
+        print(f"    scoped reconcile (keys above watermark {wm}) — {why}")
+
+    truth_fp, fact_fp = fingerprints(fact, history, key, only_keys=scope_sql)
     print(f"    fingerprint truth={truth_fp} fact={fact_fp}")
 
     reasons = []
@@ -294,7 +396,7 @@ for fact, (history, key) in FACTS.items():
         reasons.append(f"cardinality ({r.fact_rows} rows for {r.live_keys} live keys)")
     if truth_fp != fact_fp:
         # The case counts cannot see: right number of rows, wrong values in them.
-        reasons.append(f"content (fingerprint {fact_fp} != {truth_fp})")
+        reasons.append(f"content ({scopes[fact].lower()} fingerprint {fact_fp} != {truth_fp})")
 
     if reasons:
         drift[fact] = " and ".join(reasons)
@@ -305,36 +407,46 @@ for fact, (history, key) in FACTS.items():
             f"{fact}: even a full rebuild wrote {rebuilt} rows for {r.live_keys} live keys "
             "— the ranking itself is wrong, not the watermark"
         )
-        # Re-fingerprint after the rebuild. If THIS disagrees the derivation itself is
-        # broken, not the watermark, and there is nothing left to fall back on.
+        # Re-fingerprint after the rebuild, and UNSCOPED regardless of what the check above
+        # used: a rebuild replaces every row, so verifying only the slice would leave the rest
+        # of the table unexamined at exactly the moment there is reason to doubt it. If THIS
+        # disagrees the derivation itself is broken, not the watermark, and there is nothing
+        # left to fall back on.
         rebuilt_truth_fp, rebuilt_fact_fp = fingerprints(fact, history, key)
         assert rebuilt_truth_fp == rebuilt_fact_fp, (
             f"{fact}: a full rebuild still does not match the history it was built from "
             f"({rebuilt_fact_fp} != {rebuilt_truth_fp}) — `latest_per_key` is wrong"
         )
         print(f"    rebuilt to {rebuilt} rows, fingerprint {rebuilt_fact_fp}")
+        scopes[fact] = "FULL"
         fact_rows = rebuilt
     else:
         fact_rows = r.fact_rows
 
     # The regression that motivated this notebook. The old pattern filtered deletes before
     # ranking; if it ever creeps back, this fires rather than silently inflating the fact.
-    old = (
-        spark.sql(f"""
-        SELECT COUNT(*) AS n FROM (
-            SELECT ROW_NUMBER() OVER (PARTITION BY {key} ORDER BY _sort_by DESC) AS rn
-            FROM {history} WHERE _pg_change_type NOT IN ('delete','update_preimage')
-        ) WHERE rn = 1
-    """)
-        .collect()[0]
-        .n
-    )
-    if r.deleted_keys:
-        assert old > fact_rows, (
-            f"{fact}: the superseded pattern should over-count while deletes exist "
-            f"(got {old} vs {fact_rows}) — if these now agree, re-check I-080"
+    #
+    # Runs on FULL reconciles only, and that is a deliberate scoping rather than a saving: this
+    # guards against a **code** change, not against data drift, so it can only start failing
+    # after a deploy — and a deploy is always followed by a run that reconciles fully, because
+    # `full_reconcile_due` reads a history the new code has not written to yet.
+    if scopes[fact] == "FULL":
+        old = (
+            spark.sql(f"""
+            SELECT COUNT(*) AS n FROM (
+                SELECT ROW_NUMBER() OVER (PARTITION BY {key} ORDER BY _sort_by DESC) AS rn
+                FROM {history} WHERE _pg_change_type NOT IN ('delete','update_preimage')
+            ) WHERE rn = 1
+        """)
+            .collect()[0]
+            .n
         )
-        print(f"    (superseded pattern would have returned {old} — I-080 regression held)")
+        if r.deleted_keys:
+            assert old > fact_rows, (
+                f"{fact}: the superseded pattern should over-count while deletes exist "
+                f"(got {old} vs {fact_rows}) — if these now agree, re-check I-080"
+            )
+            print(f"    (superseded pattern would have returned {old} — I-080 regression held)")
 
 if drift:
     raise RuntimeError(
@@ -362,27 +474,34 @@ print("\nall fact tables reconcile")
 
 # COMMAND ----------
 
-from datetime import UTC, datetime
-
 # `watermark` and `mode` are new as of 2026-09-20. `mergeSchema` is required because the
 # table predates them; the rows written before carry NULL, which `last_watermark()` reads
 # as "no usable watermark" and therefore as "rebuild fully" — the safe direction.
+# `reconcile_scope` and `full_reconcile` are new as of 2026-09-24 (I-115) and are what
+# `full_reconcile_due()` reads back on the next run — so the 24 h clock is stored in the same
+# table as the watermark rather than kept in anyone's head. Rows written before these columns
+# existed carry NULL, which reads as "never fully reconciled" and therefore as "do it now".
 rows = []
 for fact, (history, _) in FACTS.items():
     m = spark.sql(f"SELECT MAX(_timestamp) AS newest FROM {history}").collect()[0].newest
     wm = spark.sql(f"SELECT MAX(_sort_by) AS wm FROM {history}").collect()[0].wm
     n = spark.table(fact).count()
-    rows.append((fact, history, n, m, datetime.now(UTC), wm, modes[fact].split(" ")[0]))
+    rows.append((
+        fact, history, n, m, datetime.now(UTC), wm, modes[fact].split(" ")[0],
+        scopes[fact], scopes[fact] == "FULL",
+    ))
 
 spark.createDataFrame(
     rows,
     "fact_table STRING, source_history STRING, fact_rows BIGINT, "
-    "newest_change TIMESTAMP, refreshed_at TIMESTAMP, watermark BIGINT, mode STRING",
+    "newest_change TIMESTAMP, refreshed_at TIMESTAMP, watermark BIGINT, mode STRING, "
+    "reconcile_scope STRING, full_reconcile BOOLEAN",
 ).write.mode("append").option("mergeSchema", "true").saveAsTable("ops_cdf_fact_refresh")
 
 display(
     spark.sql("""
-        SELECT fact_table, mode, fact_rows, watermark, newest_change, refreshed_at,
+        SELECT fact_table, mode, reconcile_scope, fact_rows, watermark,
+               newest_change, refreshed_at,
                ROUND(BIGINT(refreshed_at) - BIGINT(newest_change), 1) AS lag_seconds
         FROM ops_cdf_fact_refresh ORDER BY refreshed_at DESC LIMIT 10
     """)
