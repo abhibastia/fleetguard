@@ -32,7 +32,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 
+from fastapi import HTTPException, status
+
 from .auth.tokens import Principal
+
+#: Distinguishes "caller did not pass `authorized`" from "caller passed None (unrestricted)".
+#: A plain `None` default would make those two indistinguishable, and they mean opposite
+#: things once enrollment exists.
+_UNSET = object()
 
 
 class ScopeMode(StrEnum):
@@ -59,8 +66,28 @@ class Scope:
         return f"{prefix} {self.predicate}" if self.predicate else ""
 
 
+def authorized_depots(principal: Principal) -> frozenset[str] | None:
+    """The depots this principal may see, or `None` for "unrestricted".
+
+    **Returns `None` today, and that is the honest answer, not a stub.** Nobody is enrolled in
+    `fleetguard_depot_assignment`, so every caller genuinely is unrestricted — the Postgres RLS
+    policy is additive and fail-open by design (see the module docstring). Returning an empty
+    set instead would deny everyone, and inventing a mapping here would be the "fake
+    authorisation layer" this module already argues against.
+
+    It exists as a **seam**, the same way `auth/tokens.py` is a seam (E-13): when enrollment
+    lands, this one function reads the assignment table and `resolve_scope` below starts
+    enforcing, instead of someone having to re-audit every handler that accepts a `depot_id`.
+    """
+    return None
+
+
 def resolve_scope(
-    principal: Principal, depot_id: str | None = None, *, column: str = "v.depot_id"
+    principal: Principal,
+    depot_id: str | None = None,
+    *,
+    column: str = "v.depot_id",
+    authorized: frozenset[str] | None | object = _UNSET,
 ) -> Scope:
     """Decide what this caller may see.
 
@@ -80,7 +107,27 @@ def resolve_scope(
     `depot_id` directly (e.g. `fleetguard_work_order`, no join needed) passes
     `column="depot_id"` instead, so the same "voluntary narrowing" decision serves both shapes
     without duplicating this function's logic per table.
+
+    **A requested depot must lie inside the caller's authorised set (I-117).** `depot_id`
+    arrives from the client — `GET /work-orders?depot_id=DEP-042` — so turning it straight into
+    `WHERE depot_id = :depot_id` is *filtering*, not authorisation. That distinction does not
+    bite today, because `authorized_depots` returns `None` and everyone is unrestricted. It
+    bites the moment anyone is enrolled, which is precisely the moment nobody will think to
+    re-audit this function. So the check goes in now, while the reasoning is in front of us,
+    and stays inert until it is not.
+
+    Pass `authorized=` explicitly to override the lookup — used by tests, and by any caller
+    that has already resolved the set and should not pay for it twice.
     """
+    allowed = authorized_depots(principal) if authorized is _UNSET else authorized
+    if depot_id and allowed is not None and depot_id not in allowed:
+        # 403, not an empty result set: a caller asking for a depot they cannot see has made a
+        # different mistake from one whose depot is genuinely empty, and collapsing the two
+        # would hide the first behind the second.
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"not authorized for depot {depot_id}",
+        )
     if depot_id:
         return Scope(
             mode=ScopeMode.DEPOT,

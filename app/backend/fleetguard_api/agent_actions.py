@@ -37,6 +37,7 @@ PATCH — so the safety property does not depend on `FLEETGUARD_APPROVERS` and t
 from __future__ import annotations
 
 import json
+import logging
 import uuid
 from datetime import datetime
 
@@ -50,6 +51,9 @@ from .db import PG_SCHEMA, UniqueViolation, connect, rows_to_dicts
 # Must match ACTION_SENTINEL in src/agent/14_fleetguard_agent.py, which prefixes the extra
 # output item carrying an envelope.
 ACTION_SENTINEL = "__FLEETGUARD_ACTION__"
+
+log = logging.getLogger(__name__)
+
 
 OPEN_DEFECT_SIGNAL = "open_defect_signal"
 WATCH_CAMPAIGN = "watch_campaign"
@@ -199,8 +203,19 @@ def _record_attempt(
                     "trace": trace_id,
                 },
             )
-    except Exception:  # noqa: S110 — see the docstring; never mask the caller's real error
-        pass
+    except Exception:
+        # VISIBLE, not silent (I-117). This was a bare `pass` with a lint suppression.
+        # Swallowing the exception is still right — the caller's real 403 must not be replaced by a database
+        # error from the *logging* path — but swallowing it **quietly** meant a refusal could
+        # vanish from the audit trail with nothing anywhere recording that it had. For a system
+        # whose whole claim is that every agent action is attributable, "the audit write failed
+        # and nobody knows" is the wrong half to keep.
+        #
+        # `log.exception` keeps the original behaviour for the caller and gives the operator a
+        # stack trace. The DB audit row remains best-effort *by design*, and is now honest
+        # about it: the trail is Lakebase **plus** the MLflow trace, and this is the line that
+        # says which one was lost.
+        log.exception("failed to record a refused agent action for %s", principal.user_name)
 
 
 def execute(

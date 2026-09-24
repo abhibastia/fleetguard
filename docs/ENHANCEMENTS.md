@@ -482,6 +482,48 @@ unit tests alongside `vin.py` and `chunking.py` — no workspace required.
 
 ---
 
+### E-17 · A canonical vehicle-model alias table — **DEFERRED 2026-09-24, on schedule alone**
+
+**Status: DEFERRED. This is the strongest architectural suggestion any of the four external
+reviews made, and the only reason it is not built is that there are ten days left.**
+
+**The problem it solves is real and this project has paid for it four times.** NHTSA writes
+`F-250 SD`; vPIC, and therefore `gold_fleet_vehicle`, writes `F-250`. Same trucks, no exact
+match — and **all 2,116 of the fleet's F-250s** are affected. That single comparison has been
+got wrong in four separate places on four separate occasions: the gold exposure layer (I-030),
+the agent write path (I-075), the emerging detector (I-079), and the AI Search index source
+(I-115, which excluded the fleet's most numerous vehicle from retrieval outright).
+
+**What is built today, and why it is not enough.** All five paths now agree — including the
+RAG evaluation's relevance rule (I-117) — because the predicate is **copied verbatim** from
+`src/backtest/10_emerging_signals.py` rather than re-derived. That is agreement by *convention*:
+it holds because everyone who touched it knew to copy, and it has to keep holding for every
+future path. A table would make it agreement by *construction*:
+
+```
+nhtsa_make · nhtsa_model · canonical_make · canonical_series · match_basis · source
+```
+
+joined once, consumed by RAG, fleet exposure, Model B, the agent write path and the emerging
+detector alike — **one vehicle identity model across the architecture**.
+
+**It would also fix a known over-match, not just a naming inconsistency.** The prefix rule
+matches `PROMASTER` to `PROMASTER CITY`, which are different platforms. That is documented and
+deliberately kept — the tier travels with every count, so a consumer can see which rule
+answered — but it is a limitation a curated alias table removes rather than annotates.
+
+**Why not now.** It is a new table with a producer, a backfill, and five consumers to migrate,
+on a repo whose next scheduled event is Run 2 and whose rule after Run 2 is that nothing
+changes. Migrating five agreeing call sites to a new mechanism, eight days before the only
+remaining live window, risks the exact class of bug the table exists to prevent — and a
+half-migrated alias table (some paths on the table, some on the predicate) is strictly worse
+than five paths that agree.
+
+**Revisit when:** a sixth consumer needs the comparison, or any path is found to have drifted
+from the copied predicate. Either is the signal that convention has stopped holding.
+
+---
+
 ### E-16 · `AUTO CDC INTO` for the CDF-to-gold job — **REVISITED 2026-09-20, still not built**
 
 **Status: DEFERRED, and the reason is now stronger rather than weaker.**

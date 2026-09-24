@@ -345,18 +345,26 @@ class TestExecute:
         writes is not something an operator can review."""
         from fleetguard_api.routers.chat import _extract
 
+        # Ids as `predict()` stamps them — without them `_extract` drops both envelopes
+        # (fail-closed, I-117) and this would pass for the wrong reason: zero actions because
+        # the payload was malformed, not because the one-per-turn rule held.
         payload = {
             "output": [
-                {"content": [{"type": "output_text", "text": "Requested two signals."}]},
                 {
-                    "content": [
-                        {"type": "output_text", "text": f"{ACTION_SENTINEL} {json.dumps(VALID)}"}
-                    ]
+                    "id": "0",
+                    "content": [{"type": "output_text", "text": "Requested two signals."}],
                 },
                 {
+                    "id": "action-0",
                     "content": [
                         {"type": "output_text", "text": f"{ACTION_SENTINEL} {json.dumps(VALID)}"}
-                    ]
+                    ],
+                },
+                {
+                    "id": "action-1",
+                    "content": [
+                        {"type": "output_text", "text": f"{ACTION_SENTINEL} {json.dumps(VALID)}"}
+                    ],
                 },
             ]
         }
@@ -504,7 +512,22 @@ class TestChatExtraction:
     """
 
     def _payload(self, *texts: str) -> dict:
-        return {"output": [{"content": [{"type": "output_text", "text": t}]} for t in texts]}
+        """One item per text, carrying the id `predict()` stamps — an ordinal for prose,
+        `action-<n>` for an envelope.
+
+        This used to emit id-less items, which is not a shape the agent produces. It passed
+        only because `_extract` executed id-less envelopes (fail-open, closed by I-117), so
+        these tests were asserting over a payload that could not occur. Mirroring the real
+        stamping means they exercise the id discriminator rather than bypassing it.
+        """
+        items, action_n = [], 0
+        for i, t in enumerate(texts):
+            if t.startswith(ACTION_SENTINEL):
+                item_id, action_n = f"action-{action_n}", action_n + 1
+            else:
+                item_id = str(i)
+            items.append({"id": item_id, "content": [{"type": "output_text", "text": t}]})
+        return {"output": items}
 
     def test_envelope_is_stripped_from_the_visible_reply(self):
         from fleetguard_api.routers.chat import _extract

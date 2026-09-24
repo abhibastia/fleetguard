@@ -11,6 +11,8 @@ F-250 variant spelling that has now caused the same bug in four separate places.
 
 from __future__ import annotations
 
+import pytest
+
 from fleetguard.retrieval_metrics import (
     EXACT,
     MODEL_VARIANT,
@@ -169,3 +171,52 @@ def test_summarise_separates_mean_recall_from_how_many_probes_scored() -> None:
         "mrr": 0.5,
         "probes_with_a_hit": 1,
     }
+
+
+class TestTheCircularRelevanceTrap:
+    """Why `28_rag_eval.py` builds its topical relevance pool from the CORPUS, not from the
+    retrieved hits.
+
+    The first version of that notebook did the latter — `relevant = {h for h in hits if
+    is_relevant(h)}` — and then computed Recall@10 against it. The metric functions are not
+    at fault and are unchanged; the *set* was. These tests pin the arithmetic so the mistake
+    is legible to anyone who tries the same shortcut again, because it is an attractive one:
+    it needs no second query and it produces numbers that look excellent.
+    """
+
+    def test_recall_against_a_set_derived_from_the_results_cannot_fail(self) -> None:
+        """The whole bug in three lines. If `relevant ⊆ retrieved`, the intersection is the
+        entire relevant set, so recall is **1.0 by construction** — not a measurement."""
+        retrieved = [str(i) for i in range(10)]
+        derived_from_results = {r for r in retrieved if r in {"2", "7"}}
+        assert recall_at_k(retrieved, derived_from_results, 10) == 1.0
+
+        # Change the retriever completely. Recall does not move, because the goalposts moved
+        # with it — which is exactly what makes this undetectable in a results table.
+        worse = ["90", "91", "3"]
+        derived_again = {r for r in worse if r in {"3"}}
+        assert recall_at_k(worse, derived_again, 10) == 1.0
+
+    def test_it_degenerates_into_the_hit_rate_it_duplicates(self) -> None:
+        """Only two values are reachable, so the metric carries exactly one bit: did anything
+        on target come back. `probes_with_a_hit` already reports that, honestly."""
+        retrieved = ["a", "b", "c"]
+        assert recall_at_k(retrieved, {"b"}, 3) == 1.0
+        assert recall_at_k(retrieved, set(), 3) == 0.0
+
+    def test_precision_and_mrr_survive_the_same_construction(self) -> None:
+        """Which is why only recall was replaced. Both depend on *which returned items are on
+        target*, not on the relevant set being complete — so they measure something real even
+        when the set came from the results."""
+        retrieved = [str(i) for i in range(10)]
+        derived = {r for r in retrieved if r in {"2", "7"}}
+        assert precision_at_k(retrieved, derived, 10) == 0.2
+        assert reciprocal_rank(retrieved, derived) == pytest.approx(1 / 3)
+
+    def test_an_independent_pool_makes_recall_measure_something(self) -> None:
+        """With ground truth from the corpus, recall moves when retrieval does — and a large
+        pool makes it small *by arithmetic*, which is why `relevant_pool_size` is published
+        next to it."""
+        pool = {str(i) for i in range(3000)}
+        assert recall_at_k([str(i) for i in range(10)], pool, 10) == pytest.approx(10 / 3000)
+        assert recall_at_k(["90000", "90001"], pool, 10) == 0.0

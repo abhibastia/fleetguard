@@ -1,5 +1,62 @@
 # FleetGuard — project status
 
+## SESSION 2026-09-24 (later) — fourth external review triaged; 8 fixes, 1 disproven
+
+**Branch `fix/repo-review-round-4`.** Full triage in `docs/ISSUES.md` **I-117**. The best of
+the four reviews — it read a zip containing that morning's work and its line references were
+real. Three claims did not survive checking, and **the two most important findings were worse
+than it reported**.
+
+**The two that were worse:**
+
+- **Topical `recall@10` was degenerate, not merely invalid.** `28_rag_eval.py` derived each
+  probe's relevant set *from the retrieved hits*, so `relevant ⊆ retrieved` and recall was
+  **exactly 1.0 whenever anything on target came back, 0.0 otherwise** — one bit, duplicating
+  the hit-rate already reported beside it. It could not fail: change the retriever completely
+  and the number does not move. **My bug, from that morning.** The pool now comes from the
+  corpus by SQL, and `relevant_pool_size` is published beside recall so a correct small figure
+  is not mistaken for broken retrieval.
+- **`NaN` and `+Infinity` reached the work-order cost column, past BOTH guards.** The app
+  checked `< 0`, which NaN passes; Postgres `numeric` accepts `'NaN'` and orders it above every
+  number, so the `>= 0` CHECK passes it too. One row makes `SUM(actual_cost)` NaN for its depot
+  — the **$84,409.68** figure `DEMO.md` quotes. Fixing it surfaced a second bug the review did
+  not reach: the 422 echoes the rejected value back, and Starlette cannot serialise NaN, so it
+  became a **500**. Both fixed.
+
+**Disproven:** the `series_key IS NULL` idempotency hole. `component` is required and non-blank
+after I-115's `mode="before"` strip, so the key always contains at least the component —
+verified live. No second index, no migration. This is the **second** review to propose Lakebase
+DDL for a gap already shut app-side.
+
+**Repeated correction:** versioned NHTSA snapshot paths, rejected at I-115 and proposed again —
+these are full snapshots and silver does not dedupe, so a new path doubles the corpus. Built
+I-099's cheap fix instead: fail loudly when a changed snapshot lands on an already-committed
+path. Placement mattered twice — before the extract, and before the watermark write, because a
+guard that records the new watermark then raises gets a 304 next run and **silences itself**.
+
+**Also fixed:** fail-closed action envelopes (with a loud log, since the risk was an mlflow
+shape that omits ids), write tools exclusive in a tool-call batch, `log.exception` on audit
+failures, depot containment in `resolve_scope`, and `/readyz` extended into a release preflight
+— it now compares `indexed_row_count` against the source table (an index can be `ready` and
+**short**, I-105) and reports the agent version and console git SHA.
+
+**The finding inside the finding.** Closing the fail-open action path broke six tests — because
+their payload helpers emitted items with **no ids at all**, a shape `predict()` cannot produce.
+They passed by taking the fail-open branch instead of exercising the discriminator they existed
+to guard. Together with the recall metric, that is two tests-that-cannot-fail in one round, so
+**every fix here was mutation-checked**: revert the fix, confirm the test goes red, restore.
+
+**Declined:** Judge Mode, a clickable evidence panel and an agent action timeline — all new UI,
+and new frontend eight days before Run 2 turns it back into a first full composition. The
+canonical vehicle alias table is the strongest architectural suggestion in the review and is
+out of scope at ten days; recorded in `ENHANCEMENTS.md`.
+
+**Verified offline:** 635 tests passed / 24 skipped (was 627), 153 vitest, ruff clean, typecheck
+clean. **No workspace calls.** The agent and RAG halves take effect at Run 2's redeploy and
+rebuild — both already committed steps.
+
+---
+
 ## SESSION 2026-09-24 — I-115's four remaining items closed; documentation reconciled
 
 **Branch `fix/i115-remainder`.** Full write-up in `docs/ISSUES.md` **I-116**.
@@ -426,7 +483,7 @@ warehouse and Lakebase — and `DEMO.md`'s 2026-09-09 decision already lets the 
 as "offline". What that forfeits is the RAG demonstration, which is a graded category.
 
 
-**Last updated:** 2026-09-24 · previously 2026-09-23 · **MVP target: 7 September — MET** · **Two-window plan: Run 1 DONE 2026-09-23, Run 2 targeted 2–3 October**
+**Last updated:** 2026-09-24 (two sessions) · previously 2026-09-23 · **MVP target: 7 September — MET** · **Two-window plan: Run 1 DONE 2026-09-23, Run 2 targeted 2–3 October**
 
 > **RUN 1 COMPLETE 2026-09-23 — the first full end-to-end test with billable resources since
 > 2026-09-11.** AI Search rebuilt at the rescoped fleet make/model scope (115,499 chunks,

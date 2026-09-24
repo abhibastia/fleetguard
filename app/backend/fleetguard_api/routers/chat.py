@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import logging
 import os
 import secrets
 
@@ -45,6 +46,8 @@ AGENT_TIMEOUT_S = 120.0
 
 # Prefix `src/agent/14_fleetguard_agent.py`'s `predict()` puts on the id of every output item
 # carrying an action envelope. Must stay in sync with it, same as `ACTION_SENTINEL`.
+log = logging.getLogger(__name__)
+
 ACTION_ITEM_ID_PREFIX = "action-"
 
 
@@ -182,11 +185,23 @@ def _extract(payload: dict) -> tuple[str, list[dict]]:
     tool's own return value. The agent independently strips the sentinel out of model-authored
     prose, so this is the second of two barriers rather than the only one.
 
-    **Absent ids degrade, they do not break.** The item-level `id` has not been confirmed on a
-    live payload from this endpoint, and an mlflow version that omits it must not silently stop
-    every write from working. So: id says `action-` → envelope; id says anything else → the
-    sentinel is in prose that Python labelled prose, which is the forgery case, and the item is
-    dropped entirely rather than executed or displayed; **no id at all → previous behaviour.**
+    **FAIL CLOSED, including on a missing id (changed 2026-09-24, I-117).** This previously
+    read *"no id at all → previous behaviour"*, i.e. execute anyway — which states the exact
+    opposite of the invariant above. The reasoning was that the item-level `id` had not been
+    confirmed on a live payload and an mlflow version omitting it must not stop every write
+    from working. That is a real risk and it is the wrong trade: it makes the discriminator
+    optional, so anything that can produce an item without an id can produce an executable
+    action, and the security story degrades to "it works because our current wrapper happens to
+    stamp ids".
+
+    So now: id starts with `action-` → envelope. **Anything else, including no id at all →
+    dropped**, from both the actions and the reply — rendering it would show the operator a
+    forged envelope as though the assistant had said it.
+
+    The risk that motivated the old behaviour is handled by **making the failure loud instead
+    of making it safe-looking**: a dropped envelope logs at WARNING with the observed item
+    shape. If a wrapper really does omit ids, Run 2's verification sees an unmistakable log
+    line rather than a write that silently does nothing, and the revert is one condition.
     """
     parts: list[str] = []
     actions: list[dict] = []
@@ -199,11 +214,21 @@ def _extract(payload: dict) -> tuple[str, list[dict]]:
             envelope = agent_actions.parse_envelope(text)
             if envelope is None:
                 parts.append(text)
-            elif item_id is None or str(item_id).startswith(ACTION_ITEM_ID_PREFIX):
+            elif item_id is not None and str(item_id).startswith(ACTION_ITEM_ID_PREFIX):
                 actions.append(envelope)
-            # else: a sentinel inside an item Python labelled prose. Dropped from both the
-            # actions and the reply — rendering it would show the operator a forged envelope
-            # as though the assistant had said it.
+            else:
+                # A sentinel in an item Python did NOT label as an action. Either a forgery, or
+                # a payload shape whose ids we cannot read. Dropped either way — but logged
+                # loudly, because those two causes need very different responses and neither is
+                # diagnosable from a write that quietly does nothing.
+                log.warning(
+                    "dropping an action envelope: item id %r does not start with %r "
+                    "(action=%r). If this fires for every action, the payload shape changed "
+                    "and the id discriminator needs re-checking — see _extract's docstring.",
+                    item_id,
+                    ACTION_ITEM_ID_PREFIX,
+                    envelope.get("action"),
+                )
     return "".join(parts).strip(), actions
 
 

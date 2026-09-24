@@ -202,6 +202,71 @@ print(f"topical probes: {len(topical_rows)}")
 # COMMAND ----------
 
 # MAGIC %md
+# MAGIC ### The relevance set must come from the CORPUS, not from the results
+# MAGIC
+# MAGIC **This was wrong when first written, and wrong in a way that could not fail.** The
+# MAGIC first version built each probe's relevant set out of the retrieved hits — *"the things
+# MAGIC the retriever returned that I consider relevant"* — and then computed Recall@10 against
+# MAGIC it. Since the relevant set was a subset of what was retrieved, the intersection was
+# MAGIC always the whole set: **Recall@10 was exactly 1.0 whenever anything on target came
+# MAGIC back, and 0.0 otherwise.** A duplicate of the hit-rate indicator wearing the name
+# MAGIC "recall", and it would have been written to `ops_rag_eval` and published as a retrieval
+# MAGIC result. Caught by external review (I-117).
+# MAGIC
+# MAGIC Precision@k and MRR were never affected — they depend only on *which returned items are
+# MAGIC on target*, not on the relevant set being complete. Recall is the one metric that needs
+# MAGIC ground truth independent of the retriever, so it gets one.
+# MAGIC
+# MAGIC The pool is every complaint in the index source matching the probe's vehicle and
+# MAGIC component, by the **same** EXACT + MODEL_VARIANT predicate the rest of the system uses.
+# MAGIC One query for all probes, not one per probe.
+# MAGIC
+# MAGIC **`relevant_pool_size` is published beside recall, and that matters.** A pool of
+# MAGIC thousands makes Recall@10 tiny *by construction* — ten slots cannot cover three thousand
+# MAGIC documents — and a reader who sees 0.004 without the denominator will read it as broken
+# MAGIC retrieval rather than as arithmetic. Precision@10 and hit rate stay the headline.
+
+# COMMAND ----------
+
+pool_rows = spark.sql(f"""
+    WITH probes AS (
+        SELECT * FROM VALUES
+        {",".join(
+            "('{}','{}','{}','{}')".format(
+                r.campaign_id,
+                r.make.replace("'", "''"),
+                r.model.replace("'", "''"),
+                r.component.replace("'", "''"),
+            )
+            for r in topical_rows
+        )}
+        AS t(campaign_id, make, model, component)
+    )
+    SELECT p.campaign_id, collect_set(c.complaint_id) AS pool
+    FROM probes p
+    JOIN {SOURCE} c
+      ON c.make = p.make
+     AND (c.model = p.model
+          OR c.model LIKE p.model || ' %'
+          OR p.model LIKE c.model || ' %')
+     AND (upper(c.component) LIKE '%' || upper(p.component) || '%'
+          OR upper(p.component) LIKE '%' || upper(c.component) || '%')
+    GROUP BY p.campaign_id
+""").collect()
+
+POOLS = {r.campaign_id: set(r.pool) for r in pool_rows}
+_sizes = sorted(len(v) for v in POOLS.values())
+print(
+    f"relevance pools built for {len(POOLS)}/{len(topical_rows)} probes; "
+    f"sizes min={_sizes[0] if _sizes else 0} "
+    f"median={_sizes[len(_sizes) // 2] if _sizes else 0} max={_sizes[-1] if _sizes else 0}"
+)
+# A probe with no pool has no ground truth. It is a defective PROBE, not a retrieval failure,
+# and scoring it as zero would understate the system for a reason unrelated to retrieval.
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC ## 4. Score
 # MAGIC
 # MAGIC Both families, both query types. A probe whose relevant set turns out to be empty is
@@ -230,24 +295,28 @@ for query_type in ("HYBRID", "ANN"):
     results.append({"family": "known_item", "query_type": query_type, **summarise(per_probe, K)})
 
     # --- family B ------------------------------------------------------------------------
-    per_probe, dropped = [], 0
+    per_probe, dropped, pool_sizes = [], 0, []
     for row in topical_rows:
         question = (
             f"{row.component.lower()} problem on a {row.make.title()} {row.model}"
         )
-        hits = search(question, query_type)
-        relevant = {
-            h["complaint_id"]
-            for h in hits
-            if is_relevant(h, make=row.make, model=row.model, component=row.component)
-        }
-        ranked = [h.get("complaint_id") for h in hits]
-        # Relevance here is judged over what came back, so "recall" for this family is the
-        # share of the RETURNED set that was on target — reported, but precision and hit rate
-        # are the metrics that mean something. See the header.
-        if not ranked:
+        # GROUND TRUTH FROM THE CORPUS, not from `hits`. See the section above for what the
+        # first version did instead and why it could not fail.
+        relevant = POOLS.get(row.campaign_id, set())
+        if not relevant:
             dropped += 1
             continue
+        hits = search(question, query_type)
+        ranked = [h.get("complaint_id") for h in hits]
+        if not ranked:
+            # Retrieval returned nothing for a probe that HAS ground truth. That is a real
+            # miss and scores zero — unlike the no-pool case above, which is dropped.
+            per_probe.append(
+                {"recall_at_k": 0.0, "precision_at_k": 0.0, "reciprocal_rank": 0.0}
+            )
+            pool_sizes.append(len(relevant))
+            continue
+        pool_sizes.append(len(relevant))
         per_probe.append(
             {
                 "recall_at_k": recall_at_k(ranked, relevant, K),
@@ -257,13 +326,18 @@ for query_type in ("HYBRID", "ANN"):
         )
     summary = summarise(per_probe, K)
     summary["dropped_probes"] = dropped
+    # Published beside recall so a tiny figure is legible as arithmetic rather than failure.
+    summary["relevant_pool_size"] = (
+        sorted(pool_sizes)[len(pool_sizes) // 2] if pool_sizes else 0
+    )
     results.append({"family": "topical", "query_type": query_type, **summary})
 
 for r in results:
     print(
         f"{r['family']:<12} {r['query_type']:<7} "
         f"probes={r['probes']:<4} hit={r['probes_with_a_hit']:<4} "
-        f"recall@{K}={r['recall_at_k']:.3f}  P@{K}={r['precision_at_k']:.3f}  MRR={r['mrr']:.3f}"
+        f"recall@{K}={r['recall_at_k']:.3f}  P@{K}={r['precision_at_k']:.3f}  "
+        f"MRR={r['mrr']:.3f}  pool={r.get('relevant_pool_size', 1)}"
     )
 
 # COMMAND ----------
@@ -331,6 +405,10 @@ rows = [
         "recall_at_k": float(r["recall_at_k"]),
         "precision_at_k": float(r["precision_at_k"]),
         "mrr": float(r["mrr"]),
+        # Median ground-truth pool size. 1 for known-item by construction; for topical it is
+        # the denominator that makes Recall@k readable, and omitting it is how a correct small
+        # number gets mistaken for a broken retriever.
+        "relevant_pool_size": int(r.get("relevant_pool_size", 1)),
         "seed": SEED,
         "behaviour_columns_to_sync": bool(behaviour["columns_to_sync"]),
         "behaviour_harm_filter": bool(behaviour["harm_filter"]),

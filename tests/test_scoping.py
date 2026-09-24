@@ -6,8 +6,15 @@ pin here rather than trusted to manual testing against live Lakebase.
 """
 
 import pytest
+from fastapi import HTTPException
 from fleetguard_api.auth.tokens import Principal
-from fleetguard_api.scoping import Scope, ScopeMode, mask_vin, resolve_scope
+from fleetguard_api.scoping import (
+    Scope,
+    ScopeMode,
+    authorized_depots,
+    mask_vin,
+    resolve_scope,
+)
 
 PRINCIPAL = Principal(token="t", user_name="a@b.com", source="test")
 
@@ -105,3 +112,54 @@ class TestMaskVin:
         # ENTIRE string is masked instead — not the 11-asterisk prefix applied to a
         # nonsensical negative slice.
         assert mask_vin("ABCDE", mask=True) == "*****"
+
+
+class TestDepotContainment:
+    """I-117. `depot_id` arrives from the CLIENT — `GET /work-orders?depot_id=DEP-042` — and
+    `resolve_scope` turned it straight into `WHERE depot_id = :depot_id`. That is *filtering*,
+    not authorisation: the predicate narrows to what was asked for, never checks whether the
+    caller may ask.
+
+    It is not exploitable today, and these tests say so rather than pretending otherwise:
+    `authorized_depots` returns `None`, everyone is unrestricted, and the Postgres RLS policy
+    is deliberately fail-open with nobody enrolled. The check exists because the day someone
+    IS enrolled is exactly the day nobody re-reads this function.
+    """
+
+    def test_nobody_is_enrolled_today_so_nothing_is_denied(self):
+        """The honest current state, pinned. If this ever starts failing, enrollment happened
+        — and every assumption in the surrounding docs needs re-reading, not this test
+        loosening."""
+        assert authorized_depots(PRINCIPAL) is None
+        scope = resolve_scope(PRINCIPAL, "DEP-042")
+        assert scope.mode is ScopeMode.DEPOT
+        assert scope.params == {"depot_id": "DEP-042"}
+
+    def test_an_unauthorized_depot_is_a_403_once_a_set_exists(self):
+        with pytest.raises(HTTPException) as exc:
+            resolve_scope(PRINCIPAL, "DEP-042", authorized=frozenset({"DEP-001"}))
+        assert exc.value.status_code == 403
+        assert "DEP-042" in exc.value.detail
+
+    def test_an_authorized_depot_still_resolves(self):
+        scope = resolve_scope(PRINCIPAL, "DEP-001", authorized=frozenset({"DEP-001", "DEP-002"}))
+        assert scope.mode is ScopeMode.DEPOT
+        assert scope.params == {"depot_id": "DEP-001"}
+
+    def test_an_empty_authorized_set_denies_rather_than_waving_through(self):
+        """The failure mode worth naming: `frozenset()` is falsy, so a truthiness test here
+        would read "no restrictions" and allow everything — turning the most restrictive input
+        into the least. The check is `is not None`, deliberately."""
+        with pytest.raises(HTTPException) as exc:
+            resolve_scope(PRINCIPAL, "DEP-001", authorized=frozenset())
+        assert exc.value.status_code == 403
+
+    def test_explicit_none_means_unrestricted_and_is_not_the_same_as_omitting_it(self):
+        """`None` (unrestricted) and "not passed" must stay distinguishable — hence the
+        `_UNSET` sentinel. If the default were `None`, a caller that resolved the set and got
+        `None` would be indistinguishable from one that never looked."""
+        assert resolve_scope(PRINCIPAL, "DEP-042", authorized=None).mode is ScopeMode.DEPOT
+
+    def test_no_requested_depot_is_never_denied(self):
+        """Fleet-wide reads are not depot requests and must not be caught by this check."""
+        assert resolve_scope(PRINCIPAL, None, authorized=frozenset()).mode is ScopeMode.FULL

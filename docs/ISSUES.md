@@ -14,6 +14,7 @@ no error and passed the obvious check.
 
 | ID | Area | Issue | Status |
 |---|---|---|---|
+| I-117 | Review | Fourth external review triaged. **8 fixed offline**: fail-closed action envelopes, `NaN`/`Infinity` reaching the work-order cost column (poisons `SUM` on a headline demo figure — **both** the app guard and the Postgres CHECK passed it), write tools exclusive in a tool-call batch, visible audit failures, depot containment, I-099's loud stale-snapshot fail, `/readyz` as release preflight, and the **degenerate topical recall metric** (always 1.0 — my bug from I-116, caught by the review). **One claim disproven** (`series_key` cannot be NULL) and one correction repeated from I-115 (versioned NHTSA paths would double the corpus). Agent + RAG halves take effect at Run 2. | **open** — pending Run 2 |
 | I-116 | Review | I-115's four remaining items built offline: `/readyz` (demo readiness, free to poll — state reads only, never a query that would wake the agent), `scripts/provision_search.sh` (idempotent, drop-detecting), the RAG retrieval evaluation (harness + unit-tested metrics now; **numbers measured in Run 2**), and the CDF fingerprint split. Also corrected a wrong reason inside I-115 itself: that trigger is **UNPAUSED**, not paused. Remaining: the RAG numbers, which need the live index. | **open** — pending Run 2 |
 | I-115 | Review | Third external review triaged. **8 fixed offline** (branch `fix/repo-review-round-3`), incl. the exact-match AI Search join that excluded all 2,116 F-250s from retrieval. **None are live** — they take effect at Run 2's agent redeploy and index rebuild. **The widened join makes 115,499 a stale figure: Run 2 must measure and record the new count**, and the build script's assert is bounded, not exact, until it does. **All four outstanding items closed 2026-09-24 — see I-116.** | ✅ resolved |
 | I-112 | Phase 1 | Smoke index stuck at `ready: false` on two fresh attempts, **self-cleared** on the second — root cause unconfirmed, best guess is shared-workspace contention on a *first* index on a fresh endpoint (the real 115K build, on an already-warm endpoint, hit no stall at all same session). If it recurs in Run 2: wait, don't delete-and-recreate. | **watch** |
@@ -30,6 +31,221 @@ no error and passed the obvious check.
 ---
 
 ## Tooling / process
+
+### I-117 — a fourth external review: two findings worse than reported, one disproven, one already rejected
+
+*Date:* 2026-09-24 · *Status:* **8 fixed, 1 disproven, 1 correction repeated from I-115, 4 deferred with reasons.**
+
+**Found by** a fourth external review of an exported zip (`repo-review.md`, gitignored), the
+same shape as I-109, I-110 and I-115 — and **the best of the four**. It read a zip containing
+that morning's work (it names `provision_search.sh` and `28_rag_eval.py`), its line references
+are real, and it correctly identified that the project is now "sophisticated enough that
+protocol correctness and authorization details matter more than adding features".
+
+Every claim was checked against the code before being accepted. Three did not survive that
+check unchanged, and **the two most important findings were worse than the review said** — one
+of them a bug introduced that same morning, by me.
+
+---
+
+#### The two that were worse than reported
+
+**1. Topical `recall@10` was not "not a valid recall metric" — it was degenerate.**
+`src/search/28_rag_eval.py` derived each probe's relevant set *from the retrieved hits*, then
+computed recall against it. Since `relevant ⊆ retrieved`, the intersection is always the entire
+relevant set. Measured:
+
+```
+relevant derived from hits: ['2', '7']
+recall@10    = 1.0      <-- always, whenever anything on target came back
+precision@10 = 0.2      <-- genuinely meaningful
+MRR          = 0.333    <-- genuinely meaningful
+recall@10 (nothing on target) = 0.0
+```
+
+**Exactly 1.0 or exactly 0.0** — one bit of information, duplicating the hit-rate indicator
+already reported beside it, under a name that means something else. It would have been written
+to `ops_rag_eval` and published as a retrieval result, and it could not have failed: change the
+retriever completely and the number does not move, because the goalposts move with it.
+
+Precision and MRR were never affected — they depend only on *which returned items are on
+target*, not on the relevant set being complete. So only the set was replaced: the pool now
+comes from `silver_complaint_chunk_indexed` by SQL, using the same EXACT + MODEL_VARIANT
+predicate as the rest of the system, and **`relevant_pool_size` is published beside recall**.
+A pool of thousands makes Recall@10 tiny by arithmetic — ten slots cannot cover three thousand
+documents — and a reader who sees 0.004 without the denominator reads it as broken retrieval.
+
+The regression guard is split, because the metric functions were never wrong: `tests/
+test_retrieval_metrics.py::TestTheCircularRelevanceTrap` pins the arithmetic that makes the
+shortcut attractive, and `tests/test_rag_eval_source.py` asserts the notebook does not take it.
+
+**2. `NaN` and `+Infinity` reached the work-order write path, and BOTH layers waved them
+through.** `work_orders.py` guarded only `actual_cost < 0`:
+
+```
+       NaN -> ACCEPTED  value=nan   passes the (<0) guard
+  Infinity -> ACCEPTED  value=inf   passes the (<0) guard
+ -Infinity -> rejected  (caught incidentally by <0)
+```
+
+Pydantic v2 permits non-finite floats by default and Python's `json.loads` accepts the bare
+literals, so this was reachable over HTTP. The review stops at "add `math.isfinite`". The
+consequence is worse: **Postgres `numeric` accepts `'NaN'` and orders it above every number**,
+so `fg_wo_actual_cost_nonnegative` (`>= 0`) passes it too. Two independent checks, both
+waving through the same value. One poisoned row then makes `SUM(actual_cost)` NaN for its whole
+depot — the cost figure the console's breakdown renders and `docs/DEMO.md` quotes
+($84,409.68). A silent corruption of a headline number, from one malformed request.
+
+> **And fixing it surfaced a second bug the review did not reach.** `allow_inf_nan=False`
+> correctly rejects the value — and then FastAPI's default handler echoes the offending input
+> back under `input`, Starlette's `JSONResponse` sets `allow_nan=False`, and serialisation
+> raises *after* the handler returned. The caller gets a **500 with a stack trace instead of a
+> 422**. The schema fix alone traded a silent corruption for a loud crash. `main.py` now has a
+> `RequestValidationError` handler that sanitises non-finite floats out of the error body —
+> registered globally, because any endpoint taking a float can be sent one.
+
+---
+
+#### The one that is disproven
+
+**`open_defect_signal` has no `series_key IS NULL` idempotency hole.** The review reasons
+correctly about Postgres — a normal unique index does permit multiple NULLs — and from the
+`series_key or None` line, but did not check the validator ordering I-115 fixed. `series_key`
+is `"|".join(p for p in (make, model, component) if p)` and `component` is required, so the
+join always yields at least the component:
+
+```
+make=None, model=None -> series_key = 'BRAKES' -> stored 'BRAKES'   (not NULL)
+component=' '         -> rejected 422 (mode="before" strip runs BEFORE min_length)
+```
+
+The only path to a NULL was a blank component, and I-115 closed it at the root. **No second
+index, no migration.** Recorded precisely because this is the **second** review to propose
+Lakebase DDL for a gap already shut app-side — the index definition is visible in the repo and
+the validator ordering is not, so the wrong fix is the one that looks obvious from outside.
+
+#### The one already rejected, now proposed twice
+
+**NHTSA snapshot freshness.** The *bug* is real and logged (I-099): `01_download_flat_files.py`
+overwrites a fixed path, Auto Loader keys on path, so *ingestion succeeds + data is stale* is
+reachable and **was observed**. The proposed fix — immutable `snapshot=<date>/` landing paths —
+is what I-115 already rejected on the record, and this is the second review to suggest it.
+These are **full snapshots and silver does not dedupe**, so a new path re-ingests 2.24M + 5.8M
+rows as *new* rows and doubles the corpus. Versioned paths need a dedupe strategy that does not
+exist; that is a data-model change, not an ingestion tweak.
+
+**Built instead — the cheap fix I-099 named and nobody had done:** fail loudly when a *changed*
+upstream snapshot would land on a path Auto Loader has already committed. Two placement details
+are load-bearing and both were wrong in the first attempt: it runs **before the extract**, so
+the landed file still matches what bronze consumed rather than being half-overwritten by a
+snapshot nothing will read; and **before `record(...)`**, because writing the new watermark and
+then raising means the next run gets a 304, skips, and never raises again. *A guard that
+silences itself on the second attempt is worse than no guard*, since the single run that
+reported the problem then looks like a transient failure.
+
+---
+
+#### Confirmed and fixed as described
+
+**3. The action envelope failed open on a missing item id.** `_extract` read
+`item_id is None or str(item_id).startswith("action-")` — stating the opposite of its own
+invariant. The reasoning recorded at I-115 was that the item-level `id` had not been confirmed
+on a live payload, so an mlflow version omitting it must not stop every write from working.
+That is a real risk and the wrong trade: it makes the discriminator **optional**, which is the
+same as not having one, and the security story degrades to *"it works because our current
+wrapper happens to stamp ids"*.
+
+Now fail-closed, with the original risk handled by **making the failure loud rather than making
+it look safe**: a dropped envelope logs at WARNING with the observed item shape, so an omitted
+id appears in Run 2 as an unmistakable log line instead of a write that quietly does nothing.
+The revert is one condition.
+
+> **Closing it broke six tests, and that was the finding inside the finding.** Their payload
+> helpers emitted items with **no ids at all** — a shape `predict()` cannot produce — and they
+> passed only because the fail-open path executed them. So the tests guarding the action
+> protocol were exercising a payload that could not occur, which is a quieter version of the
+> same defect. The helpers now stamp ids the way `predict()` does.
+
+**4. A write tool could share a tool-call batch with reads.** The system prompt requires a
+make/model to be checked with `lookup_fleet_models` *before* being named in
+`open_defect_signal`. Every call in a batch is generated from the same model turn, so emitted
+together, the write's arguments were fixed before the lookup's result existed — the rule read
+as satisfied and had not happened.
+
+**Severity is below the review's P0**, and the review did not credit the existing layer:
+`agent_actions.execute` recomputes fleet relevance from real rows and rejects `make_n == 0`, so
+a hallucinated make cannot land. What degrades is `match_basis` quality and the protocol claim
+itself, which is the reason to fix it.
+
+The fix is shaped by a constraint the review's version would have broken: **the batch must
+still be answered in full**, because the completions API rejects the next message if any
+`tool_call_id` goes unanswered — which is exactly why the existing terminality check sits
+*after* the loop. So the write is refused **without being run** (executing it and discarding
+the envelope would still be work done on unchecked arguments), answered with a protocol error
+the model can act on, and never collected into `actions`. `READ+READ` ✅, `WRITE` alone ✅,
+`WRITE + anything` ❌.
+
+**5. Audit logging was `except Exception: pass`.** Swallowing is still right — the caller's
+real 403 must not be replaced by a database error from the *logging* path — but swallowing
+*quietly* meant a refusal could vanish from the audit trail with nothing recording that it had.
+For a system whose claim is that every agent action is attributable, "the audit write failed
+and nobody knows" is the wrong half to keep. Now `log.exception`.
+
+**6. Client-supplied `depot_id` was filtering, not authorization.** True, and the review itself
+notes it is not exploitable today. `resolve_scope` now rejects a requested depot outside the
+caller's authorised set, via an `authorized_depots()` seam that returns `None` — *unrestricted*
+— which is the honest current state rather than a stub: nobody is enrolled in
+`fleetguard_depot_assignment` and the RLS policy is deliberately fail-open. The check is inert
+today and correct the moment anyone is enrolled, **which is exactly the moment nobody will
+think to re-audit this function**. The tests pin one trap worth naming: `frozenset()` is falsy,
+so a truthiness test here would read "no restrictions" and allow everything, turning the most
+restrictive input into the least. The check is `is not None`.
+
+**7. AI Search is not reproducible from `bundle deploy` alone.** True and unfixable — DABs
+exposes four resource keys and none is a vector index. The review wants a
+`release_preflight.sh` checking nine things; **`/api/readyz` already checked four of them**, so
+it was extended rather than duplicated: `indexed_row_count` is now compared against the source
+table (an index can be `ready` and **short** — I-105 records a sync restarting from zero, and a
+partial index answers every query without erroring), and the served agent version and console
+git SHA are reported. That turns the "is the live system the thing in the zip?" question — named
+as the single biggest practical risk — from five lookups into one URL. The source-count query is
+the only part needing a warehouse, so it degrades to a note rather than failing readiness: a
+warehouse scaled to zero is not a broken index.
+
+---
+
+#### Deferred, with reasons — not silently
+
+| Item | Reason |
+|---|---|
+| **Canonical vehicle alias table** (one model identity across RAG, exposure, Model B, agent write, emerging signals) | **The strongest architectural suggestion in the review, and out of scope at ten days.** The five paths already agree by construction (the predicate is copied, not re-derived); a table would make that structural rather than conventional. Recorded in `ENHANCEMENTS.md`. |
+| **Independent Model B adjudication** (200–300 pairs) | Stands rejected from I-115. Ten days, solo, Run 2 inside the window; a rushed half-set is worth less to a judge than the existing honest caveat. The counter-offer — ~50 stratified pairs reported explicitly as a spot check — remains open. |
+| **HMAC chaining over user turns** | The review classifies it P2 itself and agrees it is not a privilege escalation: a user may edit their own question anyway. Server-side conversation state is the real fix and is not a ten-day change. |
+| **Judge Mode / clickable evidence panel / agent action timeline** | All three are new UI, and **new frontend eight days before Run 2 converts it from a verified restore back into a first full composition** — the exact failure the two-window plan exists to prevent. The determinism sought already exists: `scripts/seed_demo_state.py` drives the real API, and `DEMO.md`'s ten beats were verified beat-by-beat against the live App (I-113). |
+
+The review's "2 Vs" point — lead with **volume + variety**, not velocity — is free and is
+already the project's position: `STATUS.md` and the frozen proposal's contradictions table both
+record that the sub-minute analytics claim is unreachable (I-081's platform floors) and the
+measured chain is 2.5–4.5 min.
+
+---
+
+**Lesson.** I-115's was *a deferral's cost can expire without the decision being revisited*.
+I-116's was *a deferral reason quoted rather than read*. This round's is about **tests that
+cannot fail**, and it arrived twice in one file of changes:
+
+- topical `recall@10` was computed against ground truth derived from the thing being measured,
+  so it returned 1.0 no matter how bad retrieval was;
+- six action-protocol tests asserted over payloads with no item ids — a shape the agent cannot
+  emit — so they passed by taking a fail-open branch instead of exercising the discriminator
+  they existed to guard.
+
+Both look like evidence. Both are shaped so that the failure they are meant to catch cannot
+register. **A green check is only worth what its ability to go red is worth**, and neither of
+these had any — which is why every fix in this round was mutation-checked by reverting it and
+confirming the new test actually fails.
+
+---
 
 ### I-116 — closing I-115's four open items, and a deferral reason that was wrong in the other direction
 

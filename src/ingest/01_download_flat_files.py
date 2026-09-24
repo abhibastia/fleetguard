@@ -194,6 +194,40 @@ def fetch(source: str, url: str, subdir: str, expected_fields):
 
     last_mod = resp.headers.get("Last-Modified")
     etag = resp.headers.get("ETag")
+    # REMOVE THE SILENCE, NOT THE LIMITATION (I-099, built 2026-09-24 as I-117 item 7).
+    #
+    # This writes each snapshot over a FIXED path — `cmpl/FLAT_CMPL.txt` — and Auto Loader
+    # keys on path. A file already committed to the bronze stream is never re-read, so the
+    # reachable outcome is: **download succeeds, job goes green, bronze is unchanged, and
+    # nothing anywhere says the data is stale.** It has been observed.
+    #
+    # THE OBVIOUS FIX IS WRONG HERE, and two separate external reviews have now proposed it:
+    # immutable `snapshot=<date>/` landing paths. These are **full snapshots and the silver
+    # layer does not dedupe**, so a new path is a new file, Auto Loader ingests all of it, and
+    # 2.24M complaints become 4.5M. Versioned paths need a dedupe strategy that does not
+    # exist — a data-model change, not an ingestion tweak.
+    #
+    # So the limitation stays and the silence goes.
+    #
+    # PLACEMENT IS LOAD-BEARING, TWICE. This runs **before** the extract, so the landed file
+    # still matches what bronze actually consumed rather than being half-overwritten by a
+    # snapshot nothing will read. And it runs **before** `record(...)`: writing the new
+    # watermark and then raising would mean the next run gets a 304, skips, and never raises
+    # again — a guard that silences itself on the second attempt is worse than none, because
+    # the one run that reported the problem looks like a transient failure.
+    if prior and last_mod and last_mod != prior:
+        raise RuntimeError(
+            f"{source}: upstream changed (Last-Modified {prior!r} -> {last_mod!r}) but this "
+            f"snapshot lands on a fixed path under {VOL}/{subdir}/ that Auto Loader has "
+            "already committed. It will NOT be re-ingested, and the pipeline would report "
+            "success over stale data (I-099). Nothing has been overwritten.\n"
+            "Resolve deliberately, do not just re-run:\n"
+            "  * full refresh the bronze pipeline to re-read the corpus, or\n"
+            "  * accept the stale snapshot and clear this source's row in ops_ingest_watermark.\n"
+            "Versioned landing paths are NOT the fix — these are full snapshots and silver "
+            "does not dedupe, so a new path doubles the corpus."
+        )
+
     payload = resp.read()
     print(f"  {source}: 200, {len(payload):,} bytes zipped · Last-Modified {last_mod}")
 
@@ -225,6 +259,7 @@ def fetch(source: str, url: str, subdir: str, expected_fields):
         landed_file=name,
         outcome="downloaded",
     )
+
 
 
 for src, (u, sub, fields) in SOURCES.items():

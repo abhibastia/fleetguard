@@ -29,6 +29,10 @@ from fleetguard_api.routers import readyz as readyz_module
 
 client = TestClient(app)
 
+#: "source count equals the index count" — the healthy case, distinct from an explicit
+#: number and from None (warehouse unavailable).
+_SAME = object()
+
 
 @pytest.fixture()
 def configured(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -72,7 +76,9 @@ class _FakeWorkspace:
     wrong call and the correct call look identical at the call site.
     """
 
-    def __init__(self, *, endpoint_ready="READY", index_ready=True, rows=115_499):
+    def __init__(
+        self, *, endpoint_ready="READY", index_ready=True, rows=115_499, source_rows=_SAME
+    ):
         self.serving_endpoints = SimpleNamespace(
             get=lambda name: SimpleNamespace(
                 state=SimpleNamespace(ready=SimpleNamespace(value=endpoint_ready), config_update=None),
@@ -84,6 +90,19 @@ class _FakeWorkspace:
             get_index=lambda index_name: SimpleNamespace(
                 status=SimpleNamespace(ready=index_ready, indexed_row_count=rows)
             )
+        )
+        # The index check compares `indexed_row_count` against the source table, because an
+        # index can be `ready` and SHORT (I-105 — a sync restarting from zero answers every
+        # query without erroring). `source_rows=None` simulates a sleeping warehouse.
+        self.statement_execution = SimpleNamespace(
+            execute_statement=lambda **k: SimpleNamespace(
+                status=SimpleNamespace(state=SimpleNamespace(value="SUCCEEDED")),
+                result=SimpleNamespace(
+                    data_array=[[str(rows if source_rows is _SAME else source_rows)]]
+                ),
+            )
+            if source_rows is not None
+            else SimpleNamespace(status=None, result=None)
         )
 
     @staticmethod
@@ -116,6 +135,7 @@ def test_everything_up_is_200_and_says_so(configured, monkeypatch: pytest.Monkey
         "agent_endpoint",
         "search_index",
         "snapshots",
+        "release",
     }
     assert all(c["status"] == "ok" for c in body["checks"])
     # Detail is populated on SUCCESS too — "ok" alone is not useful before a demo.
@@ -206,3 +226,59 @@ def test_healthz_is_untouched_and_still_always_ok(configured) -> None:
     resp = client.get("/healthz")
     assert resp.status_code == 200
     assert resp.json()["status"] == "ok"
+
+
+def test_a_short_index_is_down_even_when_it_reports_ready(
+    configured, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """I-117. `ready: true` was treated as sufficient, and it is not.
+
+    I-105 records a sync silently restarting from zero. A partially-synced index answers every
+    query without erroring — it simply cannot see the rows it never embedded, which is the
+    worst shape this project keeps finding: a confident answer over a truncated corpus. So the
+    row count is compared against the source table, and a mismatch is `down`.
+    """
+    resp = _get(monkeypatch, workspace=_FakeWorkspace(rows=40_000, source_rows=115_499))
+    assert resp.status_code == 503
+    check = next(c for c in resp.json()["checks"] if c["name"] == "search_index")
+    assert check["status"] == "down"
+    assert "SHORT" in check["detail"]
+
+
+def test_a_sleeping_warehouse_does_not_fail_readiness(
+    configured, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The source count is the one check here that needs a SQL warehouse. A warehouse scaled
+    to zero is not a broken index, so it degrades to a note rather than turning a healthy
+    system red — otherwise the cheapest state to be in would look like an outage."""
+    resp = _get(monkeypatch, workspace=_FakeWorkspace(source_rows=None))
+    assert resp.status_code == 200
+    check = next(c for c in resp.json()["checks"] if c["name"] == "search_index")
+    assert check["status"] == "ok"
+    assert "unavailable" in check["detail"]
+
+
+def test_release_provenance_is_reported(configured, monkeypatch: pytest.MonkeyPatch) -> None:
+    """"Is the live system the thing in the zip?" — named as the biggest practical risk, and
+    today it means looking in five separate places. Two of the five are cheap here."""
+    monkeypatch.setenv("FLEETGUARD_GIT_SHA", "abc1234")
+    check = next(
+        c for c in _get(monkeypatch).json()["checks"] if c["name"] == "release"
+    )
+    assert check["status"] == "ok"
+    assert "agent v7" in check["detail"]
+    assert "abc1234" in check["detail"]
+
+
+def test_release_provenance_never_fails_readiness_on_its_own(
+    configured, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A missing git SHA means the deploy did not stamp one. Worth reporting; not a reason to
+    call a working system unready."""
+    monkeypatch.delenv("FLEETGUARD_GIT_SHA", raising=False)
+    monkeypatch.delenv("DATABRICKS_BUNDLE_GIT_COMMIT", raising=False)
+    resp = _get(monkeypatch)
+    assert resp.status_code == 200
+    check = next(c for c in resp.json()["checks"] if c["name"] == "release")
+    assert check["status"] == "ok"
+    assert "unset" in check["detail"]

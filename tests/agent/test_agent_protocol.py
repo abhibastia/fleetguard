@@ -153,27 +153,77 @@ def test_later_tool_failure_cannot_reach_the_write(agent):
     assert len(actions) == 1
 
 
+
+def _tool_results(client) -> dict[str, str]:
+    """`tool_call_id` -> the content answered for it, from the last request the fake saw."""
+    return {
+        m["tool_call_id"]: m["content"]
+        for m in client.chat.completions.calls[-1]["messages"]
+        if isinstance(m, dict) and m.get("role") == "tool"
+    }
+
 def test_two_envelopes_in_one_batch_write_nothing(agent):
-    """Fail closed, the same direction as the exhaustion path."""
+    """Fail closed, the same direction as the exhaustion path.
+
+    The OUTCOME is unchanged — nothing is written — but as of I-117 a different rule gets
+    there first. Two writes in one batch is also `WRITE + anything`, so batch exclusivity
+    rejects both before either tool runs, and the model is told why instead of being handed a
+    one-action-per-turn message after the fact. The later guard still exists and still fires
+    if two envelopes ever reach it by another route; this test now pins the earlier one,
+    because that is what actually happens.
+    """
     calls = [FakeToolCall("open_defect_signal", id="a"), FakeToolCall("watch_campaign", id="b")]
-    (emitted, actions), _ = _run_with(
+    (emitted, actions), client = _run_with(
         agent,
-        [FakeMessage(tool_calls=calls)],
+        [FakeMessage(tool_calls=calls), FakeMessage(content="Understood.")],
         {
             "open_defect_signal": lambda **k: _envelope(agent),
             "watch_campaign": lambda **k: _envelope(agent, "watch_campaign"),
         },
     )
     assert actions == []
-    assert "one action at a time" in emitted[-1]["content"]
+    results = _tool_results(client)
+    assert {"a", "b"} == set(results), "both calls must still be answered"
+    assert all("protocol:" in r for r in results.values())
 
 
-def test_every_tool_call_in_the_batch_is_answered(agent):
-    """Cutting the batch short would leave a `tool_call_id` unanswered, which the
-    completions API rejects on the next message. The write request is the *first* call
-    here, so a naive `break` would strand the second."""
+def test_a_write_batched_with_a_read_is_refused_and_writes_nothing(agent):
+    """REVERSED 2026-09-24 (I-117). This previously asserted `len(actions) == 1` — a write
+    batched with a read went through.
+
+    Why that was wrong: every call in a batch is generated from the *same* model turn, so
+    `open_defect_signal(make=...)` and `lookup_fleet_models()` emitted together means the
+    write's arguments were fixed before the lookup's result existed. The system prompt's rule
+    — check the make with `lookup_fleet_models` before naming it in a write — read as
+    satisfied and had not happened.
+
+    Severity was bounded (`agent_actions.execute` recomputes fleet relevance from real rows
+    and rejects an unknown make), so what this protects is `match_basis` quality and the
+    protocol claim itself. The write is now refused *without being called*: running it and
+    discarding the envelope would still be work done on unchecked arguments.
+    """
     calls = [FakeToolCall("open_defect_signal", id="a"), FakeToolCall("lookup_fleet_models", id="b")]
+    called: list[str] = []
     (_, actions), client = _run_with(
+        agent,
+        [FakeMessage(tool_calls=calls), FakeMessage(content="done")],
+        {
+            "open_defect_signal": lambda **k: called.append("write") or _envelope(agent),
+            "lookup_fleet_models": lambda **k: called.append("read") or {"makes": ["FORD"]},
+        },
+    )
+    assert actions == [], "a write batched with a read must not produce an action"
+    assert called == ["read"], "the write tool must not run at all — its arguments are untrusted"
+
+
+def test_the_refused_batch_is_still_answered_in_full(agent):
+    """The constraint that dictates the shape of the fix, and the reason the write is
+    *answered* rather than skipped: the completions API rejects the next message if any
+    `tool_call_id` went unanswered. A naive `continue` that emitted no tool message would
+    strand call `a` and the following round would 400 — trading a protocol bug for an outage.
+    """
+    calls = [FakeToolCall("open_defect_signal", id="a"), FakeToolCall("lookup_fleet_models", id="b")]
+    _, client = _run_with(
         agent,
         [FakeMessage(tool_calls=calls), FakeMessage(content="done")],
         {
@@ -181,13 +231,37 @@ def test_every_tool_call_in_the_batch_is_answered(agent):
             "lookup_fleet_models": lambda **k: {"makes": ["FORD"]},
         },
     )
-    answered = {
-        m["tool_call_id"]
-        for m in client.chat.completions.calls[-1]["messages"]
-        if isinstance(m, dict) and m.get("role") == "tool"
-    }
-    assert answered == {"a", "b"}
+    results = _tool_results(client)
+    assert set(results) == {"a", "b"}
+    assert "protocol:" in results["a"], "the model must be told WHY, or it will just retry"
+    assert "protocol:" not in results["b"], "the read is unaffected and gets its real result"
+
+
+def test_a_write_alone_in_its_batch_still_works(agent):
+    """The rule is WRITE+anything, not WRITE. The normal path must be untouched — this is the
+    test that stops the fix from quietly disabling the write path altogether."""
+    (_, actions), _ = _run_with(
+        agent,
+        [FakeMessage(tool_calls=[FakeToolCall("open_defect_signal", id="a")]),
+         FakeMessage(content="Requested.")],
+        {"open_defect_signal": lambda **k: _envelope(agent)},
+    )
     assert len(actions) == 1
+
+
+def test_two_reads_in_one_batch_are_unaffected(agent):
+    """READ + READ is normal and must stay cheap — the model should keep parallelising
+    lookups."""
+    calls = [FakeToolCall("lookup_fleet_models", id="a"), FakeToolCall("lookup_fleet_exposure", id="b")]
+    _, client = _run_with(
+        agent,
+        [FakeMessage(tool_calls=calls), FakeMessage(content="done")],
+        {
+            "lookup_fleet_models": lambda **k: {"makes": ["FORD"]},
+            "lookup_fleet_exposure": lambda **k: {"vehicles": 25},
+        },
+    )
+    assert all("protocol:" not in r for r in _tool_results(client).values())
 
 
 def test_no_write_request_still_runs_the_normal_loop(agent):

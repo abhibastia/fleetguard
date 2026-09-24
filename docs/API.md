@@ -21,7 +21,7 @@ below.
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/healthz` | Unauthenticated **liveness** check — reports auth mode, data mode (live vs. snapshot), and whether the built console is present. Always 200 while the process is up. |
-| GET | `/api/readyz` | **Readiness** — a different question: *would the demo work right now?* Checks Lakebase, the agent serving endpoint, the AI Search index and the two committed snapshots, each with its own status, detail and latency. **200 only if all four pass; 503 otherwise**, with the same body either way. |
+| GET | `/api/readyz` | **Readiness** — a different question: *would the demo work right now?* Five checks — Lakebase, the agent serving endpoint, the AI Search index (**including `indexed_row_count` against the source table**, because an index can be `ready` and short), the two committed snapshots, and release provenance (served agent version + console git SHA). Each reports its own status, detail and latency. **200 only if all pass; 503 otherwise**, with the same body either way. |
 | GET | `/api/me` | The caller's own identity and how it was obtained. Proves the auth seam end to end. |
 | GET | `/api/auth/status` | What auth mode this deployment is running, for the console's own diagnostics. |
 
@@ -34,7 +34,14 @@ proving the *app's* access would test something the product does not do. That al
 
 **It is free to call.** The agent and index are checked with `serving-endpoints get` and
 `get-index`, control-plane reads. Querying the agent instead would wake a scale-to-zero
-container and bill until it idled down — the one thing a readiness probe must not do.
+container and bill until it idled down — the one thing a readiness probe must not do. The one
+exception is the index row count, which needs a SQL warehouse; it degrades to a note rather
+than failing readiness, because a warehouse scaled to zero is not a broken index.
+
+**It is also the release preflight.** *"Is the live system the thing in the zip?"* was named by
+review as the biggest practical risk, and answering it meant looking in five places. The
+`release` check reports two of them — served agent version and the git SHA the console was
+built at — so the question is one authenticated URL rather than a runbook (I-117).
 
 ## Queue & campaign detail — the operator's primary surface
 

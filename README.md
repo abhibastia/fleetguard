@@ -71,6 +71,15 @@ above, sourced from the same measurement.
 
 ## What it's built on
 
+**Volume and variety, not velocity.** The corpus is **8.44M bronze rows** — 2.24M complaints,
+5.8M technical service bulletins, 244,925 recall rows, 154,367 investigation rows — across four
+structurally different NHTSA datasets, joined to a 20,000-vehicle fleet registry. That is a
+genuine big-data claim and it is measured. **Velocity is deliberately not claimed:** the
+Postgres→Unity Catalog capture is 7.1–15.6 s, but the end-to-end business-event→analytics path
+measures **2.5–4.5 minutes**, because a `table_update` trigger has a hard 60-second platform
+floor on both its intervals (I-081). The frozen proposal claims sub-minute there; its
+contradictions table records that as unreachable rather than quietly leaving it.
+
 - **Ingestion → medallion pipeline** (Lakeflow Declarative Pipelines): NHTSA's complaint,
   recall, investigation, and TSB flat files → bronze → silver → gold, with a quarantine
   split so `bronze = silver + quarantine` reconciles exactly at every layer.

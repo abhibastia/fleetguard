@@ -11,11 +11,13 @@ is confined to `auth/tokens.py` (E-13).
 
 from __future__ import annotations
 
+import math
 import os
 from pathlib import Path
 
-from fastapi import APIRouter, FastAPI
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -65,6 +67,43 @@ class Me(BaseModel):
 # during backend-only development, which must not be an error.
 CONSOLE_DIR = Path(os.getenv("FLEETGUARD_CONSOLE_DIR", Path(__file__).parent / "console"))
 
+
+
+def _json_safe(value):
+    """Replace non-finite floats with their text form, recursively.
+
+    JSON has no `NaN` or `Infinity`. Python's `json.dumps` emits them anyway unless told not
+    to — but Starlette's `JSONResponse` sets `allow_nan=False`, so any such value in a
+    response body raises *during serialisation*, after the handler has already returned.
+    """
+    if isinstance(value, float) and not math.isfinite(value):
+        return str(value)
+    if isinstance(value, dict):
+        return {k: _json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(v) for v in value]
+    return value
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error_handler(_: Request, exc: RequestValidationError) -> JSONResponse:
+    """422s must be serialisable, including when the rejected input is what broke JSON.
+
+    **Found while fixing I-117, and not by the review that prompted it.** Adding
+    `allow_inf_nan=False` to `actual_cost` correctly rejects `{"actual_cost": NaN}` — and then
+    FastAPI's default handler echoes the offending value back under `input`, Starlette refuses
+    to serialise it, and the caller gets a **500 with a stack trace instead of a 422**. So the
+    schema fix on its own traded a silent data-poisoning bug for a loud server error, which is
+    better but still wrong, and would look like a crash to anyone probing the API.
+
+    Registered globally rather than on one route: any endpoint accepting a float can be sent a
+    non-finite one, and the next one added should not have to rediscover this.
+    """
+    return JSONResponse(
+        status_code=422,  # not the named constant: starlette renamed it, and pinning the number
+        # keeps this working across the deprecation either way.
+        content={"detail": _json_safe(exc.errors())},
+    )
 
 @app.get("/healthz", response_model=Health, tags=["ops"])
 def healthz() -> Health:

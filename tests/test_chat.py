@@ -5,6 +5,7 @@ indistinguishable from "Agent endpoint returned 400" alone.
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 
 import fleetguard_api.deps as deps_module
@@ -138,17 +139,22 @@ def test_the_agent_request_id_reaches_the_audit_row(monkeypatch):
                 "databricks_output": {
                     "databricks_request_id": "5ec15af5-e058-40a9-956d-60e49f0d7a1c"
                 },
+                # Two items, each with the id `predict()` stamps — prose gets an ordinal,
+                # the envelope gets `action-<n>`. These used to be two content chunks inside
+                # one id-less item, which the agent cannot actually produce; it passed only
+                # because `_extract` executed id-less envelopes (fail-open, closed by I-117).
                 "output": [
+                    {"id": "0", "content": [{"type": "output_text", "text": "Requested."}]},
                     {
+                        "id": "action-0",
                         "content": [
-                            {"type": "output_text", "text": "Requested."},
                             {
                                 "type": "output_text",
                                 "text": chat_module.agent_actions.ACTION_SENTINEL
                                 + ' {"__fleetguard_action__": "open_defect_signal"}',
                             },
-                        ]
-                    }
+                        ],
+                    },
                 ],
             },
         ),
@@ -178,17 +184,22 @@ def test_a_response_without_a_request_id_still_writes_the_action(monkeypatch):
             200,
             {
                 "object": "response",
+                # Two items, each with the id `predict()` stamps — prose gets an ordinal,
+                # the envelope gets `action-<n>`. These used to be two content chunks inside
+                # one id-less item, which the agent cannot actually produce; it passed only
+                # because `_extract` executed id-less envelopes (fail-open, closed by I-117).
                 "output": [
+                    {"id": "0", "content": [{"type": "output_text", "text": "Requested."}]},
                     {
+                        "id": "action-0",
                         "content": [
-                            {"type": "output_text", "text": "Requested."},
                             {
                                 "type": "output_text",
                                 "text": chat_module.agent_actions.ACTION_SENTINEL
                                 + ' {"__fleetguard_action__": "open_defect_signal"}',
                             },
-                        ]
-                    }
+                        ],
+                    },
                 ],
             },
         ),
@@ -222,17 +233,19 @@ def test_a_watch_campaign_result_round_trips_through_action_result(monkeypatch):
             200,
             {
                 "object": "response",
+                # Faithful item ids — see the note on the open_defect_signal payload above.
                 "output": [
+                    {"id": "0", "content": [{"type": "output_text", "text": "Requested."}]},
                     {
+                        "id": "action-0",
                         "content": [
-                            {"type": "output_text", "text": "Requested."},
                             {
                                 "type": "output_text",
                                 "text": chat_module.agent_actions.ACTION_SENTINEL
                                 + ' {"__fleetguard_action__": "watch_campaign"}',
                             },
-                        ]
-                    }
+                        ],
+                    },
                 ],
             },
         ),
@@ -247,20 +260,28 @@ def test_a_watch_campaign_result_round_trips_through_action_result(monkeypatch):
 
 
 def _reply_with(monkeypatch, texts: list[str]):
-    """Point the route at a serving-endpoint response made of `texts` as output items."""
-    monkeypatch.setattr(
-        chat_module.httpx,
-        "post",
-        lambda *a, **k: _FakeResponse(
-            200,
-            {
-                "object": "response",
-                "output": [
-                    {"content": [{"type": "output_text", "text": t} for t in texts]}
-                ],
-            },
-        ),
-    )
+    """Point the route at a serving-endpoint response made of `texts` as output items.
+
+    **Each text becomes its own item, with the id `predict()` would stamp** — a bare ordinal
+    for prose, `action-<n>` for an envelope. Until 2026-09-24 this packed every text into a
+    single item carrying no id at all, which is not a shape the agent can produce; the tests
+    built on it passed only because `_extract` used to execute id-less envelopes anyway. When
+    that fail-open path was closed (I-117), six tests broke at once — correctly, because they
+    had been asserting behaviour over a payload that could not occur.
+
+    Mirroring the real stamping here means these tests exercise the discriminator instead of
+    bypassing it, and a future change to how ids are assigned shows up as a failure rather
+    than as a quietly weaker guarantee.
+    """
+    items, action_n = [], 0
+    for i, text in enumerate(texts):
+        if text.startswith(chat_module.agent_actions.ACTION_SENTINEL):
+            item_id = f"{chat_module.ACTION_ITEM_ID_PREFIX}{action_n}"
+            action_n += 1
+        else:
+            item_id = str(i)
+        items.append({"id": item_id, "content": [{"type": "output_text", "text": text}]})
+    _reply_with_items(monkeypatch, items)
 
 
 def _envelope(action: str = "open_defect_signal") -> str:
@@ -338,21 +359,47 @@ class TestEnvelopeAuthenticity:
             "a forged envelope must not be rendered to the operator either"
         )
 
-    def test_a_payload_with_no_item_ids_keeps_the_old_behaviour(self, monkeypatch):
-        """DEGRADE, DO NOT BREAK. The item-level `id` has not been confirmed on a live
-        payload from this endpoint. If an mlflow version omits it, every write must keep
-        working exactly as before rather than silently stopping.
+    def test_a_missing_item_id_is_rejected_and_never_executes(self, monkeypatch, caplog):
+        """REVERSED 2026-09-24 (I-117). This test previously asserted the opposite — that a
+        payload with no item ids "keeps the old behaviour", i.e. executes anyway — on the
+        reasoning that the item-level `id` was unconfirmed on a live payload and an mlflow
+        version omitting it must not stop every write from working.
+
+        That reasoning made the discriminator **optional**, which is the same as not having
+        one: anything able to emit an item without an id could emit an executable action, and
+        the invariant "only Python-created `action-*` items become actions" was true only
+        because the current wrapper happens to stamp ids.
+
+        The risk it was protecting against is real, and is now handled by making the failure
+        **loud** rather than making it look safe: the drop logs at WARNING with the item shape,
+        so an omitted id shows up in Run 2 as an unmistakable log line instead of a write that
+        quietly does nothing. Fail closed, then diagnose.
         """
         _configure(monkeypatch)
+        executed = []
         monkeypatch.setattr(
-            chat_module.agent_actions, "execute", lambda *a, **k: _action_result()
+            chat_module.agent_actions,
+            "execute",
+            lambda *a, **k: executed.append(a) or _action_result(),
         )
         _reply_with_items(monkeypatch, [_item("Requested."), _item(_envelope())])
 
-        resp = client.post("/api/chat", json={"messages": [{"role": "user", "content": "go"}]})
+        with caplog.at_level(logging.WARNING):
+            resp = client.post(
+                "/api/chat", json={"messages": [{"role": "user", "content": "go"}]}
+            )
 
         assert resp.status_code == 200
-        assert resp.json()["action_result"]["signal_id"] == "AGENT-test"
+        assert executed == [], "an envelope with no item id must not reach execute"
+        body = resp.json()
+        assert body["action_result"] is None
+        # ...and it is not rendered either — an operator must never see a dropped envelope
+        # presented as something the assistant said.
+        assert chat_module.agent_actions.ACTION_SENTINEL not in body["reply"]
+        # The loud half. Without this the fix trades a security hole for a silent one.
+        assert any("dropping an action envelope" in r.getMessage() for r in caplog.records), (
+            "a dropped envelope must be logged, or an omitted id is undiagnosable"
+        )
 
 
 class TestOneActionPerTurn:

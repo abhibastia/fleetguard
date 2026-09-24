@@ -24,11 +24,12 @@ this codebase never trusts the frontend to enforce anything it can enforce itsel
 from __future__ import annotations
 
 import json
+import math
 from datetime import date, datetime
-from typing import Literal
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, HTTPException, Query, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .. import snapshot
 from ..authz import may_approve
@@ -86,11 +87,26 @@ class WorkOrderUpdate(BaseModel):
     two apart, since a default and an explicit null are otherwise indistinguishable. The same
     applies to `actual_cost: null` — clearing a mis-logged cost is a real, distinct action from
     not touching it.
+
+    **`allow_inf_nan=False` is load-bearing, not tidiness (I-117).** Pydantic v2 accepts
+    non-finite floats by default and Python's `json.loads` accepts the bare literals `NaN`
+    and `Infinity`, so both were reachable over the wire — and both sailed through the
+    `actual_cost < 0` guard below, because `float("nan") < 0` is `False` and `inf < 0` is
+    `False`. Only `-Infinity` was ever caught.
+
+    Neither did the database stop it. Postgres `numeric` **accepts** `'NaN'` and orders it
+    above every number, so `fg_wo_actual_cost_nonnegative` (`>= 0`) passes it too — both
+    layers waving through the same value. One poisoned row then makes `SUM(actual_cost)` NaN
+    for its depot, which is the cost figure the console's breakdown and `docs/DEMO.md` both
+    quote. A silent corruption of a headline number, from a single malformed request.
+
+    Rejected at the schema rather than in the handler so the next endpoint to accept a float
+    inherits the guard instead of having to remember it.
     """
 
     status: Literal["OPEN", "IN_PROGRESS", "COMPLETED", "CANCELLED"] | None = None
     assigned_to: str | None = None
-    actual_cost: float | None = None
+    actual_cost: Annotated[float, Field(allow_inf_nan=False)] | None = None
 
 
 WORK_ORDER_SELECT = """
@@ -238,6 +254,12 @@ def update_work_order(
             status.HTTP_400_BAD_REQUEST,
             "at least one of status, assigned_to, or actual_cost must be provided",
         )
+    if body.actual_cost is not None and not math.isfinite(body.actual_cost):
+        # Belt and braces with `allow_inf_nan=False` on the model. The schema rejects this
+        # first, so reaching here means someone constructed the model in code rather than
+        # over HTTP — and a NaN cost is worth refusing on both paths, because nothing
+        # downstream catches it: it passes `< 0`, and Postgres `numeric` passes it too.
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "actual_cost must be a finite number")
     if body.actual_cost is not None and body.actual_cost < 0:
         # Caught here for a clean 400 rather than letting the live DB constraint
         # (fg_wo_actual_cost_nonnegative, src/lakebase/18_add_work_order_actual_cost.py)

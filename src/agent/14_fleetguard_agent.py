@@ -557,6 +557,13 @@ print(f"model : {MODEL_NAME}\nllm   : {LLM_ENDPOINT}\nindex : {INDEX}")
 # MAGIC
 # MAGIC # Marks a tool result the CONSOLE must execute rather than the agent.
 # MAGIC ACTION_KEY = "__fleetguard_action__"
+# MAGIC
+# MAGIC #: The tools that request a business write. Named explicitly rather than inferred from
+# MAGIC #: whether a result happens to carry ACTION_KEY: the batch-exclusivity rule in
+# MAGIC #: `predict()` has to decide BEFORE calling anything, and a rule that can only tell a
+# MAGIC #: write from a read after running it is not a rule. Add a write tool here in the same
+# MAGIC #: commit that adds the tool.
+# MAGIC WRITE_TOOLS = frozenset({"open_defect_signal", "watch_campaign"})
 # MAGIC # Prefix on the extra output item that carries an envelope out to the caller. Must match
 # MAGIC # ACTION_SENTINEL in app/backend/fleetguard_api/routers/chat.py, which strips it.
 # MAGIC ACTION_SENTINEL = "__FLEETGUARD_ACTION__"
@@ -808,13 +815,47 @@ print(f"model : {MODEL_NAME}\nllm   : {LLM_ENDPOINT}\nindex : {INDEX}")
 # MAGIC                 emitted.append({"role": "assistant", "content": msg.content or ""})
 # MAGIC                 return emitted, actions
 # MAGIC
+# MAGIC             # A WRITE MAY NOT SHARE A BATCH WITH ANY OTHER CALL (I-117).
+# MAGIC             #
+# MAGIC             # The system prompt tells the model to check a make/model with
+# MAGIC             # `lookup_fleet_models` BEFORE naming it in `open_defect_signal`. Emitted in
+# MAGIC             # one batch, that ordering never happened: every call in a batch is generated
+# MAGIC             # from the same model turn, so the write's arguments were fixed before the
+# MAGIC             # lookup's result existed. The rule read as satisfied and was not.
+# MAGIC             #
+# MAGIC             # Bounded, not catastrophic — `agent_actions.execute` recomputes fleet
+# MAGIC             # relevance from real rows and rejects `make_n == 0`, so a hallucinated make
+# MAGIC             # cannot land. What degrades is `match_basis` quality, and the protocol claim
+# MAGIC             # itself, which is the part worth defending.
+# MAGIC             #
+# MAGIC             # THE BATCH IS STILL ANSWERED IN FULL. The completions API rejects the next
+# MAGIC             # message if any `tool_call_id` goes unanswered — which is exactly why the
+# MAGIC             # terminality check below sits after this loop rather than inside it. So the
+# MAGIC             # write is executed-and-discarded rather than skipped: it gets a protocol
+# MAGIC             # error as its tool result, is never collected into `actions`, and the model
+# MAGIC             # can ask again next turn once the reads have actually informed it.
+# MAGIC             write_calls = [c for c in msg.tool_calls if c.function.name in WRITE_TOOLS]
+# MAGIC             batch_violates_protocol = bool(write_calls) and len(msg.tool_calls) > 1
+# MAGIC
 # MAGIC             for call in msg.tool_calls:
 # MAGIC                 fn = TOOLS.get(call.function.name)
-# MAGIC                 try:
-# MAGIC                     args = json.loads(call.function.arguments or "{}")
-# MAGIC                     result = fn(**args) if fn else {"error": f"unknown tool {call.function.name}"}
-# MAGIC                 except Exception as exc:  # surface the failure to the model, do not crash
-# MAGIC                     result = {"error": f"{type(exc).__name__}: {exc}"}
+# MAGIC                 if batch_violates_protocol and call.function.name in WRITE_TOOLS:
+# MAGIC                     # Not called at all — the point is that its arguments are untrusted,
+# MAGIC                     # so running it and throwing the envelope away would still be work
+# MAGIC                     # done on unchecked inputs.
+# MAGIC                     result = {
+# MAGIC                         "error": (
+# MAGIC                             f"protocol: {call.function.name} is a write and cannot be "
+# MAGIC                             "requested in the same turn as other tools. Finish your "
+# MAGIC                             "lookups first, then request the write on its own."
+# MAGIC                         )
+# MAGIC                     }
+# MAGIC                 else:
+# MAGIC                     try:
+# MAGIC                         args = json.loads(call.function.arguments or "{}")
+# MAGIC                         result = fn(**args) if fn else {"error": f"unknown tool {call.function.name}"}
+# MAGIC                     except Exception as exc:  # surface the failure to the model, do not crash
+# MAGIC                         result = {"error": f"{type(exc).__name__}: {exc}"}
 # MAGIC                 if isinstance(result, dict) and ACTION_KEY in result:
 # MAGIC                     actions.append(result)
 # MAGIC                 convo.append(
