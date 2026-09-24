@@ -1,5 +1,10 @@
 # FleetGuard — project status
 
+> **COLD START? Jump to [Picking this up tomorrow](#picking-this-up-tomorrow).** It is a
+> one-screen briefing — current state, the single next action, what is costing money, what is
+> staged but not yet live, and the traps in the order they bite. The session log below is
+> newest-first history; you do not need to read it to resume.
+
 ## SESSION 2026-09-24 (third) — hardening agent / RAG / security / MLflow; UI frozen
 
 **Branch `harden/agent-rag-security-mlflow`.** Full write-up in `docs/ISSUES.md` **I-118**. Not
@@ -542,7 +547,7 @@ warehouse and Lakebase — and `DEMO.md`'s 2026-09-09 decision already lets the 
 as "offline". What that forfeits is the RAG demonstration, which is a graded category.
 
 
-**Last updated:** 2026-09-24 (two sessions) · previously 2026-09-23 · **MVP target: 7 September — MET** · **Two-window plan: Run 1 DONE 2026-09-23, Run 2 targeted 2–3 October**
+**Last updated:** 2026-09-24 (three sessions) · previously 2026-09-23 · **MVP target: 7 September — MET** · **Two-window plan: Run 1 DONE 2026-09-23, Run 2 targeted 2–3 October**
 
 > **RUN 1 COMPLETE 2026-09-23 — the first full end-to-end test with billable resources since
 > 2026-09-11.** AI Search rebuilt at the rescoped fleet make/model scope (115,499 chunks,
@@ -1207,7 +1212,137 @@ than discovering it mid-demo.
 
 ## Picking this up tomorrow
 
-### START HERE — state as of end of 2026-09-17
+### COLD START — state as of 2026-09-24, end of day
+
+**Read this section, then `docs/RUNBOOK.md` Phase 3. Nothing else is required to resume.**
+
+| | |
+|---|---|
+| **Today** | 2026-09-24 · **submission 4 October** · **Run 2 targeted 2–3 October** |
+| **`main`** | `18621ca`, pushed to `origin/main`, **CI green** (both jobs) |
+| **Working tree** | clean |
+| **Billable resources running** | **none** — see "What is costing money" below |
+| **Tests** | **666 passed / 24 skipped** (backend, ~45 s), **153** vitest, ruff + typecheck clean |
+| **Bound job resources** | **30** (`ls resources/*.job.yml \| wc -l` — count it, do not trust this number) |
+
+#### The one thing that happens next
+
+**Run 2** — bring the system back up, verify it, screenshot it, submit. It is a *sequence of
+commands*, not a build: `docs/RUNBOOK.md` **Phase 3**.
+
+> **Read the RUNBOOK, not the Phase 3 table further up this file.** That table is a summary and
+> has been wrong twice. The runbook carries the corrected commands and a banner explaining what
+> changed since Run 1.
+
+Phase 3 now has **three steps that have never been executed** — all added after Run 1, all
+mandatory:
+
+| Step | What | Why it is new |
+|---|---|---|
+| **3.0** | Rebuild `silver_complaint_chunk_indexed` | I-115 widened the fleet match. Building the index off the old table leaves all 2,116 F-250s out of retrieval |
+| **3.1a** | Run the RAG retrieval evaluation | I-116/I-117 built the harness; it needs a live index |
+| **3.3a** | **Evaluate the agent** | **This step never existed.** The agent has been rebuilt, redeployed and demoed without ever being scored, so the evaluation's hard gates have been inert through every run (I-118) |
+
+#### What is costing money
+
+**Nothing.** Confirmed 2026-09-24:
+
+- **AI Search** — endpoint and index deleted after Run 1. `vector-search-endpoints list-endpoints`
+  returns only `zachy_vs` (another student's, 31 indexes). **Billing verified stopped** — that
+  was action-plan step 2.2, and it is done.
+- **App** — `fleetguard-console` is STOPPED. `databricks apps start fleetguard-console`, ~2 min.
+- **Agent endpoint** — scale-to-zero, idle. Free at rest; wakes in ~47 s.
+- **Lakebase** — persists, and is **not ours to stop** (project `summer-bootcamp-2026-v2` is owned
+  by `zach@zachwilson.tech`).
+
+**One job can run without being asked:** `fleetguard-cdf-to-gold` is **UNPAUSED** (event-trigger
+on two Lakebase tables). It fires only on an agent write or a signals load — and the App is
+stopped, so nothing is writing. *`CLAUDE.md` said `PAUSED` for two weeks and a review quoted it
+as fact (I-116); `resources/cdf_to_gold.job.yml` is the authority.*
+
+#### Four things are staged and INERT until Run 2
+
+They are committed and tested, and **none of them is live**. This is deliberate — each rides a
+Run 2 step already committed to. Do not "fix" anything that looks unapplied:
+
+| Staged | Takes effect at |
+|---|---|
+| Agent: write-batch exclusivity, evidence TTL, sentinel stripping, untrusted-data markers, prompt rules 9–10 | **3.3** — `agents.deploy()` |
+| Index source widened to `EXACT` + `MODEL_VARIANT`; the RAG evaluation | **3.0 / 3.1a** |
+| Console: fail-closed action envelopes, `NaN` guard, depot containment, `/api/readyz` | **3.2** — `bundle run fleetguard_console` |
+| Evaluation hard gates + model-version tagging | **3.3a** |
+| I-099's loud stale-snapshot fail (`01_download_flat_files.py`) | Only on the next *ingest* — not exercised in Run 2 at all |
+
+#### Three things Run 2 owes, and nobody else can produce
+
+1. **The chunk count from step 3.0.** Four documents say "measured in Run 2" and are waiting on
+   it. Record it here, and restore `27_build_chunk_index_source.py`'s assert from **bounded** to
+   **exact**.
+2. **The RAG evaluation numbers** (step 3.1a) → `docs/EVIDENCE.md`, **published as measured,
+   including if poor** — the rule I-049 and I-111 already set.
+3. **The first live score for `resists_injected_instructions`** (step 3.3a). It is a hard gate
+   that has never run against a real model.
+
+#### Traps, in the order they will bite
+
+1. **`bundle deploy` does NOT ship the App** (I-097). `databricks bundle run fleetguard_console`
+   is the step that does, and it restarts the App under whoever is using it.
+2. **`agents.deploy()` leaves the old version serving at 0% traffic** — four occurrences (v1, v4,
+   v5, v6→v7). Assume it; do not check hopefully. `update-config` command is in RUNBOOK 3.3, and
+   it must also re-assert `scale_to_zero_enabled`, which every deploy has reset.
+3. **The index can be `ready` and SHORT.** I-105's sync restarted from zero and a partial index
+   answers every query without erroring. `provision_search.sh` polls for a *drop*, not a plateau;
+   `/api/readyz` compares `indexed_row_count` against the source table.
+4. **Fail-closed action envelopes are the one change with a real failure mode.** If an mlflow
+   wrapper omits item ids on the live payload, **every agent write silently stops**. It logs
+   loudly on purpose — grep the App logs for `dropping an action envelope` after the first agent
+   question in 3.4. The revert is one condition in `routers/chat.py::_extract`.
+5. **Never `bundle destroy`.** `lifecycle.prevent_destroy: true` guards the App; nothing guards
+   the rest.
+6. **The workspace is shared with ~296 students.** Always pass `--profile` explicitly; scope every
+   destructive operation to the `fleetguard-` prefix; check `creator_user_name` first.
+
+#### The rule that still applies
+
+**Nothing changes between Run 2 and submission.** It was broken once on purpose (I-115) with the
+cost understood and written down. It is back in force, and there is no remaining window in which
+breaking it is cheap.
+
+#### How to confirm you are where this note says
+
+```bash
+git log --oneline -1                                             # expect 18621ca or later
+git status -sb                                                   # expect clean, not ahead
+.venv/bin/python -m pytest                                       # expect 666 passed / 24 skipped
+databricks vector-search-endpoints list-endpoints --profile abhi # expect NO fleetguard-vs
+databricks apps get fleetguard-console --profile abhi            # expect compute_status STOPPED
+databricks serving-endpoints get \
+  agents_bootcamp_students-fleetguard-fleetguard_agent --profile abhi
+```
+
+**Expected agent state, checked 2026-09-24 — `NOT_READY` here is NOT a fault:**
+`state.ready: NOT_READY`, `config_update: NOT_UPDATING`, serving **v7**,
+`scale_to_zero_enabled: true`. That is a healthy idle endpoint costing nothing. Do **not** read
+`scale_to_zero_enabled` as a liveness signal — it is `true` in both idle states and
+distinguishes nothing (I-092).
+
+If the profile's OAuth token has expired (it did today), the fix is
+`databricks auth login --host https://dbc-7b106152-caf3.cloud.databricks.com --profile abhi`.
+
+#### Where everything else lives
+
+`README.md` §Documentation map is the canonical index. The three files that matter for resuming:
+**this page** (where we are), **`docs/RUNBOOK.md`** (what to type), **`docs/ISSUES.md`** (why
+anything is the way it is — newest first; I-118 is the latest).
+
+---
+
+### Historical — the 2026-09-17 cold-start note
+
+> Kept as a record of what the project looked like a week before submission. **Superseded by the
+> briefing above**; read it for history, not for state. Everything it describes as "next" has
+> either been done or explicitly reconsidered in a later session.
+
 
 **Everything below is on `main`** (`d0a7ab2` as of the last merge, one more PR — #17, the
 `BarChart` fix below — landing in the same session this note was written). Working tree

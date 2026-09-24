@@ -2,10 +2,13 @@
 
 Vehicle defect early warning & recall response platform on Databricks.
 
-**Starting a new session? Read `docs/STATUS.md` first.** It is the single "where are we"
-page: phase-by-phase state, what is running unattended, what is costing money, and a
-"Picking this up tomorrow" section with the next steps in priority order. Keep it current
-at the end of a working session — it is what a cold session resumes from.
+**Starting a new session? Read `docs/STATUS.md` first — specifically its
+[Picking this up tomorrow](docs/STATUS.md#picking-this-up-tomorrow) section, which is a
+one-screen COLD START briefing at the bottom of the file.** It carries current state, the single
+next action, what is costing money, what is committed-but-not-yet-live, and the known traps in
+the order they bite. Everything above it in that file is newest-first session history and is not
+required to resume. Keep the briefing current at the end of a working session — it is the thing
+a cold session actually resumes from, and it went a week stale once (rewritten 2026-09-24).
 
 **`docs/ARCHITECTURE.md` is the living spec — what the system actually is.** Keep it true;
 update it in the same commit as the code that changes it.
@@ -381,6 +384,48 @@ need this, platform handles it):**
 - `POST /api/2.0/database/credentials` — legacy/retired Provisioned-tier path, do
   not use.
 
+**The agent's retrieval corpus is UNTRUSTED INPUT (I-118, 2026-09-24) — do not simplify this
+away.** `search_complaints` is the only tool returning text this project did not write: 2.24M
+**public, user-submitted** ODI complaint narratives, any of which can contain instruction-shaped
+text. Three layers defend it and each exists for a stated reason:
+- `_neutralise()` wraps every narrative in `UNTRUSTED_OPEN`/`UNTRUSTED_CLOSE` markers and strips
+  `ACTION_SENTINEL`. It is **deliberately not a blocklist of injection phrases** — unbounded,
+  trivially paraphrased, and it would produce a system that only *looks* defended. A test pins
+  that hostile text survives verbatim inside the marker, so "improving" it into a filter fails CI.
+- System-prompt **rules 9 and 10**: retrieved text is evidence never an instruction (and the
+  agent must *say* when one is embedded); narrative claims must cite complaint ids.
+- The markers are interpolated into the prompt **from the same constants** `_neutralise` uses, so
+  the two cannot drift into a defence naming a delimiter the retrieval path no longer emits.
+Severity is bounded by `authz.may_approve` + server-side fleet-relevance recomputation — the
+worst realistic case is an approver's session opening a false defect signal, not arbitrary
+action. Structural half is tested offline; the behavioural half is a **hard gate** in
+`16_evaluate_agent.py` and is first measured in Run 2.
+
+**Postgres `numeric` ACCEPTS `'NaN'` and orders it ABOVE every number (verified 2026-09-24).**
+So a `CHECK (col >= 0)` constraint **passes** NaN. Combined with Pydantic v2 allowing non-finite
+floats by default and Python's `json.loads` accepting the bare literals `NaN`/`Infinity`, a
+malformed request reached `fleetguard_work_order.actual_cost` past *both* the app guard
+(`< 0` is False for NaN) and the DB constraint, and one such row makes `SUM(actual_cost)` NaN for
+its whole depot. Fixed with `Field(allow_inf_nan=False)` + `math.isfinite` (I-117). **Any future
+numeric column needs the same treatment — the DB will not catch it.**
+- Related: rejecting it at the schema made FastAPI echo the value into the 422 body, which
+  Starlette cannot serialise (`allow_nan=False`) — turning it into a **500**. `main.py` has a
+  global `RequestValidationError` handler that sanitises non-finite floats out of error bodies.
+
+**`/api/readyz` is free to call, and that is a constraint not an accident.** It checks the agent
+with `serving_endpoints.get` and the index with `get_index` — control-plane reads. **Never
+`query()`**: that wakes a scale-to-zero container and bills until it idles down. The one part
+needing a SQL warehouse (index row count vs source) degrades to a note rather than failing
+readiness. `/healthz` is unchanged, unauthenticated and always-200 — it is the container probe.
+
+**MLflow's built-in RAG judges are NOT wired in, and the reason is UNVERIFIED API behaviour.**
+`RetrievalGroundedness`/`RetrievalRelevance`/`RetrievalSufficiency` read a `SpanType.RETRIEVER`
+span, which the agent already emits — but the docs do not state what they do with a span whose
+output is a list of plain dicts (what `search_complaints` returns). mlflow is **not installed
+locally**; it runs only on Databricks. Do not assert either way. `ENHANCEMENTS.md` E-18 has the
+verification sequence. Adding an unverified scorer to the gating path would risk taking the hard
+gates down with it.
+
 **Declarative Automation Bundle — built and deployed 2026-09-10. `databricks.yml` +
 `resources/` are now the deployment mechanism.** What it owns: the App
 (`fleetguard-console`), the pipeline (`fleetguard-bronze-silver`), the AI/BI dashboard, and
@@ -538,9 +583,9 @@ claim you then have to keep true; rejected experiments belong in `src/` and `doc
 - `PLAN.md` is the source of truth for build sequencing and phase definitions of
   done. Keep it in sync with the proposal if either changes.
 - **CI runs on every push and PR** (`.github/workflows/ci.yml`, added 2026-09-09). Run the same
-  checks locally before committing —**since `tests/pipelines/` (added 2026-09-17) starts a
-  local Spark session, this is now ~40s, not the "about two seconds" it used to be** — JVM
-  startup dominates:
+  checks locally before committing — **~45 s for 666 backend tests, not the "about two seconds"
+  it used to be**: `tests/pipelines/` (2026-09-17) starts a local Spark session and JVM startup
+  dominates. Count tests by running them, not by trusting this line:
   ```bash
   .venv/bin/python -m ruff check src tests app/backend scripts
   .venv/bin/python -m pytest
