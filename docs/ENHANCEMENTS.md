@@ -482,6 +482,59 @@ unit tests alongside `vin.py` and `chunking.py` — no workspace required.
 
 ---
 
+### E-18 · MLflow's built-in RAG judges — **DEFERRED 2026-09-24, on an UNVERIFIED API**
+
+**Status: DEFERRED. The reason is not a judgement call — it is that the requirement could not
+be checked, and this project does not ship on an assumption about an API.**
+
+`mlflow.genai.scorers` ships `RetrievalGroundedness`, `RetrievalRelevance` and
+`RetrievalSufficiency` — purpose-built RAG judges that would strengthen the weakest graded
+surface, and the agent already emits what they read: `search_complaints` is decorated
+`@mlflow.trace(span_type=SpanType.RETRIEVER)`.
+
+**What is confirmed** (MLflow docs, checked 2026-09-24): the judges require a trace containing
+at least one span with `span_type` `RETRIEVER`; inputs and outputs must be on the root span;
+where several retriever spans exist, the **last** is used; and documents are described as
+carrying a `page_content` field.
+
+**What is NOT confirmed, and is the whole blocker:** what these judges do with a retriever span
+whose output is a list of **plain dicts** — which is exactly what `search_complaints` returns
+(`chunk_id`, `complaint_id`, `make`, `model`, `component`, `any_harm`, `chunk_text`). The docs
+do not say whether such a span is coerced, silently skipped, or an error. Nor is it confirmed
+that span outputs can be overridden in-function via
+`mlflow.get_current_active_span().set_outputs(...)`, which is the clean way to give MLflow
+document-shaped output without duplicating narrative text into the model's context and paying
+for it twice in tokens.
+
+**Why it was not simply tried.** mlflow is not installed locally — it runs only on Databricks —
+and the agent endpoint and AI Search index are both torn down between the submission windows.
+So there was no way to check, and the only place to find out would have been a live Run 2.
+Adding an unverified scorer to the **gating** evaluation path is the wrong trade there: if it
+raises, it takes the hard gates down with it, and the hard gates are what stop a regressed agent
+shipping. An evaluation that fails for a reason unrelated to the agent is worse than one metric
+fewer.
+
+**To enable it, in this order:**
+
+1. With the index live, run one agent query and open its trace. Confirm the RETRIEVER span's
+   recorded output and whether MLflow parsed documents from it.
+2. If it did not: set span outputs explicitly inside `search_complaints` —
+   `mlflow.get_current_active_span().set_outputs([{"page_content": ..., "metadata": {...}}])` —
+   wrapped so a version mismatch cannot break retrieval itself. Keep the tool's *return* value
+   unchanged; what the model sees and what MLflow records are different concerns and should not
+   be coupled.
+3. Add the judges to `16_evaluate_agent.py` as **non-gating** scorers first. Promote to
+   `HARD_GATES` only after a run where they have produced real scores.
+
+**What exists instead, and why it is not nothing.** `src/search/28_rag_eval.py` measures
+retrieval directly against the index — known-item Recall@10 and MRR, topical Precision@10 and
+hit rate over a corpus-derived relevance pool (I-117) — and writes `ops_rag_eval`. That is a
+measurement of the retriever. The MLflow judges would add a measurement of *groundedness*:
+whether the answer is supported by what was retrieved. Different question, genuinely worth
+having, and not worth guessing at.
+
+---
+
 ### E-17 · A canonical vehicle-model alias table — **DEFERRED 2026-09-24, on schedule alone**
 
 **Status: DEFERRED. This is the strongest architectural suggestion any of the four external

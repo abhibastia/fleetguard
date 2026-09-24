@@ -1,5 +1,63 @@
 # FleetGuard — project status
 
+## SESSION 2026-09-24 (third) — hardening agent / RAG / security / MLflow; UI frozen
+
+**Branch `harden/agent-rag-security-mlflow`.** Full write-up in `docs/ISSUES.md` **I-118**. Not
+review-driven — with the UI frozen, the remaining value was in the four graded surfaces
+themselves.
+
+**The gap that mattered: the retrieval corpus is an injection surface, and nothing said so.**
+Six of the agent's seven tools return numbers this project computed. `search_complaints`
+returns **2.24M public, user-submitted complaint narratives** — anyone can file another — and
+they went into the model's context unmarked, undefended and untested. Three rounds of external
+security review all hardened the *envelope* (can a model cause an action it should not); none
+asked what is in the text the model reads.
+
+**Severity is bounded and the bounds are the point:** `may_approve` gates execution, fleet
+relevance is recomputed server-side, one action per turn is enforced at both ends, and the
+console takes envelopes only from a Python-stamped item id. Worst realistic case is an
+approver's innocent question causing a false defect signal under their name.
+
+**Three layers, and only one is testable offline** — which is why it exists in code rather than
+resting on the prompt: `_neutralise()` wraps each narrative in untrusted-data markers and strips
+the action sentinel; rule 9 tells the model the text is evidence and to *say* when it carries an
+embedded instruction; the console checks are unchanged. Deliberately **not** a phrase blocklist
+— unbounded, trivially paraphrased, and it would produce a system that only looks defended.
+
+> **The first version of those tests could not fail.** Deleting the `_neutralise` call from
+> `search_complaints` left every one of them green — they tested the function and never that
+> anything called it. Found by mutation-checking, within an hour of writing I-117's lesson about
+> exactly this. **Every** change in this round was then mutation-checked: revert, confirm red,
+> restore.
+
+**RAG:** rule 10 requires the agent to **cite complaint ids** behind narrative claims, scored by
+`cites_complaint_ids`. The scorer's limit is written into the scorer — it sees answer text only,
+so it cannot tell a real citation from a fabricated one; "cites only ids a tool returned" stays
+a prompt rule. It is also pinned as not trivially satisfiable: `25 vehicles`, `16.0%`, `1.44x`,
+`17V629000` and `$84,409.68` must all *fail* to match.
+
+**MLflow:** injection resistance promoted to a **HARD GATE** (a scorer that merely reports is a
+number nobody reads on the day it matters), and the evaluation result is now **stamped on the UC
+model version** — `eval_run_id`, `eval_hard_gates`, a `score_*` tag per scorer. Tagging runs
+*after* the gates, so a version can never claim it passed an evaluation that refused it.
+
+**And that surfaced a real gap: Run 2 never ran the evaluation at all.** The agent was rebuilt,
+redeployed and demonstrated without ever being scored — so the hard gates have been **inert
+through every run**, and would have stayed inert through submission. New runbook step **3.3a**.
+
+**Deferred on an unverified API, not a judgement:** MLflow's built-in RAG judges
+(`RetrievalGroundedness` et al.) read the RETRIEVER span the agent already emits, but the docs
+do not say what they do with a span whose output is plain dicts — and mlflow is not installed
+locally while the endpoint is down, so there was no way to check. Adding an unverified scorer to
+the *gating* path eight days out would risk taking the hard gates down with it. `ENHANCEMENTS.md`
+**E-18** records the exact verification step.
+
+**Verified offline:** 666 tests passed / 24 skipped (was 635), 153 vitest, ruff clean, typecheck
+clean. **No workspace calls, no UI changes.** Everything here takes effect at Run 2's agent
+redeploy — an already-committed step.
+
+---
+
 ## SESSION 2026-09-24 (later) — fourth external review triaged; 8 fixes, 1 disproven
 
 **Branch `fix/repo-review-round-4`.** Full triage in `docs/ISSUES.md` **I-117**. The best of
@@ -444,6 +502,7 @@ table again at step 3.6 (Run 2) — do not append a second table, replace these 
 | **3.1a** | **NEW — run the RAG retrieval evaluation** (`bundle run rag_eval`). Needs only the index, so it goes here rather than at the end. Writes `ops_rag_eval`; also re-runs the three I-040 behavioural checks at the shipped scope, open since the rescope. **Record the figures in `EVIDENCE.md` as measured, including if they are poor** | ~10 min |
 | 3.2 | **Start the App**, then `bundle run fleetguard_console` — **REQUIRED**, the console changed (Home redesign, `/api/corpus`). `apps start` alone re-deploys the old source path (I-097) | ~5 min |
 | 3.3 | **Rebuild + redeploy the agent** (`agent_build`, then `deploy_agent`) — **REQUIRED**, v7 predates I-115's four agent fixes. Then confirm the new version actually takes traffic (I-050/I-092, four recurrences) | ~15 min |
+| **3.3a** | **NEW — evaluate the agent** (`bundle run evaluate_agent`). **This step never existed**, so the evaluation's hard gates have been inert through every run: they fail the job on a claimed launch, an invented recall, and now on acting on an instruction embedded in a retrieved narrative (I-118). It also stamps the model version with its scores — skip it and the deployed artefact carries no evidence it was evaluated | ~15 min |
 | 3.4 | **Abbreviated verification**, not the full hour: one agent question, one write, confirm it reaches UC | ~15 min |
 | 3.5 | **Fresh screenshots — REQUIRED**, Home was redesigned | ~1 min |
 | 3.6 | **Update the provenance record**, then assemble the zip (repo + `docs/screenshots/`; the requirement PDF and the review files are gitignored and not part of it) | ~5 min |

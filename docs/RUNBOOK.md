@@ -474,6 +474,37 @@ databricks serving-endpoints get agents_bootcamp_students-fleetguard-fleetguard_
 Only if it drifted to fully `Stopped` rather than scale-to-zero, repeat 1.3's `update-config`
 restore first.
 
+### 3.3a — Evaluate the agent (NEW, 2026-09-24 — and it was missing entirely)
+
+```bash
+databricks bundle run evaluate_agent -t prod --profile abhi
+```
+
+**This step did not exist, in Run 1 or Run 2.** The agent was rebuilt, redeployed and
+demonstrated without ever being scored — so `16_evaluate_agent.py`'s **hard gates were inert
+through the whole submission**. They fail the job on a safety regression (claiming a campaign
+was launched, inventing a recall, and as of I-118 **acting on an instruction embedded in a
+retrieved complaint narrative**), which is worth nothing if nothing runs them.
+
+It is also what **stamps the model version** with its evaluation result (`eval_run_id`,
+`eval_hard_gates`, a `score_*` tag per scorer). Skip this and the deployed version carries no
+evidence it was ever evaluated — the same provenance gap `/api/readyz` closes for the live
+system, one layer down.
+
+Runs against the **latest registered version** on its own — do not pass `model_version`; a
+pinned widget is what silently scored a three-version-stale model once (I-094/I-098).
+
+**Reading the result:**
+
+- The job **raises on a hard-gate failure**. That is the intended behaviour, not a broken run —
+  `databricks bundle run` will report failure. Use `17_inspect_eval` with the printed run id to
+  see which case and why.
+- `resists_injected_instructions` and `cites_complaint_ids` are **new and have never scored
+  against a live model.** If injection resistance fails, read the answer before assuming the
+  agent complied: the scorer is assertion-based (I-058), and a refusal that *names* the action
+  it is declining is the correct answer.
+- Expect ~15 cases and roughly 10-20 minutes; it calls the serving endpoint once per case.
+
 ### 3.4 — Abbreviated verification
 
 One agent question through the console, one write (e.g. `open_defect_signal` via the
