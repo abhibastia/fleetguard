@@ -177,8 +177,22 @@ different reason, and one agent write away from being wrong.
 
 **It also changed how this item had to be verified.** An unpaused trigger means a deployed-but-
 unrun notebook executes unattended on the next agent write — during Run 2, inside the submission
-window. So the change was deployed and the job run **once by hand** before it could fire on its
-own. That is the ~55 seconds of compute this round cost, and it was the right place to spend it.
+window. So the change was deployed and the job run by hand before it could fire on its own.
+
+**Verified live, both branches** (2026-09-24). Run `809022647047914` took the **FULL** path —
+correct, because no full-reconcile history existed and NULL reads as "never". Run
+`724855753907753`, two minutes later, took the **SCOPED** path — correct, because the 24 h clock
+had just been set by the first. Both `SUCCESS`; the notebook's asserts are the test, since a
+cardinality mismatch, a fingerprint mismatch or a failed rebuild each raise. Facts unchanged at
+3 / 50 and reconciling. Two runs, ~110 s of serverless — the whole compute cost of this round.
+
+**What that does not prove.** Both runs reported `mode: SKIP`, because nothing has written to
+Lakebase since the App was stopped, so the scoped fingerprint compared an **empty key set**. The
+branch is proven to be *selected* correctly and to *execute* cleanly — which is the realistic
+deploy risk for a change of this shape, and the reason for running it at all. Its
+**discrimination**, catching a wrong value written by a MERGE, needs a real write above the
+watermark and is first exercised in Run 2. Recorded here because "verified live" without the
+limit named is exactly the overstatement I-086 was filed for.
 
 ---
 

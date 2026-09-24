@@ -67,6 +67,30 @@ copied:
 **Verified offline:** 627 tests (603 passed / 24 skipped), 153 vitest, ruff clean, typecheck
 clean. No frontend changed, so no console rebuild was needed.
 
+**Verified live — the three workspace steps, in order:**
+
+| # | Step | Result |
+|---|---|---|
+| **2.2** | **Confirm AI Search billing stopped** — the check the two-window plan rests on, recorded from a single source | ✅ **PASSED.** `list-endpoints` returns one endpoint, `zachy_vs` (31 indexes, `eumardassis@gmail.com`) — **not ours**. `fleetguard-vs` is absent, so the 24 h rule held |
+| — | `./scripts/deploy.sh abhi prod` | Deployed `901c35f5c`, provenance confirmed matching. `rag_eval` was the only "to be created" resource, as expected. The script warned that 3 commits were unpushed — correctly |
+| — | `bundle run cdf_to_gold` ×2 | ✅ Both branches of the new split exercised — see below |
+
+**The fingerprint split was verified on the live resource, both branches.** Run
+`809022647047914` took the **FULL** path (`reconcile_scope: FULL`, `full_reconcile: true`) —
+correct, because no full-reconcile history existed and NULL reads as "never". Run
+`724855753907753`, two minutes later, took the **SCOPED** path (`full_reconcile: false`) —
+correct, because the 24 h clock had just been set. Both `TERMINATED/SUCCESS`, and the notebook's
+asserts are the test: a cardinality mismatch, a fingerprint mismatch or a failed rebuild all
+raise. `gold_agent_action` **3** and `gold_defect_signal_current` **50**, unchanged and
+reconciling.
+
+**What that does NOT prove, stated rather than implied.** Both runs reported `mode: SKIP` —
+nothing has been written to Lakebase since the App was stopped — so the scoped fingerprint
+compared an *empty* key set. The branch is proven to be **selected** correctly and to **execute**
+cleanly, which is the realistic deploy risk for a change like this. Its **discrimination** —
+catching a wrong value written by a MERGE — needs a real write above the watermark and will
+first be exercised in Run 2. Do not read "both branches verified" as more than it says.
+
 ---
 
 ## SESSION 2026-09-23 (later) — third external review triaged; 8 fixes landed offline
@@ -344,7 +368,7 @@ table again at step 3.6 (Run 2) — do not append a second table, replace these 
 | # | Step | Note |
 |---|---|---|
 | 2.1 | ~~**Delete the index**~~ **DONE 2026-09-23** — `complaint_chunk_idx` and endpoint `fleetguard-vs` both deleted; confirmed gone via `list-endpoints` | The one that matters — billing stops **24 h after the last index is deleted** |
-| 2.2 | **Verify the next day that billing actually stopped** — check ~2026-09-24 | That 24 h rule is load-bearing for this whole plan and is recorded from a single source. Check it once, while there is still time to react |
+| 2.2 | ~~**Verify the next day that billing actually stopped**~~ **DONE 2026-09-24 — PASSED.** `vector-search-endpoints list-endpoints` returns only `zachy_vs` (another student's, 31 indexes); `fleetguard-vs` is absent. The 24 h rule held | That 24 h rule is load-bearing for this whole plan and was recorded from a single source. Checked once, while there was still time to react |
 | 2.3 | ~~**Stop the App**~~ **DONE 2026-09-23** — confirmed `compute_status.state: STOPPED` on the live resource | |
 | 2.4 | ~~**Leave the agent endpoint on scale-to-zero**~~ **CONFIRMED 2026-09-23** — `scale_to_zero_enabled: true` on the live entity; still warm right now, will idle down on its own | Free idle, and it removes a restore step from Run 2 |
 | 2.5 | **Touch nothing else** | Delta tables, Lakebase rows, the registered UC model version and the bundle deployment all persist — which is exactly why Run 2 is cheap. Never `bundle destroy` |
