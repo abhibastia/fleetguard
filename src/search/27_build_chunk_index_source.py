@@ -68,7 +68,7 @@ COMMENT 'AI Search source: complaint chunks for make/model pairs in the fleet ro
 exposure table, the agent write path and the emerging detector. Rescoped 2026-09-23 from
 the post-2010 ODI investigation series (1,746,601 chunks) for the two-window submission
 plan (I-111); the exact-only join was widened to variants 2026-09-23 (I-115) because it
-excluded every one of the fleet\'s 2,116 F-250s. Same $6.72/day cost under the 2M-vector
+excluded every one of the fleet''s 2,116 F-250s. Same $6.72/day cost under the 2M-vector
 single-unit threshold (I-035). See docs/ISSUES.md I-111, I-115.'
 TBLPROPERTIES ('delta.enableChangeDataFeed' = 'true')
 AS
