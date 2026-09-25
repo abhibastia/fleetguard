@@ -30,6 +30,15 @@ resources:
       # The first `bundle deploy` refused to proceed for exactly this reason. The published URL
       # (`/dashboardsv3/01f1a7257e801a2ebb71bdc18fc2113a/published`) appears in STATUS and is
       # part of the evidence surface, so the dashboard stays where it already lives.
+      # `free_edition` overrides this scalar field per-target (databricks.yml) — measured
+      # 2026-09-25 that the literal abhi path is invalid there ("Folder Users is protected",
+      # DIRECTORY_PROTECTED), since /Users/abhisek.bastia17@gmail.com doesn't exist as a
+      # workspace user directory in that separate account. NOTE: this dashboard's underlying
+      # queries read bootcamp_students.bootcamp_cdc.lb_fleetguard_*_history (Lakebase CDF
+      # output), which free_edition deliberately does not build — the dashboard deploys and
+      # opens there, but its widgets will error/return empty rather than show real data. Left
+      # in rather than excluded (DABs has no per-target resource exclusion, see cdf_to_gold.job.yml's
+      # comment) since it's harmless and out of scope for the agent/app testing this build is for.
       parent_path: /Users/abhisek.bastia17@gmail.com/dashboards
       file_path: ../dashboards/fleetguard_overview.lvdash.json
       warehouse_id: ${var.warehouse_id}
@@ -51,12 +60,8 @@ resources:
       # exist here. CAN_RUN, not CAN_READ, because the dashboard is published with
       # `embed_credentials: false` — each viewer's own identity runs the underlying queries, so
       # "view" without "run" would render an empty page, not a read-only one.
-      permissions:
-        - level: CAN_MANAGE
-          user_name: abhisek.bastia17@gmail.com
-        - level: CAN_RUN
-          user_name: raghavendra.yama@gmail.com
-        - level: CAN_RUN
-          user_name: sangwanrahul@icloud.com
-        - level: CAN_RUN
-          user_name: zach@zachwilson.tech
+      #
+      # Deliberately NO base list here, same reasoning as fleetguard_console.app.yml's
+      # `permissions` — each target declares its own ACL under `targets.<name>.resources.
+      # dashboards.fleetguard_overview.permissions` in databricks.yml, since a target-level
+      # override on a list field appends rather than replaces.

@@ -133,6 +133,30 @@ targets:
               user_name: sangwanrahul@icloud.com
             - level: CAN_MANAGE
               user_name: zach@zachwilson.tech
+      dashboards:
+        fleetguard_overview:
+          permissions:
+            - level: CAN_MANAGE
+              user_name: abhisek.bastia17@gmail.com
+            - level: CAN_RUN
+              user_name: raghavendra.yama@gmail.com
+            - level: CAN_RUN
+              user_name: sangwanrahul@icloud.com
+            - level: CAN_RUN
+              user_name: zach@zachwilson.tech
+      jobs:
+        # The real CDF->gold trigger, prod-only. See cdf_to_gold.job.yml's header comment and
+        # resources/cdf_to_gold.job.yml itself, which carries the job's non-trigger fields.
+        cdf_to_gold:
+          trigger:
+            pause_status: UNPAUSED
+            table_update:
+              condition: ANY_UPDATED
+              min_time_between_triggers_seconds: 60
+              table_names:
+                - bootcamp_students.bootcamp_cdc.lb_fleetguard_agent_action_history
+                - bootcamp_students.bootcamp_cdc.lb_fleetguard_defect_signal_history
+              wait_after_last_change_seconds: 61
 
   # SECOND TARGET — Databricks Free Edition, `abhibastia90@gmail.com`. A wholly separate
   # account/workspace/metastore from `prod` above, used only for isolated agent/app testing
@@ -140,8 +164,10 @@ targets:
   # shared-namespace objection above doesn't apply here (this account isn't shared with ~296
   # other students), but plain `production` is kept anyway for parity with `prod`'s shape and
   # because this target's schedules/triggers should also run as declared, not paused.
-  # Deliberately excludes anything CDF-related: no `cdf_to_gold` binding is added under this
-  # target (see `resources/cdf_to_gold.job.yml`'s own target-scoping, not this file).
+  # Deliberately excludes anything CDF-related: `fleetguard-cdf-to-gold` still exists as a job
+  # here (DABs cannot exclude a resource per-target — see resources/cdf_to_gold.job.yml's
+  # header comment) but gets no `trigger:` override, so it sits inert, manual-run-only, and
+  # references no free-edition table at all.
   free_edition:
     mode: production
     workspace:
@@ -162,6 +188,12 @@ targets:
     resources:
       apps:
         fleetguard_console:
+          permissions:
+            - level: CAN_MANAGE
+              user_name: abhibastia90@gmail.com
+      dashboards:
+        fleetguard_overview:
+          parent_path: /Users/abhibastia90@gmail.com/dashboards
           permissions:
             - level: CAN_MANAGE
               user_name: abhibastia90@gmail.com
