@@ -20,6 +20,10 @@ resources:
           notebook_task:
             notebook_path: ../src/lakebase/20_add_defect_signal_provenance.py
             source: WORKSPACE
+            base_parameters:
+              lakebase_project: ${var.lakebase_project}
+              pg_schema: ${var.pg_schema}
+              pg_database: ${var.pg_database}
           run_if: ALL_SUCCESS
           timeout_seconds: 0
       email_notifications: {}
