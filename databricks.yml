@@ -84,6 +84,11 @@ variables:
       (agents_<catalog>-<schema>-<model>). Not auto-computed by the bundle — each target
       restates it to match its own catalog/schema.
     default: agents_bootcamp_students-fleetguard-fleetguard_agent
+  scale_to_zero:
+    description: >-
+      Passed to agents.deploy(). Free Edition requires it (InvalidParameterValue otherwise,
+      measured 2026-09-25); abhi's default (false) is prod's existing, unchanged behavior.
+    default: "false"
 
 # NO `lookup:` VARIABLES, AND `run_as` IS PINNED RATHER THAN DERIVED FROM
 # ${workspace.current_user}. Both are still worth keeping — fewer moving parts, one obvious
@@ -195,6 +200,7 @@ targets:
       pg_schema: public
       pg_database: databricks_postgres
       agent_endpoint: agents_fleetguard-capstone-fleetguard_agent
+      scale_to_zero: "true"
     resources:
       apps:
         fleetguard_console:

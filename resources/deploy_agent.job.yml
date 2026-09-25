@@ -25,6 +25,7 @@ resources:
             base_parameters:
               catalog: ${var.catalog}
               schema: ${var.schema}
+              scale_to_zero: ${var.scale_to_zero}
           run_if: ALL_SUCCESS
           timeout_seconds: 5400
       email_notifications: {}
