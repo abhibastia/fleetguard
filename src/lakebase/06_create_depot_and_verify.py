@@ -38,6 +38,11 @@ PROJECT = dbutils.widgets.get("lakebase_project")
 ENDPOINT = f"{PROJECT}/branches/production/endpoints/primary"
 PG_SCHEMA = dbutils.widgets.get("pg_schema")
 PG_DB = dbutils.widgets.get("pg_database")
+dbutils.widgets.text("catalog", "bootcamp_students")
+dbutils.widgets.text("schema", "fleetguard")
+CATALOG = dbutils.widgets.get("catalog")
+SCHEMA = dbutils.widgets.get("schema")
+UC = f"{CATALOG}.{SCHEMA}"
 TABLE = "fleetguard_depot"
 
 ALL_ELEVEN = [
@@ -168,9 +173,9 @@ with conn.cursor() as cur:
 
 # COMMAND ----------
 
-depots = spark.sql("""
+depots = spark.sql(f"""
     SELECT depot_id, depot_name, region, city, state, manager_principal
-    FROM bootcamp_students.fleetguard.gold_fleet_depot ORDER BY depot_id
+    FROM {UC}.gold_fleet_depot ORDER BY depot_id
 """).collect()
 
 with conn.cursor() as cur:

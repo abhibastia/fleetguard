@@ -33,6 +33,8 @@ resources:
               lakebase_project: ${var.lakebase_project}
               pg_schema: ${var.pg_schema}
               pg_database: ${var.pg_database}
+              catalog: ${var.catalog}
+              schema: ${var.schema}
           run_if: ALL_SUCCESS
           timeout_seconds: 0
       email_notifications: {}
