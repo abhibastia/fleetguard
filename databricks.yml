@@ -182,7 +182,12 @@ targets:
       warehouse_id: 6797e114217fa513
       llm_endpoint: databricks-claude-opus-4-8
       lakebase_project: projects/fleetguard-free-edition
-      pg_schema: fleetguard
+      # `public` -- unlike abhi's bootcamp_students, this is a brand-new, project-of-our-own
+      # Lakebase project. A `fleetguard` schema doesn't pre-exist here the way bootcamp_students
+      # does on the shared abhi project (measured 2026-09-25: `create_remaining_tables` failed
+      # outright, `InvalidSchemaName: schema "fleetguard" does not exist`). Postgres's own
+      # default schema needs no extra creation step and this project holds nothing else.
+      pg_schema: public
       pg_database: databricks_postgres
       agent_endpoint: agents_fleetguard-capstone-fleetguard_agent
     resources:
