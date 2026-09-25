@@ -1,13 +1,13 @@
 resources:
   jobs:
-    build_fleet_registry:
-      name: fleetguard-build-fleet-registry
+    build_fleet_exposure:
+      name: fleetguard-build-fleet-exposure
       tasks:
-        - task_key: fleet
+        - task_key: exposure
           disabled: false
           email_notifications: {}
           notebook_task:
-            notebook_path: ../src/fleet/04_build_fleet_registry.py
+            notebook_path: ../src/fleet/04b_build_fleet_exposure.py
             source: WORKSPACE
             base_parameters:
               catalog: ${var.catalog}
