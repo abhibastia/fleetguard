@@ -62,6 +62,13 @@ from fleetguard.http_retry import (  # noqa: E402
     validate_recalls_payload,
 )
 
+API = "https://api.nhtsa.gov/recalls/recallsByVehicle"
+UA = {"User-Agent": "FleetGuard/1.0 (capstone; contact abhisek.bastia17@gmail.com)"}
+
+# Pacing. 2 requests/second is polite for a public government API and keeps a full
+# roster sweep inside ~90 seconds.
+REQ_PER_SEC = 2.0
+
 # WIDGETS ARE DECLARED, NOT JUST READ. Until 2026-09-20 this notebook called
 # `dbutils.widgets.get("max_combos")` against a widget nothing ever created, inside a bare
 # `except` — so `MAX_COMBOS` was *always* 0 and the job YAML had no parameter to set it
