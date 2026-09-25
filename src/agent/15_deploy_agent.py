@@ -24,7 +24,10 @@
 
 # COMMAND ----------
 
-CATALOG, SCHEMA = "bootcamp_students", "fleetguard"
+dbutils.widgets.text("catalog", "bootcamp_students")
+dbutils.widgets.text("schema", "fleetguard")
+CATALOG = dbutils.widgets.get("catalog")
+SCHEMA = dbutils.widgets.get("schema")
 MODEL_NAME = f"{CATALOG}.{SCHEMA}.fleetguard_agent"
 
 # Empty default means "latest", resolved below — the same treatment I-094 gave the evaluation

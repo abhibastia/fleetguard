@@ -180,7 +180,12 @@ targets:
       schema: capstone
       # "Serverless Starter Warehouse" already present in this workspace (measured 2026-09-25).
       warehouse_id: 6797e114217fa513
-      llm_endpoint: databricks-claude-opus-4-8
+      # `databricks-claude-opus-4-8` (prod's model) does not exist on this account -- measured
+      # 2026-09-25, `serving-endpoints get` 404s. Free Edition's available foundation models are
+      # a different, smaller set (`serving-endpoints list`): gpt-oss-120b/20b, qwen3-next-80b,
+      # qwen35-122b, llama-4-maverick, gemma-3-12b, llama-3-1-8b/3-3-70b. gpt-oss-120b is the
+      # largest reasoning-capable one available.
+      llm_endpoint: databricks-gpt-oss-120b
       lakebase_project: projects/fleetguard-free-edition
       # `public` -- unlike abhi's bootcamp_students, this is a brand-new, project-of-our-own
       # Lakebase project. A `fleetguard` schema doesn't pre-exist here the way bootcamp_students
