@@ -1382,10 +1382,16 @@ for r in resources:
 
 # Pin to what actually ran here, rather than to a range that may resolve differently in the
 # serving container six weeks from now.
+# `httpx` is explicit, not incidental: the `openai` client uses it internally, but the served
+# model's container does not reliably pull it in as a transitive dependency from `openai`
+# alone — measured 2026-09-25, a live query against the deployed endpoint failed with
+# "No module named 'httpx'" until it was pinned here explicitly, same shape as the `openai`
+# gap in the %pip install cell above.
 PIP = [
     f"mlflow=={_md.version('mlflow')}",
     f"databricks-sdk=={_md.version('databricks-sdk')}",
     f"openai=={_md.version('openai')}",
+    f"httpx=={_md.version('httpx')}",
 ]
 print("\npip_requirements:", PIP)
 
