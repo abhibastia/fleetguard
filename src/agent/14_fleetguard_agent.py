@@ -352,6 +352,34 @@ print(f"model : {MODEL_NAME}\nllm   : {LLM_ENDPOINT}\nindex : {INDEX}")
 # MAGIC     return out[:MAX_TOOL_CHARS]
 # MAGIC
 # MAGIC
+# MAGIC def _content_text(content: Any) -> str:
+# MAGIC     """Normalise a chat-completion message's `content` to plain text.
+# MAGIC
+# MAGIC     Claude-family endpoints return a plain string (or None), which `content or ""`
+# MAGIC     handled correctly — but `content or ""` does not COERCE type, it only substitutes on
+# MAGIC     a falsy value. `databricks-gpt-oss-120b` (measured 2026-09-25) returns a non-empty
+# MAGIC     LIST of content parts instead, which is truthy, so the old expression passed it
+# MAGIC     through unchanged and `.replace()` on it in `predict()` raised
+# MAGIC     `AttributeError: 'list' object has no attribute 'replace'`. Every place that reads
+# MAGIC     message content must go through this, not `msg.content or ""` directly.
+# MAGIC     """
+# MAGIC     if content is None:
+# MAGIC         return ""
+# MAGIC     if isinstance(content, str):
+# MAGIC         return content
+# MAGIC     if isinstance(content, list):
+# MAGIC         parts = []
+# MAGIC         for part in content:
+# MAGIC             if isinstance(part, str):
+# MAGIC                 parts.append(part)
+# MAGIC             elif isinstance(part, dict):
+# MAGIC                 parts.append(str(part.get("text", part.get("content", ""))))
+# MAGIC             else:
+# MAGIC                 parts.append(str(getattr(part, "text", part)))
+# MAGIC         return "".join(parts)
+# MAGIC     return str(content)
+# MAGIC
+# MAGIC
 # MAGIC # RETRIEVED NARRATIVE IS UNTRUSTED INPUT. THIS IS THE ONLY TOOL WHERE THAT IS TRUE.
 # MAGIC #
 # MAGIC # Every other tool returns numbers this project computed. `search_complaints` returns
@@ -902,7 +930,7 @@ print(f"model : {MODEL_NAME}\nllm   : {LLM_ENDPOINT}\nindex : {INDEX}")
 # MAGIC             convo.append(msg.model_dump(exclude_none=True))
 # MAGIC
 # MAGIC             if not msg.tool_calls:
-# MAGIC                 emitted.append({"role": "assistant", "content": msg.content or ""})
+# MAGIC                 emitted.append({"role": "assistant", "content": _content_text(msg.content)})
 # MAGIC                 return emitted, actions
 # MAGIC
 # MAGIC             # A WRITE MAY NOT SHARE A BATCH WITH ANY OTHER CALL (I-117).
@@ -997,7 +1025,7 @@ print(f"model : {MODEL_NAME}\nllm   : {LLM_ENDPOINT}\nindex : {INDEX}")
 # MAGIC                 emitted.append(
 # MAGIC                     {
 # MAGIC                         "role": "assistant",
-# MAGIC                         "content": final.choices[0].message.content or "",
+# MAGIC                         "content": _content_text(final.choices[0].message.content),
 # MAGIC                     }
 # MAGIC                 )
 # MAGIC                 return emitted, actions
