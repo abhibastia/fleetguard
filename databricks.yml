@@ -117,6 +117,22 @@ targets:
       root_path: /Workspace/Users/abhisek.bastia17@gmail.com/.bundle/${bundle.name}/${bundle.target}
     run_as:
       user_name: abhisek.bastia17@gmail.com
+    # The App's ACL lives here, per-target, rather than as a base list in
+    # resources/fleetguard_console.app.yml — see that file's comment for why (a target-level
+    # override on a list field appends rather than replaces; leaving the base list empty and
+    # letting each target supply its own via append-to-empty acts as a full replace).
+    resources:
+      apps:
+        fleetguard_console:
+          permissions:
+            - level: CAN_MANAGE
+              user_name: abhisek.bastia17@gmail.com
+            - level: CAN_MANAGE
+              user_name: raghavendra.yama@gmail.com
+            - level: CAN_MANAGE
+              user_name: sangwanrahul@icloud.com
+            - level: CAN_MANAGE
+              user_name: zach@zachwilson.tech
 
   # SECOND TARGET — Databricks Free Edition, `abhibastia90@gmail.com`. A wholly separate
   # account/workspace/metastore from `prod` above, used only for isolated agent/app testing
@@ -143,3 +159,9 @@ targets:
       pg_schema: fleetguard
       pg_database: databricks_postgres
       agent_endpoint: agents_fleetguard-capstone-fleetguard_agent
+    resources:
+      apps:
+        fleetguard_console:
+          permissions:
+            - level: CAN_MANAGE
+              user_name: abhibastia90@gmail.com
