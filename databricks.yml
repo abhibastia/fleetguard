@@ -207,46 +207,14 @@ targets:
           permissions:
             - level: CAN_MANAGE
               user_name: abhibastia90@gmail.com
-          # EMPIRICAL TEST, free_edition-only. `resources/fleetguard_console.app.yml` has no
-          # base `config:` block (prod's app.yaml is the sole source of truth there, and this
-          # override — a nested-object field, unlike `permissions` — deep-merges rather than
-          # appending, so adding it only here cannot touch prod either way). A `config:` block
-          # on the DABs `apps` resource has a documented CLI bug where it silently fails to
-          # generate app.yaml (databricks/cli#4901) — untested against this CLI (v1.12.1)
-          # before now. `command` is repeated here in full (not just `env`) because the docs
-          # describe `config:` as replacing app.yaml wholesale, not merging into it; omitting
-          # `command` would risk shipping an app with nothing to launch it.
-          config:
-            command:
-              - "uvicorn"
-              - "fleetguard_api.main:app"
-              - "--host"
-              - "0.0.0.0"
-              - "--port"
-              - "8000"
-            env:
-              - name: FLEETGUARD_AUTH_MODE
-                value: databricks-apps
-              - name: FLEETGUARD_DATA_MODE
-                value: lakebase
-              - name: FLEETGUARD_PG_PROJECT
-                value: ${var.lakebase_project}
-              - name: FLEETGUARD_PG_SCHEMA
-                value: ${var.pg_schema}
-              - name: FLEETGUARD_PG_DATABASE
-                value: ${var.pg_database}
-              - name: DATABRICKS_HOST
-                value: https://dbc-6b3a5534-db75.cloud.databricks.com
-              - name: FLEETGUARD_AGENT_ENDPOINT
-                value: ${var.agent_endpoint}
-              - name: FLEETGUARD_WAREHOUSE_ID
-                value: ${var.warehouse_id}
-              - name: FLEETGUARD_SEARCH_INDEX
-                value: ${var.catalog}.${var.schema}.complaint_chunk_idx
-              - name: FLEETGUARD_SEARCH_SOURCE
-                value: ${var.catalog}.${var.schema}.silver_complaint_chunk_indexed
-              - name: FLEETGUARD_APPROVERS
-                value: abhibastia90@gmail.com
+          # CONFIRMED BROKEN 2026-09-25, do not re-add: a `config:` block here (command/env,
+          # ${var.x}-substituted) validated and deployed clean but silently failed to write
+          # app.yaml into the workspace (github.com/databricks/cli#4901, this CLI is v1.12.1) —
+          # the uploaded file was byte-for-byte prod's, none of the free-edition values took
+          # effect. `source_code_path` below points at a separate directory with its own real
+          # app.yaml instead (see app/backend_free_edition/app.yaml and
+          # scripts/sync_free_edition_app.sh for why and how it's kept in sync).
+          source_code_path: ./app/backend_free_edition
       dashboards:
         fleetguard_overview:
           parent_path: /Users/abhibastia90@gmail.com/dashboards
