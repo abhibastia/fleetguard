@@ -124,10 +124,14 @@ with conn.cursor() as cur:
     by_source = dict(cur.fetchall())
 
 print(f"rows by source: {by_source}")
+_total_rows = sum(by_source.values())
 assert "AGENT" not in by_source or by_source.get("AGENT", 0) == 0 or by_source.get("DETECTOR"), (
     f"unexpected source distribution before any agent write: {by_source}"
 )
-assert by_source.get("DETECTOR", 0) > 0, (
+# On a fresh/empty table (a cold-start rebuild, before any batch detector run has populated
+# it) there is nothing to misclassify, so the proof is vacuous rather than failed. Only assert
+# DETECTOR-classification when there are pre-existing rows to have gotten wrong.
+assert _total_rows == 0 or by_source.get("DETECTOR", 0) > 0, (
     f"expected the existing detector rows to be classified DETECTOR, got {by_source}"
 )
 
