@@ -30,8 +30,15 @@
 
 # COMMAND ----------
 
-# MAGIC %pip install -q -U mlflow databricks-agents databricks-sdk
+# MAGIC %pip install -q -U mlflow databricks-agents databricks-sdk openai
 # MAGIC %restart_python
+# MAGIC
+# MAGIC `openai` is explicit, not incidental: `mlflow.openai.autolog()` inside the packaged
+# MAGIC model imports it directly, and `PIP` below (the logged model's own pip_requirements)
+# MAGIC captures its installed version — so it must be importable in this notebook's kernel at
+# MAGIC both points. Measured 2026-09-25: without it here, `databricks-agents`/`mlflow` did not
+# MAGIC pull it in transitively on a fresh serverless environment, and the round-trip validation
+# MAGIC cell failed with `ModuleNotFoundError: No module named 'openai'`.
 
 # COMMAND ----------
 
