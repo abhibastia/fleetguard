@@ -56,17 +56,29 @@ def _resources_of(kind: str) -> list[tuple[Path, str, dict]]:
     return out
 
 
-def test_bundle_root_parses_and_has_one_production_target():
+def test_bundle_root_parses_and_has_expected_targets():
     root = _load(BUNDLE_ROOT)
     assert root["bundle"]["name"] == "fleetguard"
 
     targets = root["targets"]
-    # A `mode: development` target would name-prefix every resource into a shared namespace
-    # AND pause the `table_update` trigger the sub-5-minute Postgres->gold path depends on.
-    # If someone adds one, this test is where they should have to argue for it.
-    assert list(targets) == ["prod"], "only a prod target is expected; see databricks.yml"
-    assert targets["prod"]["mode"] == "production"
-    assert targets["prod"]["run_as"]["user_name"]
+    # `prod` (abhi, the shared bootcamp metastore — the submission deliverable) and
+    # `free_edition` (a wholly separate account, isolated agent/app testing only) are the
+    # only two targets expected. A `mode: development` variant of either would name-prefix
+    # every resource — fine on free_edition's own account, but `prod` shares its namespace
+    # with ~296 other students and would also pause the `table_update` trigger the
+    # sub-5-minute Postgres->gold path depends on. If someone adds a third target, or a
+    # `mode: development` one, this test is where they should have to argue for it.
+    assert set(targets) == {"prod", "free_edition"}, (
+        "only prod and free_edition targets are expected; see databricks.yml"
+    )
+    for name in ("prod", "free_edition"):
+        assert targets[name]["mode"] == "production"
+        assert targets[name]["run_as"]["user_name"]
+        assert targets[name]["workspace"]["host"]
+    # The two targets must never point at the same workspace or the same deployed path —
+    # that would make a `free_edition` deploy silently collide with `prod`'s live objects.
+    assert targets["prod"]["workspace"]["host"] != targets["free_edition"]["workspace"]["host"]
+    assert targets["prod"]["run_as"]["user_name"] != targets["free_edition"]["run_as"]["user_name"]
 
 
 def test_every_resource_file_parses():

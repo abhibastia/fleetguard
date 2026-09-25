@@ -66,6 +66,24 @@ variables:
   warehouse_id:
     description: Serverless Starter Warehouse — the dashboard's warehouse.
     default: b15d3d6f837ba428
+  llm_endpoint:
+    description: Foundation-model serving endpoint the agent calls.
+    default: databricks-claude-opus-4-8
+  lakebase_project:
+    description: Lakebase project id holding the FleetGuard Postgres schema.
+    default: projects/summer-bootcamp-2026-v2
+  pg_schema:
+    description: Postgres schema (inside the Lakebase project) holding the FleetGuard tables.
+    default: bootcamp_students
+  pg_database:
+    description: Postgres database name inside the Lakebase project.
+    default: databricks_postgres
+  agent_endpoint:
+    description: >-
+      Model-serving endpoint name Databricks derives for the deployed agent
+      (agents_<catalog>-<schema>-<model>). Not auto-computed by the bundle — each target
+      restates it to match its own catalog/schema.
+    default: agents_bootcamp_students-fleetguard-fleetguard_agent
 
 # NO `lookup:` VARIABLES, AND `run_as` IS PINNED RATHER THAN DERIVED FROM
 # ${workspace.current_user}. Both are still worth keeping — fewer moving parts, one obvious
@@ -99,3 +117,29 @@ targets:
       root_path: /Workspace/Users/abhisek.bastia17@gmail.com/.bundle/${bundle.name}/${bundle.target}
     run_as:
       user_name: abhisek.bastia17@gmail.com
+
+  # SECOND TARGET — Databricks Free Edition, `abhibastia90@gmail.com`. A wholly separate
+  # account/workspace/metastore from `prod` above, used only for isolated agent/app testing
+  # (never the submission deliverable — that stays `prod`/`abhi`). `mode: production`'s
+  # shared-namespace objection above doesn't apply here (this account isn't shared with ~296
+  # other students), but plain `production` is kept anyway for parity with `prod`'s shape and
+  # because this target's schedules/triggers should also run as declared, not paused.
+  # Deliberately excludes anything CDF-related: no `cdf_to_gold` binding is added under this
+  # target (see `resources/cdf_to_gold.job.yml`'s own target-scoping, not this file).
+  free_edition:
+    mode: production
+    workspace:
+      host: https://dbc-6b3a5534-db75.cloud.databricks.com
+      root_path: /Workspace/Users/abhibastia90@gmail.com/.bundle/${bundle.name}/${bundle.target}
+    run_as:
+      user_name: abhibastia90@gmail.com
+    variables:
+      catalog: fleetguard
+      schema: capstone
+      # "Serverless Starter Warehouse" already present in this workspace (measured 2026-09-25).
+      warehouse_id: 6797e114217fa513
+      llm_endpoint: databricks-claude-opus-4-8
+      lakebase_project: projects/fleetguard-free-edition
+      pg_schema: fleetguard
+      pg_database: databricks_postgres
+      agent_endpoint: agents_fleetguard-capstone-fleetguard_agent
