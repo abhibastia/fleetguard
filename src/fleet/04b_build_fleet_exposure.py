@@ -67,7 +67,8 @@ WITH candidates AS (
 )
 SELECT vin, depot_id, make, model, model_year, segment,
        campaign_number, recall_model, component, manufacturer, recall_type,
-       do_not_drive, park_it, report_received_date, match_basis
+       do_not_drive, park_it, report_received_date, match_basis,
+       current_timestamp() AS matched_at
 FROM candidates
 """)
 
