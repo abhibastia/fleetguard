@@ -230,7 +230,6 @@ export interface Health {
   console: boolean;
   data_mode: string;
   snapshot_captured_at: string | null;
-  dashboard_url: string | null;
 }
 
 export interface AuthStatus {
@@ -244,6 +243,7 @@ export interface AuthStatus {
 export interface Me {
   user_name: string | null;
   token_source: string;
+  dashboard_url: string | null;
 }
 
 export interface WorkOrder {
