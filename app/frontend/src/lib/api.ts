@@ -230,6 +230,7 @@ export interface Health {
   console: boolean;
   data_mode: string;
   snapshot_captured_at: string | null;
+  dashboard_url: string | null;
 }
 
 export interface AuthStatus {

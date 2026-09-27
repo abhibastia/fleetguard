@@ -3,16 +3,17 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Home } from "./Home";
 
-const { evidence, queue, signals, depotRisk, corpus } = vi.hoisted(() => ({
+const { evidence, queue, signals, depotRisk, corpus, health } = vi.hoisted(() => ({
   evidence: vi.fn(),
   queue: vi.fn(),
   signals: vi.fn(),
   depotRisk: vi.fn(),
   corpus: vi.fn(),
+  health: vi.fn(),
 }));
 vi.mock("../lib/api", async () => {
   const actual = await vi.importActual<typeof import("../lib/api")>("../lib/api");
-  return { ...actual, api: { evidence, queue, signals, depotRisk, corpus } };
+  return { ...actual, api: { evidence, queue, signals, depotRisk, corpus, health } };
 });
 
 const sampleCorpus = {
@@ -57,9 +58,18 @@ describe("Home", () => {
     signals.mockReset();
     depotRisk.mockReset();
     corpus.mockReset();
+    health.mockReset();
     // Default for the existing cases, which are about evidence and fleet state. The scale
     // strip has its own tests below.
     corpus.mockResolvedValue(sampleCorpus);
+    health.mockResolvedValue({
+      status: "ok",
+      auth_mode: "databricks-apps",
+      console: true,
+      data_mode: "lakebase",
+      snapshot_captured_at: null,
+      dashboard_url: "https://example.databricks.com/dashboardsv3/test/published",
+    });
   });
 
   it("renders the measured claim once evidence resolves, even for a signed-out visitor", async () => {

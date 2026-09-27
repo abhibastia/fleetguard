@@ -56,6 +56,7 @@ class Health(BaseModel):
     console: bool
     data_mode: str
     snapshot_captured_at: str | None = None
+    dashboard_url: str | None = None
 
 
 class Me(BaseModel):
@@ -66,7 +67,6 @@ class Me(BaseModel):
 # `dist` is built by `npm run build` in app/frontend and copied here at deploy time. Absent
 # during backend-only development, which must not be an error.
 CONSOLE_DIR = Path(os.getenv("FLEETGUARD_CONSOLE_DIR", Path(__file__).parent / "console"))
-
 
 
 def _json_safe(value):
@@ -105,6 +105,7 @@ async def validation_error_handler(_: Request, exc: RequestValidationError) -> J
         content={"detail": _json_safe(exc.errors())},
     )
 
+
 @app.get("/healthz", response_model=Health, tags=["ops"])
 def healthz() -> Health:
     """Unauthenticated liveness check.
@@ -128,6 +129,16 @@ def healthz() -> Health:
         console=(CONSOLE_DIR / "index.html").exists(),
         data_mode=snapshot.data_mode(),
         snapshot_captured_at=captured,
+        # The AI/BI dashboard's host + id differ per deployment (separate workspace on
+        # Free Edition, separate metastore entirely) and the console's JS bundle is shared
+        # byte-for-byte between targets (see scripts/sync_free_edition_app.sh) — so the URL
+        # cannot be a literal in frontend source the way it was until this was a bug. Each
+        # app.yaml supplies its own; falling back to prod's current published URL keeps prod
+        # behavior identical to before this env var existed.
+        dashboard_url=os.getenv(
+            "FLEETGUARD_DASHBOARD_URL",
+            "https://dbc-7b106152-caf3.cloud.databricks.com/dashboardsv3/01f1a7257e801a2ebb71bdc18fc2113a/published",
+        ),
     )
 
 

@@ -43,6 +43,13 @@ env:
     value: fleetguard.capstone.complaint_chunk_idx
   - name: FLEETGUARD_SEARCH_SOURCE
     value: fleetguard.capstone.silver_complaint_chunk_indexed
+  # This target's own dashboard — separate workspace, separate id from prod's. Without this,
+  # the Home page's "Analytics dashboard" link fell back to the code default (prod's URL, on a
+  # host this account cannot sign into at all) since the built console JS is a byte-identical
+  # copy shared with prod (see scripts/sync_free_edition_app.sh). That was the actual "cannot
+  # access the analytics dashboard" bug, reported 2026-09-27.
+  - name: FLEETGUARD_DASHBOARD_URL
+    value: https://dbc-6b3a5534-db75.cloud.databricks.com/dashboardsv3/01f1b8d8000117c988aeffbebbe7676e/published
   # Just the account this whole build runs under — there is no cohort of judges here.
   - name: FLEETGUARD_APPROVERS
     value: abhibastia90@gmail.com

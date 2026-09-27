@@ -218,6 +218,25 @@ targets:
       dashboards:
         fleetguard_overview:
           parent_path: /Users/abhibastia90@gmail.com/dashboards
+          # `dataset_catalog`/`dataset_schema` above already retarget every plain queryLines
+          # dataset to fleetguard.capstone — that's a Lakeview API-level override the dashboard
+          # resource itself understands. It does NOT reach a dataset's `asset_name` field,
+          # which is a literal fully-qualified UC object reference baked into the JSON at
+          # export time (`bootcamp_students.fleetguard.{fleet_exposure,evidence}_metrics`, both
+          # on abhi's metastore, unreachable from this separate account). Confirmed live
+          # 2026-09-27: those two widgets 404'd, which is why the console's dashboard link
+          # looked broken. `fleetguard_overview_free_edition.lvdash.json` is a byte-identical
+          # copy of the base file with only those two `asset_name` strings repointed at
+          # fleetguard.capstone — see dashboards/metric_views/fleet_exposure_metrics_free_edition.sql
+          # for the metric view itself (created and verified live). `evidence_metrics`'
+          # equivalent could NOT be created here: `CREATE VIEW ... WITH METRICS` validates its
+          # `source:` table eagerly, and gold_lead_time_summary (the full-corpus backtest
+          # result) only exists because it predates I-114's exclusion of the backtest job from
+          # this bundle — reproducing it isn't in scope for agent/app testing. Left pointed at
+          # the correctly-qualified name anyway so that widget fails cleanly and alone (same
+          # degradation this file already accepts for the CDF-dependent widgets above) rather
+          # than blocking the rest of the page, and self-heals if the backtest is ever rerun.
+          file_path: ./dashboards/fleetguard_overview_free_edition.lvdash.json
           permissions:
             - level: CAN_MANAGE
               user_name: abhibastia90@gmail.com
