@@ -28,6 +28,12 @@ export function Home({ onNavigate }: { onNavigate: (view: string) => void }) {
   const [queue, setQueue] = useState<QueueItem[] | null>(null);
   const [signals, setSignals] = useState<SignalSummary | null>(null);
   const [depots, setDepots] = useState<DepotRisk[] | null>(null);
+  // Populated from /api/me rather than hardcoded: the dashboard's host, workspace and id
+  // differ per deployment (Free Edition is a separate workspace on a separate metastore), and
+  // this console's built JS is shared byte-for-byte between targets (see
+  // scripts/sync_free_edition_app.sh), so a literal here can only ever be right for one of
+  // them. Null until /api/me answers, or if the deployment never set FLEETGUARD_DASHBOARD_URL.
+  const [dashboardUrl, setDashboardUrl] = useState<string | null>(null);
   // Distinct from "the four states are still null" — that's ALSO true for a millisecond on
   // every normal load, before any request has had a chance to return. Without this, the
   // "not available" message rendered as a false failure on every cold visit (reproduced at
@@ -51,6 +57,11 @@ export function Home({ onNavigate }: { onNavigate: (view: string) => void }) {
       api.queue(50).then((q) => live && setQueue(q)).catch(() => null),
       api.signals().then((s) => live && setSignals(s)).catch(() => null),
       api.depotRisk().then((d) => live && setDepots(d)).catch(() => null),
+      // Not /healthz: the bare app URL's /healthz is intercepted by the Databricks Apps
+      // ingress before it reaches the backend (measured 2026-09-27) — anything the console
+      // needs to read has to be under /api. Same "allowed to fail" treatment as the fleet
+      // panels below: a session hiccup hides the link rather than showing a dead one.
+      api.me().then((m) => live && setDashboardUrl(m.dashboard_url)).catch(() => null),
     ]).then(() => live && setSettled(true));
     return () => {
       live = false;
@@ -263,18 +274,20 @@ export function Home({ onNavigate }: { onNavigate: (view: string) => void }) {
             including the improvements that were tested and came back negative.
           </p>
         </button>
-        <a
-          className="panel home-path home-path-external"
-          href="https://dbc-7b106152-caf3.cloud.databricks.com/dashboardsv3/01f1a7257e801a2ebb71bdc18fc2113a/published"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h3>Analytics dashboard ↗</h3>
-          <p className="muted">
-            Fleet, exposure, signals and trust across 12 datasets — the fuller rollup for safety
-            leadership. Opens in Databricks; needs its own sign-in.
-          </p>
-        </a>
+        {dashboardUrl && (
+          <a
+            className="panel home-path home-path-external"
+            href={dashboardUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <h3>Analytics dashboard ↗</h3>
+            <p className="muted">
+              Fleet, exposure, signals and trust across 12 datasets — the fuller rollup for
+              safety leadership. Opens in Databricks; needs its own sign-in.
+            </p>
+          </a>
+        )}
       </section>
     </div>
   );

@@ -44,6 +44,13 @@ env:
   # script uses, rather than whatever the runtime happens to supply.
   - name: DATABRICKS_HOST
     value: https://dbc-7b106152-caf3.cloud.databricks.com
+  # The Home page's "Analytics dashboard" link. Previously a literal in Home.tsx — broke Free
+  # Edition, whose dashboard lives on a different host/workspace/id entirely, because the
+  # built JS bundle is shared byte-for-byte between targets (scripts/sync_free_edition_app.sh).
+  # /healthz now serves it from here instead. Value matches the current published URL exactly
+  # (see resources/fleetguard_overview.dashboard.yml) — unchanged behavior for this target.
+  - name: FLEETGUARD_DASHBOARD_URL
+    value: https://dbc-7b106152-caf3.cloud.databricks.com/dashboardsv3/01f1a7257e801a2ebb71bdc18fc2113a/published
   # Who may APPROVE. Read access is open to any identity that can reach the app; dispatching
   # work orders against a fleet is restricted to this list, enforced unconditionally in
   # approval.py regardless of auth source. Empty would mean nobody, on every surface.
