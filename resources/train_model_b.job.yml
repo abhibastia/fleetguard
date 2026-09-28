@@ -9,6 +9,9 @@ resources:
           notebook_task:
             notebook_path: ../src/fleet/06_train_model_b.py
             source: WORKSPACE
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
           run_if: ALL_SUCCESS
           timeout_seconds: 3600
       email_notifications: {}

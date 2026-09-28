@@ -9,6 +9,9 @@ resources:
           notebook_task:
             notebook_path: ../src/fleet/05_build_model_b_golden_set.py
             source: WORKSPACE
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
           run_if: ALL_SUCCESS
           timeout_seconds: 1800
       email_notifications: {}
