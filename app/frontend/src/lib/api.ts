@@ -243,6 +243,7 @@ export interface AuthStatus {
 export interface Me {
   user_name: string | null;
   token_source: string;
+  dashboard_url: string | null;
 }
 
 export interface WorkOrder {

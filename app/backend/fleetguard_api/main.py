@@ -61,12 +61,20 @@ class Health(BaseModel):
 class Me(BaseModel):
     user_name: str | None
     token_source: str
+    # The AI/BI dashboard's host + id differ per deployment (separate workspace on Free
+    # Edition, separate metastore entirely) and the console's JS bundle is shared byte-for-byte
+    # between targets (see scripts/sync_free_edition_app.sh), so the URL cannot be a literal in
+    # frontend source — that was the actual bug (Home.tsx pointed at prod's workspace, which a
+    # Free Edition account has no login for). Lives here rather than on `/healthz`: `/healthz`
+    # at the bare app URL is intercepted by the Databricks Apps ingress before it reaches this
+    # process (measured 2026-09-27 — 200, empty body, no corresponding line in `apps logs`), so
+    # anything the console actually needs to read must go under `/api`.
+    dashboard_url: str | None = None
 
 
 # `dist` is built by `npm run build` in app/frontend and copied here at deploy time. Absent
 # during backend-only development, which must not be an error.
 CONSOLE_DIR = Path(os.getenv("FLEETGUARD_CONSOLE_DIR", Path(__file__).parent / "console"))
-
 
 
 def _json_safe(value):
@@ -105,6 +113,7 @@ async def validation_error_handler(_: Request, exc: RequestValidationError) -> J
         content={"detail": _json_safe(exc.errors())},
     )
 
+
 @app.get("/healthz", response_model=Health, tags=["ops"])
 def healthz() -> Health:
     """Unauthenticated liveness check.
@@ -135,7 +144,16 @@ def healthz() -> Health:
 def me(principal: CurrentPrincipal) -> Me:
     """Proves the auth seam end to end, and tells the console who it will attribute
     approvals to. Returns the identity, never the token."""
-    return Me(user_name=principal.user_name, token_source=principal.source)
+    return Me(
+        user_name=principal.user_name,
+        token_source=principal.source,
+        # Falls back to prod's current published URL, so prod is unaffected by this env var
+        # existing — see the field's docstring on `Me` for why this isn't on `/healthz`.
+        dashboard_url=os.getenv(
+            "FLEETGUARD_DASHBOARD_URL",
+            "https://dbc-7b106152-caf3.cloud.databricks.com/dashboardsv3/01f1a7257e801a2ebb71bdc18fc2113a/published",
+        ),
+    )
 
 
 api.include_router(queue.router)

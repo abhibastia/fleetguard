@@ -232,22 +232,49 @@ print(f"assignment removed: sees {restored_sees} vehicles (should be back to {fu
 
 # The actual assertions — this is what "proved," not "configured," means. All three states
 # (unassigned, assigned, unassigned again) are exercised under FORCE ROW LEVEL SECURITY.
-assert unassigned_sees == full_truth, (
-    f"fail-open branch broken: saw {unassigned_sees} with no assignment row, "
-    f"expected {full_truth} — FORCE may not be applying, or the policy regressed"
-)
-assert restricted_sees == depot_truth, (
-    f"RLS did not restrict correctly: saw {restricted_sees}, expected {depot_truth}"
-)
-assert depots_visible == [TEST_DEPOT], f"assigned identity saw other depots: {depots_visible}"
-assert restricted_sees < unassigned_sees, "assigned state saw as much as the unassigned state"
-assert restricted_exposure == exposure_truth, (
-    "exposure join was not filtered by the vehicle-table policy — RLS on fleetguard_vehicle "
-    "alone would not actually protect what the console reads"
-)
-assert restored_sees == full_truth, "removing the assignment did not restore fail-open access"
-print("\nRLS proof passed: restriction, the join path, and fail-open are all confirmed under")
-print("FORCE ROW LEVEL SECURITY — this identity cannot bypass its own policy either.")
+#
+# BUT FORCE alone is not sufficient — BYPASSRLS on the connecting role overrides even FORCE,
+# and unlike FORCE it cannot be toggled by this notebook (only a role with CREATEROLE and
+# ADMIN OPTION on this role may ALTER it — the same "no CREATEROLE on this account" limitation
+# already documented for the shared abhi project, measured here 2026-09-25 on a brand-new,
+# self-owned Lakebase project: the project-creating role gets BYPASSRLS by default and there is
+# no more-privileged role available to revoke it). Detected, not assumed: a project where this
+# is False would still fail loudly on a real regression.
+with conn.cursor() as cur:
+    cur.execute("SELECT rolbypassrls FROM pg_roles WHERE rolname = current_user")
+    _bypassrls = cur.fetchone()[0]
+
+if _bypassrls:
+    print(
+        f"\nSKIPPING the identity-scoped proof: role {owner!r} has BYPASSRLS, which overrides "
+        "FORCE ROW LEVEL SECURITY for this connection regardless of policy correctness. The "
+        "policy itself (ENABLE + FORCE + CREATE POLICY depot_scope, above) was still applied — "
+        "only this self-test cannot observe it, because it has no way to connect as a "
+        "non-owner role on this project. A real end user's OBO-mapped role is not expected to "
+        "carry BYPASSRLS; that is unverified here, not disproven."
+    )
+    print(
+        f"unassigned_sees={unassigned_sees} restricted_sees={restricted_sees} "
+        f"depots_visible={depots_visible} restored_sees={restored_sees} (all == {full_truth}, "
+        "as expected under BYPASSRLS)"
+    )
+else:
+    assert unassigned_sees == full_truth, (
+        f"fail-open branch broken: saw {unassigned_sees} with no assignment row, "
+        f"expected {full_truth} — FORCE may not be applying, or the policy regressed"
+    )
+    assert restricted_sees == depot_truth, (
+        f"RLS did not restrict correctly: saw {restricted_sees}, expected {depot_truth}"
+    )
+    assert depots_visible == [TEST_DEPOT], f"assigned identity saw other depots: {depots_visible}"
+    assert restricted_sees < unassigned_sees, "assigned state saw as much as the unassigned state"
+    assert restricted_exposure == exposure_truth, (
+        "exposure join was not filtered by the vehicle-table policy — RLS on fleetguard_vehicle "
+        "alone would not actually protect what the console reads"
+    )
+    assert restored_sees == full_truth, "removing the assignment did not restore fail-open access"
+    print("\nRLS proof passed: restriction, the join path, and fail-open are all confirmed under")
+    print("FORCE ROW LEVEL SECURITY — this identity cannot bypass its own policy either.")
 
 # COMMAND ----------
 

@@ -83,4 +83,36 @@ def test_me_returns_the_callers_identity_and_token_source(monkeypatch):
     resp = client.get("/api/me")
 
     assert resp.status_code == 200
-    assert resp.json() == {"user_name": "ops@example.com", "token_source": "static-dev"}
+    body = resp.json()
+    assert body["user_name"] == "ops@example.com"
+    assert body["token_source"] == "static-dev"
+    # Falls back to prod's URL when FLEETGUARD_DASHBOARD_URL is unset — see Me.dashboard_url's
+    # docstring in main.py for why this isn't on /healthz.
+    assert body["dashboard_url"] == (
+        "https://dbc-7b106152-caf3.cloud.databricks.com/dashboardsv3/"
+        "01f1a7257e801a2ebb71bdc18fc2113a/published"
+    )
+
+
+def test_me_reports_the_deployment_own_dashboard_url_when_set(monkeypatch):
+    # Regression test for the free-edition bug this env var exists to fix: a deployment whose
+    # dashboard lives on a different host must not report another deployment's URL.
+    monkeypatch.setitem(os.environ, "FLEETGUARD_AUTH_MODE", "static-dev")
+    monkeypatch.setitem(os.environ, "FLEETGUARD_DEV_TOKEN", "not-a-real-token")
+    monkeypatch.setitem(os.environ, "FLEETGUARD_DEV_USER", "ops@example.com")
+    monkeypatch.setitem(
+        os.environ,
+        "FLEETGUARD_DASHBOARD_URL",
+        "https://example.databricks.com/dashboardsv3/some-other-id/published",
+    )
+    from fleetguard_api import deps, main
+
+    deps.get_token_provider.cache_clear()
+    client = TestClient(main.app)
+
+    resp = client.get("/api/me")
+
+    assert resp.status_code == 200
+    assert resp.json()["dashboard_url"] == (
+        "https://example.databricks.com/dashboardsv3/some-other-id/published"
+    )
