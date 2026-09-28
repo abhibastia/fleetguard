@@ -5,11 +5,15 @@
 # a free offline session, and first RUN in Run 2 alongside the index rebuild it depends on.
 # Binding it early is the point: the alternative is writing bundle YAML at 11pm on 2 October.
 #
-# NO `base_parameters`, for the same reason `evaluate_agent.job.yml` has none — `bundle
-# generate` will happily copy a widget default out of a live job and pin it forever (I-098,
-# which re-created I-094 one layer up). The notebook's SEED is a module constant precisely so
-# two runs over the same index are comparable; it is not a knob to set per-run, and a run with
-# a different seed is a different evaluation rather than a repeat of this one.
+# `catalog`/`schema` ARE passed below — they select which target's tables to read, the same
+# ${var.catalog}/${var.schema} every other widget-ized job already uses, not a value `bundle
+# generate` could pin from a live run (I-098's risk was a *model version* widget, which this
+# notebook does not have). Missing entirely until a free_edition end-to-end test hit
+# `ResourceDoesNotExist: bootcamp_students.fleetguard.complaint_chunk_idx` (hardcoded).
+#
+# SEED, unlike catalog/schema, stays a module constant and is NOT a base parameter — it exists
+# precisely so two runs over the same index are comparable, and a run with a different seed is
+# a different evaluation rather than a repeat of this one.
 #
 # Timeout is 1 h: 200 index queries plus three behavioural checks. If it approaches that, the
 # index is the problem, not the notebook.
@@ -25,6 +29,9 @@ resources:
           notebook_task:
             notebook_path: ../src/search/28_rag_eval.py
             source: WORKSPACE
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
           run_if: ALL_SUCCESS
           timeout_seconds: 3600
       email_notifications: {}

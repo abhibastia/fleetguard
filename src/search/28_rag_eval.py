@@ -80,7 +80,10 @@ from fleetguard.retrieval_metrics import (  # noqa: E402
     summarise,
 )
 
-CATALOG, SCHEMA = "bootcamp_students", "fleetguard"
+dbutils.widgets.text("catalog", "bootcamp_students")
+dbutils.widgets.text("schema", "fleetguard")
+CATALOG = dbutils.widgets.get("catalog")
+SCHEMA = dbutils.widgets.get("schema")
 INDEX = f"{CATALOG}.{SCHEMA}.complaint_chunk_idx"
 SOURCE = f"{CATALOG}.{SCHEMA}.silver_complaint_chunk_indexed"
 FLEET = f"{CATALOG}.{SCHEMA}.gold_fleet_vehicle"
@@ -231,15 +234,17 @@ print(f"topical probes: {len(topical_rows)}")
 pool_rows = spark.sql(f"""
     WITH probes AS (
         SELECT * FROM VALUES
-        {",".join(
-            "('{}','{}','{}','{}')".format(
-                r.campaign_id,
-                r.make.replace("'", "''"),
-                r.model.replace("'", "''"),
-                r.component.replace("'", "''"),
-            )
-            for r in topical_rows
-        )}
+        {
+    ",".join(
+        "('{}','{}','{}','{}')".format(
+            r.campaign_id,
+            r.make.replace("'", "''"),
+            r.model.replace("'", "''"),
+            r.component.replace("'", "''"),
+        )
+        for r in topical_rows
+    )
+}
         AS t(campaign_id, make, model, component)
     )
     SELECT p.campaign_id, collect_set(c.complaint_id) AS pool
@@ -297,9 +302,7 @@ for query_type in ("HYBRID", "ANN"):
     # --- family B ------------------------------------------------------------------------
     per_probe, dropped, pool_sizes = [], 0, []
     for row in topical_rows:
-        question = (
-            f"{row.component.lower()} problem on a {row.make.title()} {row.model}"
-        )
+        question = f"{row.component.lower()} problem on a {row.make.title()} {row.model}"
         # GROUND TRUTH FROM THE CORPUS, not from `hits`. See the section above for what the
         # first version did instead and why it could not fail.
         relevant = POOLS.get(row.campaign_id, set())
@@ -311,9 +314,7 @@ for query_type in ("HYBRID", "ANN"):
         if not ranked:
             # Retrieval returned nothing for a probe that HAS ground truth. That is a real
             # miss and scores zero — unlike the no-pool case above, which is dropped.
-            per_probe.append(
-                {"recall_at_k": 0.0, "precision_at_k": 0.0, "reciprocal_rank": 0.0}
-            )
+            per_probe.append({"recall_at_k": 0.0, "precision_at_k": 0.0, "reciprocal_rank": 0.0})
             pool_sizes.append(len(relevant))
             continue
         pool_sizes.append(len(relevant))
@@ -327,9 +328,7 @@ for query_type in ("HYBRID", "ANN"):
     summary = summarise(per_probe, K)
     summary["dropped_probes"] = dropped
     # Published beside recall so a tiny figure is legible as arithmetic rather than failure.
-    summary["relevant_pool_size"] = (
-        sorted(pool_sizes)[len(pool_sizes) // 2] if pool_sizes else 0
-    )
+    summary["relevant_pool_size"] = sorted(pool_sizes)[len(pool_sizes) // 2] if pool_sizes else 0
     results.append({"family": "topical", "query_type": query_type, **summary})
 
 for r in results:
@@ -417,9 +416,9 @@ rows = [
     for r in results
 ]
 
-spark.createDataFrame(rows).write.mode("append").option(
-    "mergeSchema", "true"
-).saveAsTable(OPS_TABLE)
+spark.createDataFrame(rows).write.mode("append").option("mergeSchema", "true").saveAsTable(
+    OPS_TABLE
+)
 
 print(f"wrote {len(rows)} rows to {OPS_TABLE}")
 display(spark.table(OPS_TABLE).where(f"run_ts = '{run_ts}'"))
