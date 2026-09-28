@@ -23,7 +23,10 @@
 
 # COMMAND ----------
 
-# MAGIC %pip install -q -U mlflow databricks-agents databricks-sdk
+# MAGIC # `openai` is required here too: mlflow loads the agent's own pyfunc code to score it,
+# MAGIC # and that code imports `openai` (14_fleetguard_agent.py's %pip cell), which fails with
+# MAGIC # "No module named 'openai'" otherwise.
+# MAGIC %pip install -q -U mlflow databricks-agents databricks-sdk openai
 # MAGIC %restart_python
 
 # COMMAND ----------
