@@ -20,8 +20,15 @@
 
 # COMMAND ----------
 
-import psycopg
-from databricks.sdk import WorkspaceClient
+import os
+
+# See I-045. `psycopg[binary]` aborts the kernel with a FIPS self-test failure on serverless
+# unless this is set before import. Every other src/lakebase/*.py file that imports psycopg
+# already carries this guard; this file was missing it.
+os.environ.setdefault("PSYCOPG_IMPL", "python")
+
+import psycopg  # noqa: E402 - must follow the PSYCOPG_IMPL assignment above
+from databricks.sdk import WorkspaceClient  # noqa: E402
 
 PROJECT = "projects/summer-bootcamp-2026-v2"
 ENDPOINT = f"{PROJECT}/branches/production/endpoints/primary"
