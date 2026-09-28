@@ -25,6 +25,12 @@ CATALOG = dbutils.widgets.get("catalog")
 SCHEMA = dbutils.widgets.get("schema")
 spark.sql(f"USE {CATALOG}.{SCHEMA}")
 
+# Default TRUE everywhere, including prod. Set to "false" only for a deliberate run against a
+# corpus known to differ from the one the 777 pin below was measured on (e.g. a different
+# workspace's own NHTSA ingest) — the assertion still runs and prints, it just doesn't fail.
+dbutils.widgets.dropdown("strict_population_check", "true", ["true", "false"])
+STRICT_POPULATION_CHECK = dbutils.widgets.get("strict_population_check") == "true"
+
 LOOKBACK_MONTHS = 24  # detection window: how far before open_date a run may start
 
 # The working set must extend FURTHER BACK than the detection window. The detector's
@@ -181,10 +187,14 @@ SELECT
 for k, v in checks.asDict().items():
     print(f"  {k:<26} {v:,}" if isinstance(v, int | float) else f"  {k:<26} {v}")
 
-assert checks["real_investigations"] == 777, (
-    f"real arm has {checks['real_investigations']} investigations, expected 777 — "
-    "the backtest population changed and results are no longer comparable with v2"
-)
+if checks["real_investigations"] != 777:
+    msg = (
+        f"real arm has {checks['real_investigations']} investigations, expected 777 — "
+        "the backtest population changed and results are no longer comparable with v2"
+    )
+    if STRICT_POPULATION_CHECK:
+        raise AssertionError(msg)
+    print(f"  WARNING: {msg} (strict_population_check=false, continuing anyway)")
 assert checks["complaints_to_embed"] == checks["distinct_complaints"], (
     "gold_backtest_complaint is not one row per complaint_id — embedding spend would double"
 )
