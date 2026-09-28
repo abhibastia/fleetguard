@@ -210,16 +210,23 @@ with mlflow.start_run(run_name="fleetguard-model-b-v1") as run:
 
     signature = infer_signature(X_train, clf.predict_proba(X_train))
     # MLflow's default sklearn serialization (skops) security-gates internal types it does
-    # not recognise. CalibratedClassifierCV produces sklearn.calibration._CalibratedClassifier
-    # internally, which trips that gate. Trusting it here is correct, not a bypass: this is a
-    # model we just trained in-process, not one loaded from an external or untrusted source —
-    # the gate exists for the latter case.
+    # not recognise. CalibratedClassifierCV produces sklearn.calibration._CalibratedClassifier,
+    # and the GradientBoostingClassifier it calibrates produces sklearn.tree._tree.Tree for
+    # each of its estimators — both trip that gate. Trusting them here is correct, not a
+    # bypass: this is a model we just trained in-process, not one loaded from an external or
+    # untrusted source — the gate exists for the latter case. Measured 2026-09-29: a fresh
+    # `%pip install -U mlflow` started enforcing this gate on the second (nested tree) type
+    # where it hadn't before, failing an otherwise-unchanged run with "untrusted types found:
+    # ['sklearn.tree._tree.Tree']".
     model_info = mlflow.sklearn.log_model(
         clf,
         name="model",
         signature=signature,
         input_example=X_train.head(3),
-        skops_trusted_types=["sklearn.calibration._CalibratedClassifier"],
+        skops_trusted_types=[
+            "sklearn.calibration._CalibratedClassifier",
+            "sklearn.tree._tree.Tree",
+        ],
     )
     print(f"run_id: {run.info.run_id}")
 
