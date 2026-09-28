@@ -1,0 +1,24 @@
+# gold_fleet_exposure previously had no source file or bundle job at all — it existed live in
+# abhi only because someone built it ad hoc and never committed the SQL (docs/ISSUES.md I-059).
+# fleetguard-load-exposure has always depended on this table existing; nothing in the bundle
+# ever created it. Run this before fleetguard-load-exposure on a from-scratch rebuild.
+
+resources:
+  jobs:
+    build_fleet_exposure:
+      name: fleetguard-build-fleet-exposure
+      tasks:
+        - task_key: exposure
+          disabled: false
+          email_notifications: {}
+          notebook_task:
+            notebook_path: ../src/fleet/04b_build_fleet_exposure.py
+            source: WORKSPACE
+          run_if: ALL_SUCCESS
+          timeout_seconds: 0
+      email_notifications: {}
+      max_concurrent_runs: 1
+      queue:
+        enabled: true
+      timeout_seconds: 0
+      webhook_notifications: {}
