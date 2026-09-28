@@ -25,6 +25,7 @@
 
 # COMMAND ----------
 
+import datetime
 import json
 import os
 import random
@@ -45,6 +46,19 @@ N_VEHICLES = 20_000
 N_DEPOTS = 60
 SEED = 20260831
 random.seed(SEED)
+
+
+def _manufacture_date(model_year: int) -> datetime.date:
+    """A plausible build date within the vehicle's model year.
+
+    `fleetguard_vehicle.manufacture_date` (Lakebase, src/lakebase/08_create_remaining_tables.py)
+    expects one, and `10_load_reference_from_gold.py` reads it from `gold_fleet_vehicle` -- this
+    generator was the one place in the chain that never produced it (caught 2026-09-25 running
+    the free-edition rebuild: UNRESOLVED_COLUMN on a table that, on abhi, already carries this
+    column from an undocumented hand-run ALTER, the same shape of gap as I-059).
+    """
+    return datetime.date(model_year, random.randint(1, 12), random.randint(1, 28))
+
 
 VPIC_BATCH = "https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVINValuesBatch/"
 # Identify ourselves to the API the same way the recall poll does. Absent here until
@@ -380,6 +394,7 @@ for seg, share in TARGET_MIX.items():
                 "make": src["make"],
                 "model": src["model"],
                 "model_year": src["model_year"],
+                "manufacture_date": _manufacture_date(src["model_year"]),
                 "body_class": src["body_class"],
                 "gvwr_class": src["gvwr_class"],
                 "plant_city": src["plant_city"],
@@ -408,6 +423,7 @@ while len(vehicles) < N_VEHICLES:
             "make": src["make"],
             "model": src["model"],
             "model_year": src["model_year"],
+            "manufacture_date": _manufacture_date(src["model_year"]),
             "body_class": src["body_class"],
             "gvwr_class": src["gvwr_class"],
             "plant_city": src["plant_city"],
