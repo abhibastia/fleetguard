@@ -184,7 +184,7 @@ topical_rows = spark.sql(f"""
         SELECT DISTINCT make, model FROM {FLEET}
     ),
     campaigns AS (
-        SELECT DISTINCT r.make, r.model, r.component, r.campaign_id
+        SELECT DISTINCT r.make, r.model, r.component, r.campaign_number AS campaign_id
         FROM {RECALLS} r
         WHERE r.component IS NOT NULL AND length(trim(r.component)) > 0
           AND EXISTS (
