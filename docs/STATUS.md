@@ -1360,7 +1360,7 @@ than discovering it mid-demo.
 | **Branches** | **3 local / 2 remote, deliberately** — `main`, `fix/repo-review-round-5`, `free-edition-deploy`. 14 were deleted 2026-09-29 (**I-121**, SHAs recorded there). `deploy/render` and `feature/role-based-views` went too, against this file's own "preserved"/"not deleted" notes, on an explicit decision — the latter survives as tag `archive/role-based-views`. Docs naming `deploy/render` as a live location now name commit `2b5727a` |
 | **Working tree** | clean |
 | **Billable resources running** | **none** — see "What is costing money" below |
-| **Tests** | **679 passed / 24 skipped** (backend, ~45 s), **153** vitest, ruff + typecheck clean — *679 is 667 + I-120's 12, arithmetic not a fresh CI reading; the 614 non-Spark half was re-run and matches. Count it yourself if it matters* |
+| **Tests** | **679 passed / 24 skipped** (backend), **153** vitest, ruff + typecheck clean — *measured by CI on PR #19, run `36618884010`, not derived. Includes the 53 `tests/pipelines/` Spark tests, which cannot run on this laptop (`Bad CPU type in executable`, x86-only `java`) — CI is the only place they execute* |
 | **Bound job resources** | **31** (`ls resources/*.job.yml \| wc -l` — count it, do not trust this number) |
 
 #### The fifth external review is triaged — `fix/repo-review-round-5` (I-120)
