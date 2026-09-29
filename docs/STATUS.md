@@ -1357,7 +1357,8 @@ than discovering it mid-demo.
 | **Today** | 2026-09-30 · **submission 4 October** · **Run 2 targeted 2–3 October** |
 | **`main`** | `b7fa9c8` (I-120 + I-121, PR #19), pushed to `origin/main`, **CI green** (both jobs) |
 | **Unmerged** | `chore/fold-free-edition-target` — I-122, the `free_edition` target fold. Offline only |
-| **Branches** | **1 local / 1 remote** — just `main`. 14 were deleted 2026-09-29 (**I-121**, SHAs recorded there) and `free-edition-deploy` was folded into `main` as the `free_edition` bundle target 2026-09-30 (**I-122**), reversing I-119. `feature/role-based-views` survives as tag `archive/role-based-views`; docs naming `deploy/render` as a live location name commit `2b5727a` |
+| **Branches** | **2 local / 2 remote** — `main` plus **`free-edition-deploy`, retained deliberately** (2026-09-30) though its work is now all on `main`. 14 others were deleted 2026-09-29 (**I-121**, SHAs recorded there). `feature/role-based-views` survives as tag `archive/role-based-views`; docs naming `deploy/render` as a live location name commit `2b5727a` |
+| ⚠️ **`free-edition-deploy` is a FROZEN PRE-FOLD SNAPSHOT** | Tip `e7ff1b6`, **4 commits behind `main`**. It is kept as a fallback, **not as a live branch — do not deploy free edition from it.** It predates I-120, so its `agent_actions.py` and `readyz.py` lack the `NaN`/422 fix and the `/readyz` eval gate, and it still carries the stale `series_key IS NULL` comment two reviews mis-filed. Free-edition work lives on `main`: `./scripts/deploy.sh <profile> free_edition` |
 | **Bundle targets** | **2** — `prod` (default, abhi, the submission deliverable) and `free_edition` (separate account). `./scripts/deploy.sh <profile> <target>`, target defaults to `prod`. All 9 variable defaults are the abhi values, so `prod` is unchanged by the fold |
 | **Working tree** | clean |
 | **Billable resources running** | **none** — see "What is costing money" below |

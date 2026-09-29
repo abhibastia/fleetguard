@@ -97,6 +97,22 @@ produced I-096 and I-098. `tests/test_bundle_resources.py` now fails if the mirr
 and — from the other side — fails if `app.yaml` ever becomes identical to prod's, which would
 point the free-edition App at abhi's Lakebase project and approvers. Both mutation-checked.
 
+#### The branch is RETAINED, and that changes what it is
+
+Deleting `free-edition-deploy` was proposed once its content was on `main` — every line it has
+that `main` lacks is *superseded* text, verified line by line (its `.gitignore` predates I-120's
+`/repo-review*.md` glob; `26_add_defect_signal_idempotency.py` still carries the stale
+`series_key IS NULL` comment). **The user chose to keep it as a fallback**, which is fine and
+free.
+
+But it is no longer *the* home of the free-edition work, and that distinction has teeth. It is a
+**frozen pre-fold snapshot at `e7ff1b6`, 4 commits behind `main`**, and it predates I-120 — so
+its `agent_actions.py` and `readyz.py` lack the `NaN`/422 fix and the `/readyz` eval gate.
+**Deploying free edition from that branch would silently ship an App missing both.** Free-edition
+work lives on `main` now: `./scripts/deploy.sh <profile> free_edition`. Written into the cold-start
+briefing as a trap rather than left to be rediscovered, because "we might need it later" and "it is
+safe to build from" are different claims and only the first one is true.
+
 #### Verified
 
 **628 passed / 24 skipped** (was 626; +2 mirror guards), ruff clean. 31 bound job resources.
