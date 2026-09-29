@@ -1223,7 +1223,7 @@ updates them in place and creates nothing:
 | Databricks App | `fleetguard_console` | `fleetguard-console` |
 | Pipeline | `bronze_silver` | `937b9ce4-4fbe-4493-96ad-b76317bf58db` |
 | AI/BI dashboard | `fleetguard_overview` | `01f1a7257e801a2ebb71bdc18fc2113a` |
-| Jobs | every `resources/*.job.yml` | the live / rebuild-from-empty `fleetguard-*` jobs (29 as of 2026-09-23, after adding `build_chunk_index_source` and removing 7 unbound dead-experiment job objects that were cluttering the live workspace, I-114 — count via `ls resources/*.job.yml \| wc -l` rather than trusting a number written here, it has grown before) |
+| Jobs | every `resources/*.job.yml` | the live / rebuild-from-empty `fleetguard-*` jobs (31 as of 2026-09-29, after adding `build_fleet_exposure` (I-119) — count via `ls resources/*.job.yml \| wc -l` rather than trusting a number written here, it has grown before) |
 
 The other **7** `fleetguard-*` jobs are excluded on purpose — `lead-time-backtest-v2`,
 `semantic-subdivision` and `embed-backtest-complaints` (the semantic arm §6 measured and
@@ -1343,8 +1343,10 @@ recurring charge. Everything else is manual-trigger. Billing stops 24 h after th
 is deleted. Embedding was ~$5 one-off.
 
 **Rebuild.** `src/setup/00_create_all_objects.py` creates the foundations nothing else
-creates, prints a 14-step rebuild order naming each producer, and verifies present-vs-expected
-across 34 objects. It is deliberately **not** pure DDL: most tables here are derived, and
+creates, prints a 19-step rebuild order naming each producer, and verifies present-vs-expected
+across 39 objects (both counts verified 2026-09-29, I-119 — this paragraph had drifted from the
+actual `REBUILD`/`EXPECTED` lists in the file before that; count from the file itself if it
+matters, not from this sentence). It is deliberately **not** pure DDL: most tables here are derived, and
 `CREATE TABLE` for `silver_complaint` would yield an empty table with the right name — a
 rebuild that looks successful and isn't.
 

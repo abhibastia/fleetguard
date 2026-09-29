@@ -32,7 +32,109 @@ no error and passed the obvious check.
 ---
 
 ## Tooling / process
-### I-118 — hardening the graded surfaces: indirect prompt injection, citations, and evaluation provenance
+### I-119 — a free-edition end-to-end run surfaced 10 real bugs that had never been exercised
+
+*Date:* 2026-09-29 · *Status:* ✅ resolved — merged to `main` via PR #18 (`fa8d2b0`).
+
+Not a review. `free-edition-deploy` added a second bundle target (`free_edition`, a wholly
+separate Databricks Free Edition account, `mode: production`, no shared workspace, no billing
+concern) specifically so the pipeline/agent/App could be run end to end on a fresh environment
+without touching `abhi`. Doing that — for the first time ever, for several of these jobs — found
+real bugs that widget-izing catalog/schema alone would not have: things that only surface when
+code actually *executes* against live data instead of being trusted from a green `bundle
+validate` or a read-through. **All ten below are ported to `main`; the free-edition-only
+scaffolding (the target itself, catalog/schema widgets, the LLM-endpoint swap for a workspace
+where `databricks-claude-opus-4-8` doesn't exist) deliberately stays on `free-edition-deploy`.**
+
+**Zero `abhi` usage to find or verify any of this.** Every fix was exercised live against the
+identical code path on free edition first; porting to `main` was verified with the local suite
+only (667 backend tests, 153 vitest, ruff, `tsc`) — the fix isn't catalog-specific, so a second
+live run against `abhi` would prove nothing a local test doesn't already cover.
+
+**What was found, most SILENT — correct-looking or simply unexercised until this run:**
+
+1. **`gold_fleet_exposure` had no source file at all — SILENT.** It exists live on `abhi`
+   (989,042 rows, matching the proposal's figures) because someone built it ad hoc and never
+   committed the SQL. The rebuild manifest in `00_create_all_objects.py` **actively
+   misattributed it** to the fleet-registry job, which never produced it — so a rebuild-from-empty
+   would have silently ended up short one table with no error at any step. Reconstructed from the
+   live schema and the EXACT/MODEL_VARIANT rule already used elsewhere in the codebase, given its
+   own source file (`04b_build_fleet_exposure.py`) and bundle job
+   (`fleetguard-build-fleet-exposure`), and correctly inserted into the rebuild order as its own
+   step (manifest now 19 steps, was 18; `EXPECTED` was already tracking 39 objects under the
+   wrong step number, not 34 as `docs/ARCHITECTURE.md` claimed — also corrected there).
+2. **`04_build_fleet_registry.py` never produced `manufacture_date` — SILENT on `abhi`.**
+   `fleetguard_vehicle` (Lakebase DDL) and `10_load_reference_from_gold.py` have always
+   expected the column; `abhi`'s live `gold_fleet_vehicle` apparently carries it from an
+   undocumented hand-run `ALTER`, so committed source was simply wrong and nothing detected it
+   until a fresh build hit `UNRESOLVED_COLUMN`. Same shape as the previous bug — a gap papered
+   over by manual intervention on the one environment anyone actually queries.
+3. **`28_rag_eval.py` referenced a column that doesn't exist — SILENT until first run.**
+   `r.campaign_id`; the real column on `silver_recall` is `campaign_number`. This notebook's own
+   header says it "runs only with a live index" and had never been run against one before this
+   session, on any branch — the bug is exactly as old as the file and nothing had ever exercised
+   the query.
+4. **`evaluate_agent` and `agent_build`/`14_fleetguard_agent.py` were both missing `openai` in
+   their `%pip install` cell.** `mlflow.openai.autolog()` and `mlflow.pyfunc.load_model()` both
+   import it directly; `databricks-agents`/`mlflow` did not pull it in transitively on a fresh
+   serverless environment. `ModuleNotFoundError` on the first cold run of each.
+5. **The agent's served container needed `httpx` pinned explicitly too** — same shape as #4,
+   one layer down (the `openai` client uses `httpx` internally but the container did not
+   reliably resolve it transitively). Only surfaced on a live inference call against a
+   freshly-deployed endpoint, not at deploy time.
+6. **`train_model_b`'s `mlflow.sklearn.log_model` started rejecting the model outright** —
+   a newer mlflow enforces skops' untrusted-type gate one level deeper than before:
+   `CalibratedClassifierCV` was already trusted, but the `GradientBoostingClassifier` it
+   calibrates produces `sklearn.tree._tree.Tree` per estimator, which is now also gated.
+   Version-drift bug, not environment-specific — would hit `abhi` too on the next fresh
+   `%pip install -U mlflow`.
+7. **The agent's LLM-endpoint code assumed message `content` is always a string or `None`** —
+   true for Claude, not guaranteed for every endpoint this agent could be pointed at. A
+   list-shaped `content` (measured on `databricks-gpt-oss-120b`) passed through `content or ""`
+   unchanged (truthy, not falsy) and crashed a downstream `.replace()` call. Dormant on `abhi`
+   today (Claude), real robustness gap.
+8. **The round-trip validation cell in `14_fleetguard_agent.py` was pinned to one fleet
+   roster's exact numbers** (25/22 exposure, 15 makes, 47 combos, 2,116 F-250s, DODGE-absent/
+   RAM-present, 48/4/2418 emerging-signal counts) with no way to tell "the tool is broken" from
+   "this environment's randomly-generated fleet is a different shape" — the fleet registry is
+   *not* reproducible across environments even with the same `SEED` (vPIC response ordering
+   isn't stable). Now detects which shape it's looking at and runs `abhi`'s exact regression
+   numbers only when that shape is actually present — verified by reading the diff, not the
+   commit message, that `abhi`'s protection is byte-for-byte unchanged.
+9. **Two Lakebase migration scripts failed only on a genuinely empty table.**
+   `06_create_depot_and_verify.py` was missing the `PSYCOPG_IMPL=python` guard (I-045) every
+   other `src/lakebase/*.py` file carries — `abhi`'s job has run before and inherits a cached
+   pre-I-045 environment that masks it; a cold start SIGABRTs. `20_add_defect_signal_provenance.py`'s
+   self-check asserted pre-existing `DETECTOR`-classified rows existed — true once there's live
+   data, vacuously false (and therefore a hard failure, not a pass) on an empty table.
+10. **The RLS self-test had no path for a role with `BYPASSRLS=true`.** Measured on a brand-new,
+    self-owned Lakebase project: the project-creating role carries it by default, which overrides
+    `FORCE ROW LEVEL SECURITY` for that connection regardless of policy correctness, and there is
+    no more-privileged role available to revoke it from (same "no `CREATEROLE`" limitation
+    already documented for the shared `abhi` project — found again on a project nobody else owns
+    at all). The policy itself still gets applied; only the self-test's identity-scoped
+    assertions are unprovable under that role, so they're now skipped-and-explained rather than
+    silently passing or hard-failing.
+
+**Also found, and deliberately NOT a bug fix:** a real SQL string escape error
+(`\'` inside a `COMMENT` literal, which is Python syntax rather than SQL and truncates the
+string early) in `27_build_chunk_index_source.py` — pre-existing, unrelated to any of the above,
+caught only because that job had also never been run through the bundle before. Fixed with the
+standard SQL doubled-quote escape.
+
+**The Home page's dashboard link was a hardcoded `abhi`-workspace URL baked into the built JS**,
+found because it broke on a different workspace where the console's JS bundle is shared
+byte-for-byte with `abhi`'s. Moved to `FLEETGUARD_DASHBOARD_URL` (`app.yaml`), surfaced via
+`/api/me` rather than `/healthz` (the bare app URL's `/healthz` is intercepted by the Databricks
+Apps ingress before it reaches the FastAPI process — measured directly, 200/empty-body/no
+corresponding `apps logs` line). Falls back to the exact URL already in use, so this is a
+strict improvement with zero behavior change for the current deployment.
+
+**What this does not affect.** None of the above changes `abhi`'s current live state or Run 2's
+own sequence — `gold_fleet_exposure` already exists there (just without a producer job), and
+nothing else touched was ever wrong on data `abhi` already has. The new `build_fleet_exposure`
+job only matters for a genuine rebuild-from-empty, which `00_create_all_objects.py`'s manifest
+now correctly reflects.
 
 *Date:* 2026-09-24 · *Status:* **Built offline; the behavioural half is measured in Run 2.**
 

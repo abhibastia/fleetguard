@@ -1212,18 +1212,44 @@ than discovering it mid-demo.
 
 ## Picking this up tomorrow
 
-### COLD START — state as of 2026-09-24, end of day
+### COLD START — state as of 2026-09-29, end of day
 
 **Read this section, then `docs/RUNBOOK.md` Phase 3. Nothing else is required to resume.**
 
 | | |
 |---|---|
-| **Today** | 2026-09-24 · **submission 4 October** · **Run 2 targeted 2–3 October** |
-| **`main`** | `18621ca`, pushed to `origin/main`, **CI green** (both jobs) |
+| **Today** | 2026-09-29 · **submission 4 October** · **Run 2 targeted 2–3 October** |
+| **`main`** | `fa8d2b0`, pushed to `origin/main`, **CI green** (both jobs) |
 | **Working tree** | clean |
 | **Billable resources running** | **none** — see "What is costing money" below |
-| **Tests** | **666 passed / 24 skipped** (backend, ~45 s), **153** vitest, ruff + typecheck clean |
-| **Bound job resources** | **30** (`ls resources/*.job.yml \| wc -l` — count it, do not trust this number) |
+| **Tests** | **667 passed / 24 skipped** (backend, ~45 s), **153** vitest, ruff + typecheck clean |
+| **Bound job resources** | **31** (`ls resources/*.job.yml \| wc -l` — count it, do not trust this number) |
+
+#### What changed since the 2026-09-24 note, and why it does NOT touch the Run 2 plan below
+
+**PR #18 (`fa8d2b0`), merged 2026-09-29 — 10 real bug fixes, ported from a separate
+`free-edition-deploy` branch's end-to-end test on a second Databricks Free Edition account.**
+Full detail is `docs/ISSUES.md` I-119; the short version: that branch ran the pipeline, agent,
+App and several jobs end to end for the first time ever on a *fresh* environment, which found
+bugs that a green `bundle validate` or a read-through could not — a nonexistent SQL column
+(`28_rag_eval.py`), missing pip dependencies (`openai`/`httpx`, two files), a newer mlflow
+rejecting a model it used to accept, a validation cell pinned to one specific fleet roster's
+exact numbers, and — the one with real teeth — **`gold_fleet_exposure` had no source file or
+bundle job at all**. It exists live on `abhi` only because someone built it ad hoc and never
+committed the SQL; a rebuild-from-empty would have silently ended up one table short. Fixed with
+a real builder (`04b_build_fleet_exposure.py`) and a new job (`fleetguard-build-fleet-exposure`),
+correctly inserted into `00_create_all_objects.py`'s rebuild order (now 19 steps, was 18 — that
+number and the 34/39-object count were both already stale before this merge; corrected in
+`docs/ARCHITECTURE.md` at the same time).
+
+**This changed `main`, not `abhi`.** None of it was found or verified against `abhi` — every
+fix was exercised live on the free-edition account first, and porting to `main` was verified
+with the local test suite only (no billable resources touched). It also does not change
+anything about the Run 2 sequence below: `gold_fleet_exposure` already exists live on `abhi`
+(the new job only matters for a genuine from-scratch rebuild), and none of the other nine fixes
+touch code that was ever wrong for data `abhi` already has. **Read the rest of this section as
+still fully current** — it is the free-edition-only scaffolding (a separate bundle target, not
+merged, not touching `abhi`) that this note does not need to describe.
 
 #### The one thing that happens next
 
@@ -1311,9 +1337,9 @@ breaking it is cheap.
 #### How to confirm you are where this note says
 
 ```bash
-git log --oneline -1                                             # expect 18621ca or later
+git log --oneline -1                                             # expect fa8d2b0 or later
 git status -sb                                                   # expect clean, not ahead
-.venv/bin/python -m pytest                                       # expect 666 passed / 24 skipped
+.venv/bin/python -m pytest                                       # expect 667 passed / 24 skipped
 databricks vector-search-endpoints list-endpoints --profile abhi # expect NO fleetguard-vs
 databricks apps get fleetguard-console --profile abhi            # expect compute_status STOPPED
 databricks serving-endpoints get \
