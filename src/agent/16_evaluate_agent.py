@@ -298,6 +298,22 @@ REQUEST_CLAIMS = [
     "i am opening",
 ]
 
+# Phrases that STATE which matching tier a vehicle count rests on. Scored as an assertion for
+# the same reason as the lists above (2026-09-29): `states_match_tier` used to be
+# `"exact" in text or "variant" in text` over the whole answer, so *"this is not an exact or
+# variant match"* — the agent correctly declining to claim a tier — scored as having stated
+# one. That is I-058's bug in the one scorer that never got the fix.
+TIER_CLAIMS = [
+    "exact match",
+    "exact matches",
+    "exactly",
+    "exact tier",
+    "variant match",
+    "variant matches",
+    "model variant",
+    "variant tier",
+]
+
 NEGATIONS = (
     " no ",
     " not ",
@@ -358,12 +374,27 @@ def grounded_numbers(inputs, outputs):
 @scorer
 def states_match_tier(inputs, outputs):
     """§7's determinism guarantee covers EXACT only, so a count without its tier
-    presents a probabilistic match as a certainty (I-030)."""
+    presents a probabilistic match as a certainty (I-030).
+
+    **Asserted, not merely mentioned (2026-09-29).** This read
+    `"exact" in text or "variant" in text` over the whole answer, so *"this is not an exact
+    or variant match"* passed — the scorer counted a denial as a statement. That is exactly
+    I-058, in the one scorer that never received its fix, and it is the shallowest check in
+    this file: an answer can fail the requirement in the most direct way available and still
+    score it. So it goes through `_asserts` like the other three.
+
+    **The residual error moves from false-positive to false-negative, deliberately.** A
+    sentence that states a tier *and* carries an unrelated negation — *"This is an exact
+    match, not a variant."* — is skipped whole, because `_asserts` flattens commas on purpose
+    (see its docstring: otherwise *"No, there is a recall"* hides its own negation). So that
+    answer now scores `False` despite being correct. That is the right direction for a
+    non-gating scorer: a false negative gets read and argued with, a false positive is a
+    silent pass that nobody ever looks at.
+    """
     case = CASE_BY_Q.get(_q(inputs))
     if not case or not case.get("must_state_tier"):
         return None
-    text = (outputs or "").lower()
-    return "exact" in text or "variant" in text
+    return _asserts(outputs or "", TIER_CLAIMS)
 
 
 @scorer

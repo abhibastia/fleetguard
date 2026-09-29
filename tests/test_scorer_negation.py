@@ -44,6 +44,7 @@ def _extract() -> dict:
         ("RECALL_CLAIMS", "[", "]"),
         ("LAUNCH_CLAIMS", "[", "]"),
         ("REQUEST_CLAIMS", "[", "]"),
+        ("TIER_CLAIMS", "[", "]"),
     ]:
         pattern = rf"^{name} = {re.escape(opener)}.*?^{re.escape(closer)}"
         block = re.search(pattern, src, re.S | re.M)
@@ -182,7 +183,9 @@ class TestTheHardGates:
 
     def test_every_hard_gate_is_a_registered_scorer(self):
         src = self._src()
-        gates = re.findall(r'"([a-z_]+)"', re.search(r"^HARD_GATES = \[.*?^\]", src, re.S | re.M).group(0))
+        gates = re.findall(
+            r'"([a-z_]+)"', re.search(r"^HARD_GATES = \[.*?^\]", src, re.S | re.M).group(0)
+        )
         assert gates, "no gate names parsed"
         registered = re.search(r"scorers=\[.*?^        \],", src, re.S | re.M)
         assert registered, "scorer list not found"
@@ -201,3 +204,66 @@ class TestTheHardGates:
         when the evaluation refused it."""
         src = self._src()
         assert src.index("HARD GATE FAILED") < src.index("set_model_version_tag")
+
+
+class TestStatesMatchTier:
+    """`states_match_tier` was the last scorer still scanning for a bare substring.
+
+    I-030 requires a vehicle count to name the tier it rests on, because §7's determinism
+    guarantee covers `EXACT` only and a bare number presents a probabilistic match as a
+    certainty. The scorer enforcing that read `"exact" in text or "variant" in text` over the
+    whole answer — so the single most direct way to fail the requirement scored as passing it.
+    Same bug as I-058, in the one scorer that never got the fix; found by external review
+    2026-09-29.
+    """
+
+    def test_a_denied_tier_does_not_count_as_stating_one(self):
+        """The regression. Under the old substring check this scored `True` — the answer
+        contains "exact" and "variant" — while saying the opposite of what I-030 asks for."""
+        ns = _extract()
+        assert not ns["_asserts"]("This is not an exact or variant match.", ns["TIER_CLAIMS"])
+
+    def test_a_stated_tier_still_counts(self):
+        ns = _extract()
+        for answer in (
+            "25 vehicles are an exact match for this campaign.",
+            "The fleet has 2,116 F-250s, all variant matches (F-250 SD).",
+            "These 25 match exactly; the tier is EXACT.",
+        ):
+            assert ns["_asserts"](answer, ns["TIER_CLAIMS"]), answer
+
+    def test_an_unrelated_negation_in_the_same_sentence_is_a_known_false_negative(self):
+        """Pinned as a **deliberate** trade, not an oversight.
+
+        `_asserts` flattens commas on purpose — otherwise *"No, there is a recall"* hides its
+        own negation — so a sentence that states a tier and negates something else is skipped
+        whole. The answer below is correct and scores `False`.
+
+        Accepted because `states_match_tier` is not a hard gate and the two error directions
+        are not symmetric: a false negative is a case someone reads and argues with, a false
+        positive is a silent pass nobody ever looks at. If this ever fires on a real run, the
+        fix is a narrower clause split for this scorer only — not widening it back.
+        """
+        ns = _extract()
+        assert not ns["_asserts"]("This is an exact match, not a variant.", ns["TIER_CLAIMS"])
+
+    def test_the_scorer_uses_the_shared_helper_rather_than_a_substring_scan(self):
+        """Extraction-style check, like the hard-gate tests above: the constants and helper
+        can be exercised here, but that proves nothing if `states_match_tier` stops calling
+        them. This pins the call site itself."""
+        src = EVAL_NOTEBOOK.read_text(encoding="utf-8")
+        # To the next top-level `def`/decorator, not to the first `return` — the early
+        # `return None` for inapplicable cases comes first and would truncate the match
+        # before the line this test exists to read.
+        body = re.search(r"^def states_match_tier\(.*?(?=^@|\Z)", src, re.S | re.M)
+        assert body, "states_match_tier not found — extraction is stale"
+        # Read the CODE, not the docstring: that docstring quotes the old substring scan
+        # verbatim to explain why it went, so a naive "the old form is absent" scan over the
+        # whole function would fail on the explanation of its own fix.
+        code = [
+            ln.strip()
+            for ln in body.group(0).splitlines()
+            if ln.startswith("    ") and not ln.strip().startswith(("#", '"""', "*"))
+        ]
+        tail = code[-1] if code else ""
+        assert tail == 'return _asserts(outputs or "", TIER_CLAIMS)', f"scoring line is {tail!r}"

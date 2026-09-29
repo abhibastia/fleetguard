@@ -42,7 +42,7 @@ import uuid
 from datetime import datetime
 
 from fastapi import HTTPException, status
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from . import authz, snapshot
 from .auth.tokens import Principal
@@ -162,7 +162,11 @@ def parse_envelope(text: str) -> dict | None:
 
 
 def _record_attempt(
-    principal: Principal, tool: str, params: dict, outcome: str, reason: str,
+    principal: Principal,
+    tool: str,
+    params: dict,
+    outcome: str,
+    reason: str,
     trace_id: str | None,
 ) -> None:
     """Write one `fleetguard_agent_action` row for an attempt that did NOT commit.
@@ -245,15 +249,53 @@ def execute(
     except HTTPException as exc:
         if principal.user_name:
             _record_attempt(
-                principal, action, envelope.get("params") or {},
-                "REJECTED", str(exc.detail), trace_id,
+                principal,
+                action,
+                envelope.get("params") or {},
+                "REJECTED",
+                str(exc.detail),
+                trace_id,
             )
         raise
+    except ValidationError as exc:
+        # MODEL-AUTHORED PARAMS THAT FAIL THE SCHEMA ARE A 422, NOT A 500 (found 2026-09-29).
+        #
+        # Every handler starts by constructing its params model, and that raises a bare
+        # `pydantic.ValidationError` — which is not an `HTTPException`, so it fell through to
+        # the generic branch below, got re-raised, and left `/api/chat` returning **500**.
+        # Reachable from ordinary model output: a blank `component`, a negative
+        # `complaint_count`, an over-long `rationale`. The write was always correctly refused;
+        # what was wrong is that a refusal of bad input presented as the console breaking.
+        #
+        # Same bug family as I-117's 422-that-became-a-500 in `main.py`, reached from the other
+        # side — there the *error body* could not serialise, here the error never became one.
+        #
+        # Recorded as REJECTED rather than FAILED for the same reason: the system worked. The
+        # detail is `exc.errors()` rather than `str(exc)` so the audit row keeps the field names
+        # without the multi-line pydantic banner and its docs URL.
+        if principal.user_name:
+            _record_attempt(
+                principal,
+                action,
+                envelope.get("params") or {},
+                "REJECTED",
+                f"invalid params: {exc.errors(include_url=False)}",
+                trace_id,
+            )
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            f"the agent requested {action} with invalid parameters: "
+            + "; ".join(f"{'.'.join(str(p) for p in e['loc'])}: {e['msg']}" for e in exc.errors()),
+        ) from exc
     except Exception as exc:
         if principal.user_name:
             _record_attempt(
-                principal, action, envelope.get("params") or {},
-                "FAILED", f"{type(exc).__name__}: {exc}", trace_id,
+                principal,
+                action,
+                envelope.get("params") or {},
+                "FAILED",
+                f"{type(exc).__name__}: {exc}",
+                trace_id,
             )
         raise
 

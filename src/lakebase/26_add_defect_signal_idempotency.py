@@ -32,12 +32,25 @@
 # MAGIC   the same series are two real observations, not a duplicate. Scoping per actor also
 # MAGIC   keeps one person's retry from silently blocking another person's first write.
 # MAGIC - **`series_key`** — the `make|model|component` string `agent_actions.py` already
-# MAGIC   builds and persists. It is NULL when no make/model was supplied, and Postgres unique
-# MAGIC   indexes permit repeated NULLs, which is why `component` is in the key too: without it
-# MAGIC   every make-less signal would collide with every other one regardless of component.
-# MAGIC   With it, NULL `series_key` rows simply fall out of the index and stay unconstrained —
-# MAGIC   acceptable, since a signal with no make is the vaguest kind and the least harmful to
-# MAGIC   duplicate.
+# MAGIC   builds and persists. `component` is in the key as well, so that two make-less signals
+# MAGIC   for different components cannot collide.
+# MAGIC
+# MAGIC   > **CORRECTED 2026-09-29.** This paragraph used to say `series_key` "is NULL when no
+# MAGIC   > make/model was supplied", that Postgres permits repeated NULLs in a unique index,
+# MAGIC   > and that such rows "fall out of the index and stay unconstrained". The middle claim
+# MAGIC   > is true in general and **the conclusion is not true here.** `series_key` is built by
+# MAGIC   > joining the non-empty parts of `(make, model, component)`, and since I-115 made
+# MAGIC   > `component` required *and* non-blank — `min_length=1` with a `mode="before"` strip,
+# MAGIC   > so `" "` is a 422 rather than an empty string — the join always has at least one
+# MAGIC   > part. **`series_key` can no longer be NULL, and every agent-opened signal is
+# MAGIC   > covered by this index.**
+# MAGIC   >
+# MAGIC   > Left as a correction rather than deleted, because the stale version was load-bearing
+# MAGIC   > in the wrong direction: **two separate external reviews read it and filed the
+# MAGIC   > "`series_key IS NULL` idempotency hole" as an open defect**, each proposing a second
+# MAGIC   > partial index as the fix (I-117 disproved it the first time; a fifth review repeated
+# MAGIC   > it on 2026-09-29). A comment describing a gap the code already shut is not a harmless
+# MAGIC   > inaccuracy — it manufactures the same finding indefinitely.
 # MAGIC - **`status = 'OPEN'` and `source = 'AGENT'`** — a closed signal must not block
 # MAGIC   re-opening the same series later (a real workflow: open, investigate, close,
 # MAGIC   recurrence). And the detector's own rows must not be constrained by a rule written

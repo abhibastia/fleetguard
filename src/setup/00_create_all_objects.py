@@ -140,16 +140,20 @@ REBUILD = [
         "fleetguard-build-chunk-index-source",
         "src/search/27_build_chunk_index_source.py",
         "silver_complaint_chunk_indexed",
-        "Rescoped 2026-09-23 to the fleet's own make/model pairs (I-111) — 115,499 chunks,"
-        " ~27 min to sync, down from the post-2010 series' 1,746,601 / ~6.7h. Needs steps 2"
-        " and 3. Was a hand-run CTAS with no producer until this step existed.",
+        "Rescoped 2026-09-23 to the fleet's own make/model pairs (I-111), then WIDENED the"
+        " same day to the EXACT + MODEL_VARIANT tiers (I-115) because exact spelling"
+        " excluded all 2,116 F-250s. Row count is whatever this step prints — the old"
+        " 115,499 was the exact-only scope and the current one is an unmeasured strict"
+        " superset. Order of minutes, not the post-2010 series' 1,746,601 / ~6.7h. Needs"
+        " steps 2 and 3. Was a hand-run CTAS with no producer until this step existed.",
     ),
     (
         7,
         "MANUAL — AI Search",
         "see docs/STATUS.md",
         "endpoint fleetguard-vs, index complaint_chunk_idx",
-        "~27 min to sync 115,499 chunks at the current scope (I-111). THE ONLY RECURRING COST (~$6.72/day).",
+        "~27 min to sync at the I-111 scope; re-derive from the count step 6 prints, since"
+        " I-115 widened the source to a strict superset. THE ONLY RECURRING COST (~$6.72/day).",
     ),
     (
         8,

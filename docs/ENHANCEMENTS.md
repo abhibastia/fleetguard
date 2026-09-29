@@ -352,7 +352,8 @@ a **local server** (`scripts/run_local_static_dev.sh`).
 
 The complete working Render deployment — blueprint, the `render-u2m` U2M OAuth flow, the
 `app-login` GitHub flow, and the session machinery behind both — is preserved on the
-`deploy/render` branch. It is an archive, never merged.
+`deploy/render` branch — **deleted 2026-09-29**, preserved as commit `2b5727a`. It is an
+archive, never merged.
 
 **What this cost, honestly.** The `render-u2m` login was built, deployed, and never confirmed
 working in a browser: it stalled on an account admin granting the `all-apis` scope, and a

@@ -88,8 +88,16 @@ does not consume shared-workspace compute before the demo window. Schedule it in
 true`** — matching `silver_complaint_chunk_indexed` exactly. ~7 h to build.*
 
 **RESCOPED 2026-09-23 (I-111).** The source table is now scoped to the fleet's own 47
-make/model pairs — **115,499 chunks**, ~27 min to build — for the two-window submission
-plan's schedule safety, at the same $6.72/day cost (I-035). The done-when checks below were
+make/model pairs — 115,499 chunks, ~27 min to build — for the two-window submission
+plan's schedule safety, at the same $6.72/day cost (I-035).
+
+> **That 115,499 is SUPERSEDED and is recorded here as history (noted 2026-09-29).** I-115
+> widened the join to `EXACT` + `MODEL_VARIANT` the same day, because exact spelling excluded
+> every one of the fleet's 2,116 F-250s (`F-250 SD` is NHTSA's spelling). The new count is a
+> strict superset and **has not been measured** — Run 2's step 3.0 produces it. Do not quote a
+> figure for the current scope until then; `docs/ARCHITECTURE.md` §4.4 carries the same note.
+
+The done-when checks below were
 proved once at the original full-corpus scope; the current build has been independently
 validated at a 10K-row smoke scope (I-112) but the full `ops_hybrid_query_test` sweep has not
 yet been re-run and republished at the new scope — tracked in `docs/STATUS.md`'s action plan.

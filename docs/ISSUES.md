@@ -32,6 +32,196 @@ no error and passed the obvious check.
 ---
 
 ## Tooling / process
+### I-121 — branch cleanup: 17 local / 9 remote down to 3 / 2, and why `--merged` was no help
+
+*Date:* 2026-09-29 · *Status:* ✅ done.
+
+Housekeeping, logged rather than done silently for the same reason **I-114** logged deleting 7
+dead job objects: a deletion nobody recorded looks like something that went missing.
+
+#### `git branch --merged` is actively misleading on this repo
+
+This project **squash-merges**, so a merged branch's commits are never ancestors of `main`.
+`git branch --merged main` reported **2** branches out of 17. The opposite check misleads too:
+every branch was 5–101 commits *behind* `main`, so `git diff main..<branch>` showed hundreds of
+differing files that were only `main` moving on — `deploy/render` showed 231 differing files
+while being, by ancestry, fully merged.
+
+Each branch was therefore verified by **whether its work is on `main` by content**,
+cross-referenced against this file and `docs/STATUS.md`. **Two branches had their squash commits
+reworded on merge** (`chore/remove-render`, `feature/watch-campaign-action`), so subject-matching
+returned false negatives — `chore/remove-render` was confirmed absorbed only by checking that
+`main`'s tree has no `render*` file, that `authz.py` is present, and that `main:auth/tokens.py`
+contains **0** `render-u2m`/`app-login` references. Anyone repeating this audit should not trust
+commit subjects.
+
+#### Kept — 3 local, 2 remote
+
+`main` (`ae5f3e5`), `fix/repo-review-round-5` (`8d5512b`, I-120's unmerged work), and
+`free-edition-deploy` (`e7ff1b6`, I-119's separate bundle target, 34 commits ahead — the most
+unique work of any branch, and explicitly protected in local *and* origin).
+
+#### Deleted — 14 local, 7 remote
+
+Recorded with SHAs because a branch deletion removes a pointer, not commits:
+`git branch <name> <sha>` restores any of these until `git gc` prunes unreachable objects.
+All 14 SHAs were confirmed still resolvable with `git cat-file -e` after the deletions.
+
+| Branch | SHA | Absorbed by |
+|---|---|---|
+| `fix/repo-review-round-2` | `0a67965` | `40e6864` |
+| `fix/repo-review-round-3` | `6544bcc` | `f400331` |
+| `fix/repo-review-round-4` | `2d79192` | `580f8ed` |
+| `harden/agent-rag-security-mlflow` | `7d16107` | `18621ca` |
+| `fix/i115-remainder` | `1b210d7` | `901c35f` |
+| `fix/runbook-run2-drift` | `92a5e7a` | `688a5ed` |
+| `port-free-edition-fixes` | `cb37571` | `fa8d2b0` (#18) |
+| `docs/architecture-and-diagram-cleanup` | `246c43f` | `33577d3` (#11) |
+| `feature/persona-and-dashboard-link` | `dabd057` | `02e90df` (#7) |
+| `feature/console-polish-and-launched-status-2026-09-08` | `8a941f2` | `173b996` |
+| `feature/watch-campaign-action` | `ebbf978` | content check |
+| `chore/remove-render` | `5bc1356` | content check |
+| **`deploy/render`** | `2b5727a` | **not merged — see below** |
+| **`feature/role-based-views`** | `9e7a106` | **not merged — see below** |
+
+#### Two were deleted against this project's own record, on an explicit decision
+
+`docs/STATUS.md` marked both as deliberately preserved — `deploy/render` as "preserved intact",
+and `feature/role-based-views` at `STATUS.md` verbatim: *"kept, not merged, not deleted"*. Both
+deletions were proposed, the irreversibility was flagged, and **the user reaffirmed both.**
+Recorded here so a later reader does not find those lines, conclude the branches went missing,
+and go looking.
+
+- **`deploy/render`** was pushed, so `2b5727a` is unambiguous. Every doc that named the *branch*
+  as a live location now names the *commit* instead — `CLAUDE.md`'s U2M block,
+  `ARCHITECTURE.md` ×4, `ENHANCEMENTS.md` E-12, `STATUS.md`'s Phase 8a note. Historical session
+  prose that says "preserved on `deploy/render`" as a record of what was true at the time was
+  left alone; it is history, not state.
+- **`feature/role-based-views` was never pushed**, so deleting it was the only genuinely
+  irreversible step here. **Archived as tag `archive/role-based-views` before deletion** — tags
+  do not appear in `git branch`, so the repo still reads as 3 branches while the 3 commits stay
+  reachable. What would have been lost: depot enforcement via `fleetguard_depot_assignment`,
+  `tests/test_role_scoping_live.py` (211 lines), scoping/router changes.
+
+**Checked before deleting, and it is the reason this is a tolerable loss: the findings already
+live on `main` even though the code does not.** **I-070** — RLS on `fleetguard_vehicle`
+overriding app-level scoping intent, the branch's actual lesson — is documented in this file,
+and `scripts/run_local_static_dev.sh` was cherry-picked to `main` long ago as `c5b3af0`. The
+implementation went; the knowledge did not.
+
+#### Verified
+
+`git branch` → 3. `git branch -r` → `origin/HEAD`, `origin/main`,
+`origin/free-edition-deploy`. `main` unmoved at `ae5f3e5`. All 14 deleted SHAs plus the archive
+tag still resolvable. **626 passed / 24 skipped, ruff clean** after the doc edits (`tests/pipelines`'
+53 Spark tests still cannot run on this machine — `Bad CPU type in executable`, x86-only `java`).
+No code, no workspace object and no billable resource was touched.
+
+---
+
+### I-120 — fifth external review: 2 of 26 findings actionable; the docs were manufacturing a third
+
+*Date:* 2026-09-29 · *Status:* ✅ resolved on `fix/repo-review-round-5`.
+
+Two reviews triaged against `ae5f3e5`: `repo-review.md` (the fourth, already fully closed as
+I-117) and `repo-review2.md` (new, read the post-I-118 zip).
+
+**`repo-review.md` needed nothing.** All 14 findings were already fixed or deliberately
+rejected with a reason. Re-verified rather than assumed: fail-closed envelopes
+(`chat.py:217`), write-batch exclusivity (`14_fleetguard_agent.py:951`), `log.exception` on
+audit failure, depot containment in `resolve_scope`, the corpus-derived recall pool in
+`28_rag_eval.py`, `allow_inf_nan=False`.
+
+**`repo-review2.md`: 26 findings, 2 built.** The rest are evaluation-rigor work — human-labelled
+relevance sets, grouped Model B holdouts, an indirect-injection corpus, 50–100 eval cases,
+PII-redacted retrieval context — each needing days of labelling or a live index, five days
+before submission, against a Run 2 sequence that already carries three never-executed steps.
+Declined and recorded here rather than half-built. **The governing argument: the agent
+evaluation has never executed against a real model** (I-118), so every one of those findings
+improves a measurement that has not been taken. One clean run of the existing 15 cases is worth
+more than 85 more that also never run.
+
+#### Built
+
+**1. `/api/readyz` now checks that the SERVED agent version passed the hard gates.**
+I-118 started stamping `eval_hard_gates` / `eval_run_id` on the UC model version after the
+gates pass; nothing read it, so "the deployed artefact is the evaluated one" was a claim with
+no check. `_check_release` reads it now.
+
+> **`ModelVersionInfo` has no `tags` field** on `databricks-sdk` 0.89 — the typed API cannot
+> see what `mlflow.set_model_version_tag` writes. Measured live 2026-09-29 (set → read →
+> delete a throwaway tag on our own registered model, then removed):
+> `GET /api/2.0/mlflow/unity-catalog/model-versions/get` returns
+> `model_version.tags = [{"key","value"}]` and **omits the key entirely** when there are none.
+> Also measured, because it cost a minute: `set-tag` is `POST`, `delete-tag` is **`DELETE`** —
+> `POST .../delete-tag` returns *No API found*.
+
+Three outcomes, and the last two are deliberately distinct: tagged `passed` → ok, reporting the
+run id; the call **raised** → unavailable, degraded to a note exactly as a sleeping warehouse
+is; the call **succeeded with no tag** → `down`. That third case is not hypothetical — **all
+seven registered versions were untagged**, confirming I-118's finding from the other side. It
+is also the correct state between runbook steps 3.3 and 3.3a.
+
+**2. `states_match_tier` asserted, not mentioned.** It read
+`"exact" in text or "variant" in text` over the whole answer, so *"this is not an exact or
+variant match"* — the most direct way to fail I-030's requirement — scored as satisfying it.
+That is I-058 in the one scorer that never received the fix. Now goes through `_asserts` with a
+new `TIER_CLAIMS` list. The residual error moves from false-positive to false-negative (a
+sentence stating a tier *and* negating something else is skipped whole, because `_asserts`
+flattens commas on purpose); pinned as a deliberate trade, since a false negative gets read and
+a false positive is a silent pass.
+
+#### The docs were manufacturing a finding
+
+**`26_add_defect_signal_idempotency.py` described a hole the code had already shut**, and two
+separate reviews read it and filed the "`series_key IS NULL` idempotency gap" as an open defect,
+each proposing a second partial index. I-117 disproved it by hand; the fifth review repeated it
+verbatim. The comment still said `series_key` "is NULL when no make/model was supplied" —
+untrue since I-115 made `component` required and non-blank, because the key joins the non-empty
+parts of `(make, model, component)`.
+
+**A fact disproven by hand twice is a fact with no test.** Corrected the comment *and* added
+`TestSeriesKeyIsNeverNull` pinning both halves — a make-less signal gets `series_key="STEERING"`
+rather than NULL, and a whitespace-only component is refused. A stale comment describing a
+closed gap is not a harmless inaccuracy; it reproduces the same finding indefinitely.
+
+#### Found while writing that test: model-authored bad params returned 500, not 422
+
+Every handler starts by constructing its params model, which raises a bare
+`pydantic.ValidationError`. That is not an `HTTPException`, so it fell past `execute`'s
+`except HTTPException` branch, was re-raised by the generic one, and `/api/chat` answered
+**500**. Reachable from ordinary model output: a blank `component`, a negative
+`complaint_count`, an over-long `rationale`. The write was always correctly refused — what was
+wrong is that refusing bad input presented as the console breaking, and the audit row recorded
+`FAILED` when the system had worked. Same family as I-117's 422-that-became-a-500 in `main.py`,
+reached from the other side: there the error body could not serialise, here the error never
+became one. Now a 422 recorded as `REJECTED`.
+
+#### Doc corrections
+
+- **`docs/RUNBOOK.md`** said *"Done when ... `indexed_row_count == 115499`"* **eighteen lines
+  after** its own callout saying that figure no longer applies — and it is the line an operator
+  actually executes at the end of the index poll, so following it literally reads a correct
+  count as a failed sync.
+- **`PLAN.md` §Phase 3** and **`src/setup/00_create_all_objects.py`** (steps 6 and 7 of the
+  rebuild order — the from-empty path PR #18 just found was incomplete) still asserted 115,499
+  as current. Marked superseded; the real count comes from Run 2 step 3.0.
+
+#### Verified
+
+**626 passed / 24 skipped** (was 614 on this machine), ruff clean. **Every change
+mutation-checked** per I-117/I-118: gate-always-passes, untagged-treated-as-ok,
+unreachable-registry-treated-as-down, substring-scan-restored, empty `TIER_CLAIMS`,
+`series_key` dropping `component`, and the `ValidationError` branch removed — each confirmed
+red, then restored. *`tests/pipelines/` (53 Spark tests) could not run on this machine —
+`Bad CPU type in executable`, the local `java` is x86-only. Untouched by this branch; CI covers
+them.*
+
+The one workspace interaction was the read-only tag probe described above. Nothing was
+deployed; no billable resource was started.
+
+---
+
 ### I-119 — a free-edition end-to-end run surfaced 10 real bugs that had never been exercised
 
 *Date:* 2026-09-29 · *Status:* ✅ resolved — merged to `main` via PR #18 (`fa8d2b0`).

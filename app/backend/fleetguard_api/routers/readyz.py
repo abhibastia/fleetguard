@@ -121,7 +121,9 @@ def _check_agent(principal) -> tuple[bool, str]:
     w: WorkspaceClient = db._workspace_client(principal)
     ep = w.serving_endpoints.get(name=AGENT_ENDPOINT)
     state = ep.state
-    ready = getattr(getattr(state, "ready", None), "value", None) or str(getattr(state, "ready", ""))
+    ready = getattr(getattr(state, "ready", None), "value", None) or str(
+        getattr(state, "ready", "")
+    )
     config = getattr(getattr(state, "config_update", None), "value", None) or ""
     # `ready` is the only field that distinguishes serving from stopped. `scale_to_zero_enabled`
     # reads True in BOTH idle states and so distinguishes nothing (I-092) — it is not consulted.
@@ -130,7 +132,10 @@ def _check_agent(principal) -> tuple[bool, str]:
     served = ep.config.served_entities if ep.config else None
     if served:
         entity = f", serving v{served[0].entity_version}"
-    return is_ready, f"{AGENT_ENDPOINT}: ready={ready or '?'}{entity}{f', {config}' if config else ''}"
+    return (
+        is_ready,
+        f"{AGENT_ENDPOINT}: ready={ready or '?'}{entity}{f', {config}' if config else ''}",
+    )
 
 
 def _check_index(principal) -> tuple[bool, str]:
@@ -174,7 +179,10 @@ def _source_row_count(w: WorkspaceClient) -> int | None:
             statement=f"SELECT COUNT(*) FROM {SEARCH_SOURCE}",
             wait_timeout="10s",
         )
-        if not stmt.status or str(getattr(stmt.status.state, "value", stmt.status.state)) != "SUCCEEDED":
+        if (
+            not stmt.status
+            or str(getattr(stmt.status.state, "value", stmt.status.state)) != "SUCCEEDED"
+        ):
             return None
         rows = (stmt.result.data_array or []) if stmt.result else []
         return int(rows[0][0]) if rows else None
@@ -190,20 +198,85 @@ def _check_release(principal) -> tuple[bool, str]:
     separate places. Two of the five are cheap enough to answer here, so a judge (or a tired
     operator at 11pm) gets them from one URL instead of a runbook.
 
-    Never `down` on its own: a missing git SHA means the deployment did not stamp one, which is
-    worth *reporting* and is not a reason to call the system unready.
+    A missing git SHA means the deployment did not stamp one, which is worth *reporting* and is
+    not a reason to call the system unready.
+
+    **It CAN go `down`, for exactly one reason: the served version was never evaluated.**
+    `16_evaluate_agent.py` stamps `eval_hard_gates` on the UC model version *after* the gates
+    pass, so the tag's presence is the only durable proof that the deployed artefact is the
+    evaluated one. Nothing consumed that tag until now, which left the release loop open at its
+    last inch — and the gap is not hypothetical: all seven registered versions were untagged as
+    of 2026-09-29, because the evaluation had never run against any of them (I-118). A check
+    that reported that as "ok, unverified" would be the same decorative-gate mistake I-118 was
+    filed for.
     """
     sha = os.getenv("FLEETGUARD_GIT_SHA") or os.getenv("DATABRICKS_BUNDLE_GIT_COMMIT") or "unset"
     w: WorkspaceClient = db._workspace_client(principal)
-    version = "?"
+    version, model = "?", None
     try:
         ep = w.serving_endpoints.get(name=AGENT_ENDPOINT)
         served = ep.config.served_entities if ep.config else None
         if served:
             version = str(served[0].entity_version)
+            # Read from the endpoint rather than hard-coding the UC name: the two cannot then
+            # drift, and a fork pointing `FLEETGUARD_AGENT_ENDPOINT` elsewhere needs no edit.
+            model = served[0].entity_name
     except Exception:  # noqa: BLE001 - the agent check above already reports this properly
         pass
-    return True, f"agent v{version}, console built at {sha}"
+
+    ok, gates = _eval_gate_status(w, model, version)
+    return ok, f"agent v{version}, console built at {sha}, {gates}"
+
+
+def _eval_gate_status(w: WorkspaceClient, model: str | None, version: str) -> tuple[bool, str]:
+    """Did the *served* model version pass `16_evaluate_agent.py`'s hard gates?
+
+    **Why the raw REST call and not the SDK.** `w.model_versions.get()` returns
+    `ModelVersionInfo`, which has no `tags` field at all on `databricks-sdk` 0.89 — so the
+    typed API cannot see what `mlflow.set_model_version_tag` writes. The MLflow-on-UC endpoint
+    can. Measured live 2026-09-29 against `bootcamp_students.fleetguard.fleetguard_agent`:
+    `GET /api/2.0/mlflow/unity-catalog/model-versions/get` returns
+    `model_version.tags = [{"key": ..., "value": ...}]`, and **omits the `tags` key entirely**
+    when the version carries none — which is why absence is read as "untagged" below rather
+    than as a parse failure. (Also measured, for whoever cleans up after a probe: `set-tag` is
+    `POST`, `delete-tag` is `DELETE`. `POST .../delete-tag` returns *No API found*.)
+
+    Free, like every other check in this file: a control-plane metadata read, no warehouse and
+    no serving container.
+
+    Three outcomes, and the distinction between the last two is the whole point:
+
+    * tag says `passed` → `ok`, and the run id is reported so the scores are one lookup away.
+    * the call **raised** → unavailable, not unhealthy. Degraded to a note exactly as
+      `_source_row_count` handles a sleeping warehouse.
+    * the call **succeeded** and there is no tag → `down`. The registry was reachable and
+      answered that this version was never evaluated. That is a real release-gate failure and
+      it is the state Run 2 is in between runbook steps 3.3 and 3.3a, correctly.
+    """
+    if not model or version == "?":
+        return True, "eval gates unverified (no served model version)"
+    try:
+        body = w.api_client.do(
+            "GET",
+            "/api/2.0/mlflow/unity-catalog/model-versions/get",
+            query={"name": model, "version": version},
+        )
+    except Exception as exc:  # noqa: BLE001 - see the docstring; unavailable is not unhealthy
+        return True, f"eval gates unverified ({type(exc).__name__})"
+
+    tags = {
+        t.get("key"): t.get("value")
+        for t in (body or {}).get("model_version", {}).get("tags") or []
+    }
+    gates, run = tags.get("eval_hard_gates"), tags.get("eval_run_id")
+    if gates is None:
+        return False, (
+            f"NEVER EVALUATED — {model} v{version} carries no eval_hard_gates tag. "
+            "Run 16_evaluate_agent.py (runbook step 3.3a) before demoing this version"
+        )
+    if gates != "passed":
+        return False, f"eval_hard_gates={gates!r} on {model} v{version} — do not demo this version"
+    return True, f"eval_hard_gates=passed (run {run or '?'})"
 
 
 def _check_snapshots() -> tuple[bool, str]:

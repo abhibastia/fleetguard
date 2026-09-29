@@ -5,6 +5,141 @@
 > staged but not yet live, and the traps in the order they bite. The session log below is
 > newest-first history; you do not need to read it to resume.
 
+## SESSION 2026-09-29 (later) — fifth external review triaged; 2 fixes, 2 found while fixing
+
+**Branch `fix/repo-review-round-5`.** Full write-up in `docs/ISSUES.md` **I-120**. Two reviews
+read together: `repo-review.md` (the fourth, which I-117 had already closed) and
+`repo-review2.md` (new, read the post-I-118 zip, 26 findings).
+
+> **Neither review file is in the tree.** `.gitignore` has held since the third review that an
+> external review dropped into the working directory is *local-only, not part of the project
+> record* — and `repo-review.md` was never committed at all, so **this section plus I-120 is the
+> only surviving record of either.** That is why the declined list below is enumerated rather
+> than summarised: the reasoning has to outlive the file, or the sixth review re-files all of it
+> and someone re-derives the same answers under more schedule pressure.
+
+**`repo-review.md` needed nothing — all 14 findings already closed.** Re-verified against the
+code rather than taken on trust: fail-closed action envelopes (`chat.py:217`), write-batch
+exclusivity (`14_fleetguard_agent.py:951`), `log.exception` on audit failure, depot containment
+in `resolve_scope`, the corpus-derived recall pool in `28_rag_eval.py`, `allow_inf_nan=False` on
+`actual_cost`. Its two "still open" items were the canonical vehicle alias table (E-17) and the
+Model B proxy labels — both already recorded as deferred, not new.
+
+### Built
+
+**`/api/readyz` now fails if the SERVED agent version was never evaluated.** I-118 began
+stamping `eval_hard_gates` / `eval_run_id` on the UC model version after the gates pass, and
+nothing consumed it — so *"the deployed artefact is the evaluated one"* was a claim with no
+check behind it, which is the shape of gap I-118 itself was filed for.
+
+Two things made it more than a one-liner, both worth keeping:
+
+- **`ModelVersionInfo` has no `tags` field** on `databricks-sdk` 0.89, so the typed API cannot
+  see what `mlflow.set_model_version_tag` writes. It goes through
+  `GET /api/2.0/mlflow/unity-catalog/model-versions/get` instead, whose shape was **measured
+  live** (set → read → delete a throwaway tag on our own registered model, removed afterwards)
+  rather than assumed: `model_version.tags` is `[{"key","value"}]` and the key is **omitted
+  entirely** when there are none — which is why absence is read as "untagged" and not as a parse
+  failure. Also measured, since it cost a minute: `set-tag` is `POST`, `delete-tag` is
+  **`DELETE`**; `POST .../delete-tag` returns *No API found*.
+- **Three outcomes, and the last two are deliberately distinguished.** Tagged `passed` → ok,
+  reporting the run id so the scores are one lookup away. The call **raised** → unavailable, not
+  unhealthy, degraded to a note exactly as a sleeping warehouse already is. The call
+  **succeeded and there was no tag** → `down`: the registry answered, and its answer was that
+  this version was never evaluated.
+
+That third case is not hypothetical. The probe confirmed **all seven registered agent versions
+are untagged** — I-118's finding reached from the other side. It also means **`/readyz` reads
+`down` between runbook steps 3.3 and 3.3a, by design**; that is the check working, not something
+to route around.
+
+**`states_match_tier` asserts rather than substring-matches.** It read
+`"exact" in text or "variant" in text` over the whole answer, so *"this is not an exact or
+variant match"* — the most direct available way to fail I-030's requirement — scored as
+satisfying it. That is I-058's bug surviving in the one scorer that never received the fix. Now
+routed through `_asserts` with a new `TIER_CLAIMS` list. The residual error moves from
+false-positive to **false-negative** (a sentence that states a tier *and* negates something else
+is skipped whole, because `_asserts` flattens commas on purpose), pinned as a deliberate trade:
+a false negative gets read and argued with, a false positive is a silent pass nobody looks at.
+
+### The docs were manufacturing a third finding
+
+`26_add_defect_signal_idempotency.py` described a `series_key IS NULL` idempotency hole **that
+the code had already shut**, and two separate reviews read it, believed it, and filed it as an
+open defect — each proposing a second partial index as the fix. I-117 disproved it by hand; the
+fifth review repeated it verbatim five days later.
+
+**A fact disproven by hand twice is a fact with no test.** So the comment was corrected *and*
+`TestSeriesKeyIsNeverNull` added, pinning both halves: a make-less signal gets
+`series_key="STEERING"` rather than NULL, and a whitespace-only component is refused. A stale
+comment describing a closed gap is not a harmless inaccuracy — it reproduces the same finding
+indefinitely, and it costs a reviewer's attention every round.
+
+### Found while writing that test: bad model params returned 500, not 422
+
+Every handler starts by constructing its params model, which raises a bare
+`pydantic.ValidationError`. That is not an `HTTPException`, so it fell past `execute`'s
+`except HTTPException` branch, was re-raised by the generic one, and **`/api/chat` answered
+500** — reachable from ordinary model output: a blank `component`, a negative
+`complaint_count`, an over-long `rationale`. The write was always correctly refused; what was
+wrong is that refusing bad input presented as the console breaking, and the audit row recorded
+`FAILED` when the system had in fact worked. Now a 422 recorded as `REJECTED`. Same family as
+I-117's 422-that-became-a-500 in `main.py`, reached from the other side — there the error *body*
+could not serialise, here the error never became one.
+
+### Declined — 24 findings, with the reason each was declined
+
+Recorded because the review files are gone and because several are genuinely good ideas that
+are simply not five-days-from-submission work. **The governing argument for the whole group:
+the agent evaluation has never executed against a real model** (I-118), so every one of these
+improves a measurement nobody has taken. One clean run of the existing 15 cases first.
+
+| Finding | Why declined |
+|---|---|
+| Human-labelled RAG relevance set (100–200 queries) | Days of labelling. `28_rag_eval.py` already states the metadata-relevance limitation in its own header — honest, not hidden |
+| Paraphrase / operational / distractor query families | Same labelling cost; the fleet-scoped corpus also limits which paraphrases are answerable at all |
+| Add a BM25 arm beside HYBRID/ANN | **Verify feasibility first** — `query_type` is a free-form string in the SDK and a keyword-only type was not confirmed to exist on a delta-sync embedding index. Do not plan around it unverified |
+| Canonical vehicle-model alias table | Already **E-17**. The strongest architectural idea in either review, and it touches RAG, exposure, Model B and agent writes at once |
+| E2E agent-action eval (`/api/chat` → Lakebase → CDF) | The strongest evidence available, and it needs live Lakebase + live agent + a CDF cycle (2.5–4.5 min measured). Real Run 2 time, on the day three never-executed steps already land |
+| Indirect injection via a poisoned corpus row | Technically possible — `silver_complaint_chunk_indexed` is ours — but it means polluting the production index source on the one build Run 2 depends on, at ~27 min per sync. The existing case's "the corpus cannot be edited" is slightly overstated; the conclusion holds for this timeline |
+| Trace-grounded citation scorer (`cited_ids ⊆ retrieved_ids`) | Correct, and the scorer's own docstring already says so. Needs `mlflow.get_trace()` plumbing because `predict_fn` returns text only, and mlflow is not installed locally to develop against |
+| Grow 15 → 50–100 eval cases | Each case is a real model call in a billed window that has never run the evaluation once |
+| Agent reads are fleet-wide, not user-scoped | Already true and already documented in `scoping.py`'s module docstring. The reviewer's own Option A — state it as a fleet-wide safety analyst — is the position the code takes |
+| PII-redacted retrieval context (`redacted_chunk_text`) | A real gap. Also a new column, a source rebuild and an index rebuild — the most expensive item in either review |
+| Request-level rate limiting | Confirmed absent. Low value on a single-instance demo App behind the Apps ingress |
+| Model B human-adjudicated holdout (200–300 pairs) | Days of labelling; `05_build_model_b_golden_set.py` already documents the proxy-label limitation and `derivation_method` records it per row |
+| Model B grouped split (by `campaign_number`) | **The cheapest real rigor win left** — `train_test_split(stratify=y)` lets campaigns leak across the split. ~5 lines, but it moves published numbers and needs compute to re-run. Only if Run 2 has slack |
+| Model B bootstrap confidence intervals | Same re-run cost; worth pairing with the grouped split if it happens at all |
+| Separate snapshot acceptance from ongoing freshness | Half-built already: `ops_ingest_watermark` plus I-099's loud stale-snapshot fail. The remainder is refactoring `test_data_quality.py`'s pinned cardinalities |
+| A single `release_preflight.sh` | `/api/readyz` now covers the substance (index-vs-source, agent version, console SHA, eval gates). A second entry point would be a wrapper, not a capability |
+| HMAC chain over user turns, not just assistant turns | The review itself rated it non-blocking; the user may edit their own question anyway |
+| Judge Mode / clickable evidence panel / agent action timeline | All new UI. Declined at I-117 for the same reason and the reason has not changed: the frontend is frozen |
+| Known-item test overstated; `states_match_tier`/`grounded_numbers`/`never_claims_launched` shallow | Partly acted on — `states_match_tier` is fixed above. The notebook already calls known-item a *"floor test"* verbatim, and the other two are documented as what they are |
+| "AI Gateway protects PII" should not be claimed | Already not claimed — **E-01** records the guardrail as belonging in front of the LLM endpoint and not built |
+| Structured `facts_used` emission for deterministic scoring | Changes the agent's response contract five days out, and every scorer would need rewriting against it |
+| Four-layer evaluation architecture diagram | Presentation, not capability; the layers already exist separately |
+| Post-deployment production checks (App → Agent → Lakebase → CDF → Delta) | This is the E2E eval above wearing a different hat; same Run 2 cost |
+| Re-publish "2 Vs" as Volume + Variety, not Velocity | Already the project's position — `CLAUDE.md` records that §8.3's sub-minute claim survives only for CDF replication, and that the full chain is 2.5–4.5 min |
+
+### Verified
+
+**626 passed / 24 skipped** locally (was 614), ruff clean, frontend untouched so no
+`build_console.sh`. **Every change mutation-checked** per I-117/I-118 — seven mutants
+(gate-always-passes, untagged-treated-as-ok, unreachable-registry-treated-as-down,
+substring-scan-restored, empty `TIER_CLAIMS`, `series_key` dropping `component`,
+`ValidationError` branch removed), each confirmed red then restored.
+
+> **Two caveats, stated rather than smoothed over.** `tests/pipelines/` (53 Spark tests) **could
+> not run on this machine** — `Bad CPU type in executable`, the local `java` is x86-only. Nothing
+> on this branch touches them, but CI is the only thing that has actually executed them. And the
+> briefing's `679` is arithmetic (667 + 12), not a fresh CI reading; the 614 non-Spark base was
+> re-run and matches exactly.
+
+**One workspace call, read-only:** the tag-shape probe described above. Nothing deployed,
+nothing billable started, no UI change.
+
+---
+
 ## SESSION 2026-09-24 (third) — hardening agent / RAG / security / MLflow; UI frozen
 
 **Branch `harden/agent-rag-security-mlflow`.** Full write-up in `docs/ISSUES.md` **I-118**. Not
@@ -563,7 +698,8 @@ as "offline". What that forfeits is the RAG demonstration, which is a graded cat
 > The supported ways to run FleetGuard are **Databricks Apps** (`fleetguard-console`, the demo
 > surface) and a **local server** (`scripts/run_local_static_dev.sh`). The Render deployment and
 > both of its auth flows (`render-u2m` U2M OAuth, `app-login` GitHub) were removed from `main`
-> and preserved intact on the **`deploy/render`** branch.
+> and preserved intact at commit **`2b5727a`** (the `deploy/render` branch until it was
+> deleted 2026-09-29).
 > `FLEETGUARD_AUTH_MODE` now accepts only `databricks-apps` or `static-dev`.
 > **This closes former "Next" item 0** — the unconfirmed `render-u2m` browser login — by
 > removing the thing that was blocked. Detail in `ARCHITECTURE.md` §8a and `ENHANCEMENTS.md` E-12.
@@ -1220,12 +1356,42 @@ than discovering it mid-demo.
 |---|---|
 | **Today** | 2026-09-29 · **submission 4 October** · **Run 2 targeted 2–3 October** |
 | **`main`** | `fa8d2b0`, pushed to `origin/main`, **CI green** (both jobs) |
+| **Unmerged** | **`fix/repo-review-round-5`** — fifth review triaged (I-120). Offline only; see below |
+| **Branches** | **3 local / 2 remote, deliberately** — `main`, `fix/repo-review-round-5`, `free-edition-deploy`. 14 were deleted 2026-09-29 (**I-121**, SHAs recorded there). `deploy/render` and `feature/role-based-views` went too, against this file's own "preserved"/"not deleted" notes, on an explicit decision — the latter survives as tag `archive/role-based-views`. Docs naming `deploy/render` as a live location now name commit `2b5727a` |
 | **Working tree** | clean |
 | **Billable resources running** | **none** — see "What is costing money" below |
-| **Tests** | **667 passed / 24 skipped** (backend, ~45 s), **153** vitest, ruff + typecheck clean |
+| **Tests** | **679 passed / 24 skipped** (backend), **153** vitest, ruff + typecheck clean — *measured by CI on PR #19, run `36618884010`, not derived. Includes the 53 `tests/pipelines/` Spark tests, which cannot run on this laptop (`Bad CPU type in executable`, x86-only `java`) — CI is the only place they execute* |
 | **Bound job resources** | **31** (`ls resources/*.job.yml \| wc -l` — count it, do not trust this number) |
 
-#### What changed since the 2026-09-24 note, and why it does NOT touch the Run 2 plan below
+#### The fifth external review is triaged — `fix/repo-review-round-5` (I-120)
+
+**2 of 26 findings built; nothing here changes the Run 2 sequence.** `repo-review.md` (the
+fourth) needed nothing — all 14 findings were already closed as I-117. `repo-review2.md`'s
+remainder is evaluation-rigor work (human-labelled relevance sets, grouped Model B holdouts, an
+indirect-injection corpus, 50–100 eval cases, PII-redacted retrieval) that needs days of
+labelling or a live index; declined and recorded in I-120 rather than half-built.
+
+**The argument for declining, worth keeping:** the agent evaluation has never executed against
+a real model, so every one of those findings improves a measurement nobody has taken. Step
+3.3a first.
+
+What is on the branch, all offline, no workspace deploy:
+
+| | |
+|---|---|
+| `/api/readyz` fails if the **served** agent version carries no `eval_hard_gates` tag | Closes the evaluated-artefact-vs-deployed-artefact loop I-118 opened. **It will read `down` between runbook steps 3.3 and 3.3a — that is correct, not a bug to route around** |
+| `states_match_tier` now asserts rather than substring-matches | *"this is not an exact or variant match"* used to score as stating a tier |
+| `pydantic.ValidationError` from model-authored params → **422, not 500** | Found writing the test below; `/api/chat` 500'd on a blank `component` |
+| `TestSeriesKeyIsNeverNull` + a corrected comment in `26_add_defect_signal_idempotency.py` | The stale comment had made **two** reviews file the same disproven "`series_key IS NULL` hole" |
+| `RUNBOOK.md` *"Done when `indexed_row_count == 115499`"* | Contradicted its own callout 18 lines above, on the line an operator executes |
+
+> **One live call was made:** a read-only probe of the MLflow-on-UC tag API (set → read →
+> delete a throwaway tag on our own registered model, removed afterwards), because
+> `ModelVersionInfo` has no `tags` field and the response shape had to be measured rather than
+> assumed. It confirmed **all seven registered agent versions are untagged** — I-118's finding,
+> from the other side. Nothing deployed, nothing billable started.
+
+#### What changed in PR #18, and why it does NOT touch the Run 2 plan below
 
 **PR #18 (`fa8d2b0`), merged 2026-09-29 — 10 real bug fixes, ported from a separate
 `free-edition-deploy` branch's end-to-end test on a second Databricks Free Edition account.**
@@ -1295,8 +1461,8 @@ Run 2 step already committed to. Do not "fix" anything that looks unapplied:
 |---|---|
 | Agent: write-batch exclusivity, evidence TTL, sentinel stripping, untrusted-data markers, prompt rules 9–10 | **3.3** — `agents.deploy()` |
 | Index source widened to `EXACT` + `MODEL_VARIANT`; the RAG evaluation | **3.0 / 3.1a** |
-| Console: fail-closed action envelopes, `NaN` guard, depot containment, `/api/readyz` | **3.2** — `bundle run fleetguard_console` |
-| Evaluation hard gates + model-version tagging | **3.3a** |
+| Console: fail-closed action envelopes, `NaN` guard, depot containment, `/api/readyz` (incl. I-120's eval-gate check and the 422-not-500 fix) | **3.2** — `bundle run fleetguard_console` |
+| Evaluation hard gates + model-version tagging; I-120's `states_match_tier` fix | **3.3a** — **and `/api/readyz` reads `down` until this step runs, by design** |
 | I-099's loud stale-snapshot fail (`01_download_flat_files.py`) | Only on the next *ingest* — not exercised in Run 2 at all |
 
 #### Three things Run 2 owes, and nobody else can produce
