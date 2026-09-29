@@ -410,9 +410,23 @@ It runs exactly the step-1.2 commands below — the *config* is unchanged and wa
 - **idempotent**: `get-endpoint`/`get-index` first, so a re-run after a dropped connection
   resumes instead of erroring on line one;
 - **reads the expected count** from the table 3.0 just rebuilt, rather than carrying a literal.
-  Do not expect 115,499 — I-115 widened the source and it is a strict superset;
+  Do not expect 115,499 — I-115 widened the source and it is a strict superset. **Expect roughly
+  180K** (see below), and treat a result near 115K as *the widening did not take*, not as success;
 - **polls with drop detection**, and treats a *decrease* in `indexed_row_count` as fatal. That
   is I-105's only visible symptom, and it is the failure that costs a day.
+
+> **Where "roughly 180K" comes from — measured on free edition 2026-09-30 (I-123), not guessed.**
+> That workspace runs the *widened* builder and its index decomposes as **116,252 `EXACT` +
+> 64,577 `MODEL_VARIANT` = 180,829**. Its `EXACT` half is within **0.65%** of abhi's recorded
+> 115,499, so the two workspaces agree on the *old* basis and the whole gap is the widening.
+> The 753-chunk residual is a fresher corpus: free edition holds **2,249,908** complaints vs
+> abhi's 2,240,289 (+9,619), which also shifts the generated roster from 47 to 49 make/model
+> pairs. So abhi's rebuild should land near 180K — **a few percent lower**, since its corpus
+> and roster are slightly smaller.
+>
+> **This is an expectation, not a pin.** Record what step 3.0 actually prints; if it comes back
+> near 115K the `EXACT`-only join is still in force and the F-250s are still excluded, which is
+> the exact failure I-115 was filed for.
 
 The manual path still works and is what the script wraps, if it ever needs to be run by hand:
 
