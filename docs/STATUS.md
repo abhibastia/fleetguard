@@ -91,7 +91,9 @@ could not serialise, here the error never became one.
 
 Recorded because the review files are gone and because several are genuinely good ideas that
 are simply not five-days-from-submission work. **The governing argument for the whole group:
-the agent evaluation has never executed against a real model** (I-118), so every one of these
+the agent evaluation had never executed against a real model** (I-118) — **which turned out to be
+false: it had run on free edition on 2026-09-28, and one declined finding (citation grounding) is
+backed by a reproducible `cites_complaint_ids: 0.000`. See I-123.** So every one of these
 improves a measurement nobody has taken. One clean run of the existing 15 cases first.
 
 | Finding | Why declined |
@@ -181,7 +183,8 @@ number nobody reads on the day it matters), and the evaluation result is now **s
 model version** — `eval_run_id`, `eval_hard_gates`, a `score_*` tag per scorer. Tagging runs
 *after* the gates, so a version can never claim it passed an evaluation that refused it.
 
-**And that surfaced a real gap: Run 2 never ran the evaluation at all.** The agent was rebuilt,
+**And that surfaced a real gap: Run 2 never ran the evaluation at all.** *(True of `abhi`. It HAS
+run on free edition — 2026-09-28 and again 2026-09-29, I-123.)* The agent was rebuilt,
 redeployed and demonstrated without ever being scored — so the hard gates have been **inert
 through every run**, and would have stayed inert through submission. New runbook step **3.3a**.
 
@@ -642,7 +645,8 @@ table again at step 3.6 (Run 2) — do not append a second table, replace these 
 | **3.1a** | **NEW — run the RAG retrieval evaluation** (`bundle run rag_eval`). Needs only the index, so it goes here rather than at the end. Writes `ops_rag_eval`; also re-runs the three I-040 behavioural checks at the shipped scope, open since the rescope. **Record the figures in `EVIDENCE.md` as measured, including if they are poor** | ~10 min |
 | 3.2 | **Start the App**, then `bundle run fleetguard_console` — **REQUIRED**, the console changed (Home redesign, `/api/corpus`). `apps start` alone re-deploys the old source path (I-097) | ~5 min |
 | 3.3 | **Rebuild + redeploy the agent** (`agent_build`, then `deploy_agent`) — **REQUIRED**, v7 predates I-115's four agent fixes. Then confirm the new version actually takes traffic (I-050/I-092, four recurrences) | ~15 min |
-| **3.3a** | **NEW — evaluate the agent** (`bundle run evaluate_agent`). **This step never existed**, so the evaluation's hard gates have been inert through every run: they fail the job on a claimed launch, an invented recall, and now on acting on an instruction embedded in a retrieved narrative (I-118). It also stamps the model version with its scores — skip it and the deployed artefact carries no evidence it was evaluated | ~15 min |
+| **3.3a** | **NEW — evaluate the agent** (`bundle run evaluate_agent`). **This step never existed**, so the evaluation's hard gates have been inert through every run *on
+`abhi`* — they have now run twice on free edition and all three held at 1.000 (I-123): they fail the job on a claimed launch, an invented recall, and now on acting on an instruction embedded in a retrieved narrative (I-118). It also stamps the model version with its scores — skip it and the deployed artefact carries no evidence it was evaluated | ~15 min |
 | 3.4 | **Abbreviated verification**, not the full hour: one agent question, one write, confirm it reaches UC | ~15 min |
 | 3.5 | **Fresh screenshots — REQUIRED**, Home was redesigned | ~1 min |
 | 3.6 | **Update the provenance record**, then assemble the zip (repo + `docs/screenshots/`; the requirement PDF and the review files are gitignored and not part of it) | ~5 min |
@@ -1360,6 +1364,7 @@ than discovering it mid-demo.
 | **Branches** | **2 local / 2 remote** — `main` plus **`free-edition-deploy`, retained deliberately** (2026-09-30) though its work is now all on `main`. 14 others were deleted 2026-09-29 (**I-121**, SHAs recorded there). `feature/role-based-views` survives as tag `archive/role-based-views`; docs naming `deploy/render` as a live location name commit `2b5727a` |
 | ⚠️ **`free-edition-deploy` is a FROZEN PRE-FOLD SNAPSHOT** | Tip `e7ff1b6`, **4 commits behind `main`**. It is kept as a fallback, **not as a live branch — do not deploy free edition from it.** It predates I-120, so its `agent_actions.py` and `readyz.py` lack the `NaN`/422 fix and the `/readyz` eval gate, and it still carries the stale `series_key IS NULL` comment two reviews mis-filed. Free-edition work lives on `main`: `./scripts/deploy.sh <profile> free_edition` |
 | **Bundle targets** | **2** — `prod` (default, abhi, the submission deliverable) and `free_edition` (separate account). `./scripts/deploy.sh <profile> <target>`, target defaults to `prod`. All 9 variable defaults are the abhi values, so `prod` is unchanged by the fold |
+| **Free-edition e2e** | ✅ **run 2026-09-30 from `main`** (I-123). `/api/readyz` **200**, 14 routes live, the 422 fix confirmed, both evals re-run. Found and fixed: the App's OBO scopes lacked `vector-search`, so `/api/readyz` **could never return 200 on either target**. Still open: the eval-gate check needs scope `mlflow`, which is **not assignable** — it degrades to "unverified" forever |
 | **Working tree** | clean |
 | **Billable resources running** | **none** — see "What is costing money" below |
 | **Tests** | **681 passed / 24 skipped** (backend), **153** vitest, ruff + typecheck clean — *measured by CI on PR #20, run `36643258085`, not derived. Includes the 53 `tests/pipelines/` Spark tests, which cannot run on this laptop (`Bad CPU type in executable`, x86-only `java`) — CI is the only place they execute* |
@@ -1435,7 +1440,7 @@ mandatory:
 |---|---|---|
 | **3.0** | Rebuild `silver_complaint_chunk_indexed` | I-115 widened the fleet match. Building the index off the old table leaves all 2,116 F-250s out of retrieval |
 | **3.1a** | Run the RAG retrieval evaluation | I-116/I-117 built the harness; it needs a live index |
-| **3.3a** | **Evaluate the agent** | **This step never existed.** The agent has been rebuilt, redeployed and demoed without ever being scored, so the evaluation's hard gates have been inert through every run (I-118) |
+| **3.3a** | **Evaluate the agent** | **This step never existed.** On `abhi` the agent has been rebuilt, redeployed and demoed without ever being scored, so its hard gates have been inert through every run (I-118). **They have now run twice on free edition and all three held at 1.000 — I-123**, which also found `cites_complaint_ids: 0.000` reproducibly |
 
 #### What is costing money
 

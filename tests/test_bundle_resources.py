@@ -154,7 +154,18 @@ def test_app_source_and_scopes():
         # routes and losing `model-serving` breaks the chat panel — both with the same
         # undifferentiated 403 that also means "stale consent grant" (I-086), which is the
         # single most expensive error message in this project.
-        assert set(app.get("user_api_scopes") or []) == {"postgres", "sql", "model-serving"}, (
+        # `vector-search` added 2026-09-30 (I-123) — the deliberate change this assertion asks
+        # for. The first live run of `/api/readyz` returned
+        # `PermissionDenied: ... required scopes: vector-search` on its index check, and because
+        # that check fails closed, the endpoint could never return 200 through the App on either
+        # target. Proved to be the App's cap and not the caller's: the same bearer token got
+        # HTTP 200 calling the vector-search API directly.
+        assert set(app.get("user_api_scopes") or []) == {
+            "postgres",
+            "sql",
+            "model-serving",
+            "vector-search",
+        }, (
             f"app {key} OBO scopes changed: {app.get('user_api_scopes')!r}. "
             "Change this assertion deliberately, with a reason — do not widen it to a subset."
         )

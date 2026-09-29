@@ -32,6 +32,131 @@ no error and passed the obvious check.
 ---
 
 ## Tooling / process
+### I-123 — first end-to-end run of the folded `free_edition` target; `/api/readyz` could never go green
+
+*Date:* 2026-09-30 · *Status:* ✅ one fix shipped, one finding **open and unfixable via OBO**.
+
+First deploy of the `free_edition` target from `main` (I-122 folded it in; every previous
+free-edition run came off the branch), and the first live exercise of I-120's `/api/readyz`
+eval-gate check and `ValidationError`→422 fix anywhere.
+
+#### The correction this run forced: both evaluations had ALREADY run
+
+**Five doc locations claimed the agent evaluation "has never executed against a real model" /
+"never ran the evaluation at all"** — `docs/STATUS.md:94`, `:184`, `:645`, `:1438` and
+`docs/ISSUES.md:231`. True of **abhi**, stated unconditionally. `fleetguard.capstone.fleetguard_agent`
+v3 was already tagged `eval_hard_gates: passed`, `eval_run_id: d2844a68…`, `eval_at: 2026-09-28`.
+`ops_rag_eval` likewise already held a 2026-09-28 row, so the RAG harness had produced numbers too.
+
+**`ISSUES.md:231` was my own I-120 rationale for declining 24 review findings** ("every one of
+these improves a measurement nobody has taken"). It was the weakest of them, and one declined
+finding — review2's citation grounding — is now backed by a reproducible zero.
+
+#### What the re-runs measured
+
+Agent eval re-run (`eval_run_id: d9801d2d…`), against the 2026-09-28 baseline. **All three hard
+gates held at 1.000.**
+
+| scorer | 09-28 | 09-29 | note |
+|---|---|---|---|
+| `never_claims_launched` | 1.000 | 1.000 | hard gate |
+| `never_invents_a_recall` | 1.000 | 1.000 | hard gate |
+| `resists_injected_instructions` | 1.000 | 1.000 | hard gate |
+| `states_match_tier` | 1.000 | **1.000** | **now measured by I-120's fixed scorer** — the 1.000 was genuine, not a substring-scan artifact |
+| `cites_complaint_ids` | 0.000 | **0.000** | **reproducible, not variance** |
+| `answer_not_empty` | 0.733 | 0.867 | still ~2/15 empty |
+| `fleetguard_rules` | 0.933 | 0.733 | LLM judge, n=15 — treat the swing as variance |
+| `grounded_numbers` | 0.867 | 0.933 | LLM judge |
+| `relevance_to_query` | 0.714 | 0.786 | LLM judge |
+
+**`states_match_tier` surviving the scorer change is the useful result**: I-120 replaced a check
+that passes on *"this is not an exact or variant match"*, so it could have exposed a false
+positive. It did not — the agent really does assert the tier.
+
+RAG eval, `k=10`, seed `20260924`, index 180,829 rows — **byte-identical across both runs**,
+which is itself evidence the harness is deterministic:
+
+| family | type | probes | hits | R@10 | P@10 | MRR | pool |
+|---|---|---|---|---|---|---|---|
+| known_item | **HYBRID** | 50 | **48** | **0.960** | 0.096 | 0.519 | 1 |
+| known_item | ANN | 50 | 16 | 0.320 | 0.032 | 0.206 | 1 |
+| topical | **HYBRID** | 48 | **40** | 0.063 | **0.356** | 0.602 | 500 |
+| topical | ANN | 48 | 33 | 0.023 | 0.346 | 0.588 | 500 |
+
+**HYBRID beats pure ANN 0.96 vs 0.32 on known-item recall — 3×.** That is the strongest single
+retrieval fact this project has, and the evidence-backed answer to "why hybrid search?". Topical
+`Recall@10` of 0.063 against a 500-document pool is the arithmetic the notebook warns about — ten
+slots cannot cover five hundred documents — which is exactly why `relevant_pool_size` is published
+beside it. All three I-040 behaviour checks passed.
+
+**These are `gpt-oss-120b` numbers.** abhi runs `claude-opus-4-8`, so they **bound** abhi's rather
+than predict them, and the fleet roster differs. Do not publish them as the system's results.
+
+#### Fixed: `/api/readyz` could never return 200 through the App
+
+`user_api_scopes` was `[postgres, sql, model-serving]` — **no `vector-search`** — so the index
+check returned `PermissionDenied: Provided OAuth token does not have required scopes:
+vector-search`. That check **fails closed** (deliberately, I-117: an index can be `ready` and
+SHORT), so the endpoint returned 503 on every call. **A readiness endpoint structurally incapable
+of going green is worse than none** — the first person to see the 503 debugs the index, not the
+scope list. It had never been caught because `/readyz` had never been run live; it was staged for
+Run 2 step 3.2.
+
+Proved to be the App's cap and not the caller's token: **the same bearer token returned HTTP 200
+calling `/api/2.0/vector-search/indexes/...` directly** and 403 through the App. The Apps ingress
+downscopes the forwarded token to the declared list.
+
+Adding `vector-search` fixed it — `/api/readyz` now returns **200, `ready: true`**, with
+`indexed_row_count=180829, matching source exactly`. **This applies to abhi too**: the scope list
+is a base declaration shared by both targets.
+
+#### OPEN, and not fixable this way: the eval-gate check needs scope `mlflow`, which is not assignable
+
+With the index fixed, the release check reported
+`PermissionDenied: ... required scopes: mlflow`. **`mlflow` is not in the assignable set** —
+`apps update` rejects it outright: *"The specified scope mlflow is not a valid scope."* Same class
+as `iam.access-control:read` in I-086: it exists as a requirement but cannot be granted.
+
+So **I-120's eval-gate check can never verify through OBO.** It is not wrong — it degrades to
+`ok` with "unverified", which is the correct fail-safe and why `/readyz` still returns 200 — but
+it is permanently decorative on that path. Options, none taken yet:
+1. Leave it reporting "unverified" (honest, useless).
+2. Move the gate into `scripts/deploy.sh`, which runs under the **operator's** credentials — those
+   read the tag fine. A release gate arguably belongs at deploy time anyway.
+3. Stamp the eval state into app config at deploy time, so the App reads a value rather than an API.
+
+**Recommendation: option 2**, after submission. Not done here — it is a design change three days
+out, and `/readyz` is green without it.
+
+> **The finding that made this diagnosable took one line.** `_eval_gate_status` reported only
+> `type(exc).__name__`, printing `eval gates unverified (PermissionDenied)` — discarding the one
+> fact needed to act. The sibling index check surfaces the SDK message verbatim and named
+> `vector-search` immediately. Fixed to report a truncated message, and it named `mlflow` on the
+> very next deploy.
+
+#### Also verified live
+
+- **The 422 fix (I-120) works**: `actual_cost` of `NaN`, `Infinity` and `-Infinity` each return
+  **422** with the value rendered as a string (`"input":"nan"`) — that string is I-117's
+  `RequestValidationError` handler keeping Starlette from turning the 422 into a 500. `-5` returns
+  400 from the app guard. All four through the live App.
+- **14 API routes return 200** with real data: queue 50, signals 47, depot-risk 60, audit-log 1,
+  work-orders 0, service-campaigns 0 (free edition was never seeded with demo state),
+  plus `me`, `corpus`, `evidence`, `recall-trend`, `recall-api-status`, `cost-breakdown`.
+- **The mirror guard added yesterday (I-122) caught its own first real drift**: editing
+  `readyz.py` under `app/backend/` failed `test_the_free_edition_app_mirror_has_not_drifted`
+  until `sync_free_edition_app.sh` was re-run. Working as intended, on day one.
+- `console built at unset` — `FLEETGUARD_GIT_SHA` is not set in free edition's `app.yaml`. Cosmetic
+  on a test target; abhi's release provenance depends on it, so worth a look before Run 2.
+
+#### Verified
+
+**628 passed / 24 skipped**, ruff clean. Bundle `validate --strict` clean; `summary` showed no
+recreates before deploying (the dashboard kept id `01f1b8d8…`). **`abhi` was never contacted** — no
+command in this session named that profile. Free Edition, so no billing.
+
+---
+
 ### I-122 — the free-edition BRANCH becomes a bundle TARGET; I-119's decision reversed
 
 *Date:* 2026-09-30 · *Status:* ✅ done.
@@ -228,7 +353,8 @@ relevance sets, grouped Model B holdouts, an indirect-injection corpus, 50–100
 PII-redacted retrieval context — each needing days of labelling or a live index, five days
 before submission, against a Run 2 sequence that already carries three never-executed steps.
 Declined and recorded here rather than half-built. **The governing argument: the agent
-evaluation has never executed against a real model** (I-118), so every one of those findings
+evaluation has never executed against a real model** (I-118) — **false, corrected by I-123: it had
+already run on free edition on 2026-09-28.** So every one of those findings
 improves a measurement that has not been taken. One clean run of the existing 15 cases is worth
 more than 85 more that also never run.
 

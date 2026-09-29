@@ -262,7 +262,19 @@ def _eval_gate_status(w: WorkspaceClient, model: str | None, version: str) -> tu
             query={"name": model, "version": version},
         )
     except Exception as exc:  # noqa: BLE001 - see the docstring; unavailable is not unhealthy
-        return True, f"eval gates unverified ({type(exc).__name__})"
+        # REPORT THE MESSAGE, NOT JUST THE CLASS (2026-09-30, first live run on free edition).
+        #
+        # This read `{type(exc).__name__}` and produced `eval gates unverified
+        # (PermissionDenied)` — which says a permission is missing and hides *which*, so the
+        # one fact needed to fix it was the one fact discarded. The sibling `search_index`
+        # check surfaces the SDK's message verbatim and therefore named `vector-search`
+        # immediately; this branch made the same failure undiagnosable.
+        #
+        # Truncated because the SDK appends a full `Config:` dump (host, account_id,
+        # client_id, every env var it consulted) that would swamp the readiness payload. The
+        # required-scope sentence is at the front, which is the part worth having.
+        detail = " ".join(str(exc).split())[:180]
+        return True, f"eval gates unverified ({type(exc).__name__}: {detail})"
 
     tags = {
         t.get("key"): t.get("value")
