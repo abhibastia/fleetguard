@@ -752,3 +752,64 @@ class TestAttemptAudit:
             execute(USER, envelope)
 
         assert exc.value.status_code == 422
+
+
+class TestSeriesKeyIsNeverNull:
+    """The invariant that makes `ux_fg_defect_signal_agent_active` cover every agent signal.
+
+    **This exists because the absence of it kept manufacturing a finding.** The partial unique
+    index is on `(opened_by, series_key, component)`, and Postgres permits unlimited NULLs in a
+    unique index — so *if* `series_key` could be NULL, make-less signals would escape the
+    idempotency guard entirely. Two external reviews (2026-09-24 and 2026-09-29) read
+    `26_add_defect_signal_idempotency.py`'s comment saying exactly that, filed it as an open
+    defect, and proposed a second partial index. It was disproven by hand both times — and a
+    fact disproven by hand twice is a fact with no test.
+
+    What actually shuts it: `series_key` joins the *non-empty* parts of
+    `(make, model, component)`, and `component` is required and non-blank (I-115 —
+    `min_length=1` plus a `mode="before"` strip, so the length check sees what will be stored).
+    The join therefore always has at least one part. Both halves are pinned below, because
+    either one loosening reopens the hole.
+    """
+
+    @staticmethod
+    def _series_key_written(cur) -> str | None:
+        insert = [params for sql, params in cur.executed if INSERT_SIGNAL in sql]
+        assert insert, "no defect-signal INSERT was issued"
+        return insert[0]["series_key"]
+
+    def test_a_make_less_signal_still_gets_a_non_null_series_key(self, monkeypatch):
+        """The exact case both reviews described: no make, no model. Under their reading this
+        writes NULL and escapes the index; it writes the component instead."""
+        cur = _cursor(exact=0, variant=0, make=0)
+        install(monkeypatch, agent_actions, cur)
+
+        envelope = json.loads(json.dumps(VALID))
+        envelope["params"].pop("make")
+        envelope["params"].pop("model")
+        execute(USER, envelope)
+
+        assert self._series_key_written(cur) == "STEERING"
+
+    def test_a_blank_component_is_rejected_rather_than_stripped_to_empty(self, monkeypatch):
+        """I-115's half. `component=" "` used to pass `min_length=1` and *then* get stripped to
+        `""`, producing `series_key = ""` → written as NULL. `mode="before"` makes the length
+        check see the stripped value, so this is a 422 — the honest answer, since the model did
+        not name a component."""
+        install(monkeypatch, agent_actions, _cursor(exact=1, variant=0, make=1))
+
+        envelope = json.loads(json.dumps(VALID))
+        envelope["params"]["component"] = "   "
+        with pytest.raises(HTTPException) as exc:
+            execute(USER, envelope)
+
+        assert exc.value.status_code == 422
+
+    def test_the_fully_populated_case_keeps_all_three_parts(self, monkeypatch):
+        """Guards the other direction: a `series_key` that quietly narrowed to the component
+        would make two different series collide under one actor."""
+        cur = _cursor(exact=5, variant=0, make=5)
+        install(monkeypatch, agent_actions, cur)
+        execute(USER, json.loads(json.dumps(VALID)))
+
+        assert self._series_key_written(cur) == "RAM|2500|STEERING"

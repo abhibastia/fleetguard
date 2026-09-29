@@ -77,15 +77,40 @@ class _FakeWorkspace:
     """
 
     def __init__(
-        self, *, endpoint_ready="READY", index_ready=True, rows=115_499, source_rows=_SAME
+        self,
+        *,
+        endpoint_ready="READY",
+        index_ready=True,
+        rows=115_499,
+        source_rows=_SAME,
+        eval_tags=_SAME,
     ):
         self.serving_endpoints = SimpleNamespace(
             get=lambda name: SimpleNamespace(
-                state=SimpleNamespace(ready=SimpleNamespace(value=endpoint_ready), config_update=None),
-                config=SimpleNamespace(served_entities=[SimpleNamespace(entity_version="7")]),
+                state=SimpleNamespace(
+                    ready=SimpleNamespace(value=endpoint_ready), config_update=None
+                ),
+                config=SimpleNamespace(
+                    served_entities=[
+                        SimpleNamespace(
+                            entity_version="7",
+                            entity_name="bootcamp_students.fleetguard.fleetguard_agent",
+                        )
+                    ]
+                ),
             ),
             query=self._forbidden,
         )
+        # The release check reads the served version's `eval_hard_gates` tag through the
+        # MLflow-on-UC REST endpoint, because `ModelVersionInfo` has no `tags` field. Shape
+        # measured live 2026-09-29: `tags` is a list of {key, value} and is OMITTED entirely
+        # when the version has none — which the `eval_tags=None` case below reproduces.
+        self._eval_tags = (
+            {"eval_hard_gates": "passed", "eval_run_id": "abc123"}
+            if eval_tags is _SAME
+            else eval_tags
+        )
+        self.api_client = SimpleNamespace(do=self._do)
         self.vector_search_indexes = SimpleNamespace(
             get_index=lambda index_name: SimpleNamespace(
                 status=SimpleNamespace(ready=index_ready, indexed_row_count=rows)
@@ -95,14 +120,16 @@ class _FakeWorkspace:
         # index can be `ready` and SHORT (I-105 — a sync restarting from zero answers every
         # query without erroring). `source_rows=None` simulates a sleeping warehouse.
         self.statement_execution = SimpleNamespace(
-            execute_statement=lambda **k: SimpleNamespace(
-                status=SimpleNamespace(state=SimpleNamespace(value="SUCCEEDED")),
-                result=SimpleNamespace(
-                    data_array=[[str(rows if source_rows is _SAME else source_rows)]]
-                ),
+            execute_statement=lambda **k: (
+                SimpleNamespace(
+                    status=SimpleNamespace(state=SimpleNamespace(value="SUCCEEDED")),
+                    result=SimpleNamespace(
+                        data_array=[[str(rows if source_rows is _SAME else source_rows)]]
+                    ),
+                )
+                if source_rows is not None
+                else SimpleNamespace(status=None, result=None)
             )
-            if source_rows is not None
-            else SimpleNamespace(status=None, result=None)
         )
 
     @staticmethod
@@ -111,6 +138,18 @@ class _FakeWorkspace:
             "readyz queried the serving endpoint — that wakes a scale-to-zero container and "
             "bills for it. Check state with serving_endpoints.get instead."
         )
+
+    def _do(self, method, path, query=None, **k):
+        assert method == "GET", "the eval-tag read must not mutate the registry"
+        if self._eval_tags is None:
+            # An untagged version: the key is absent, not an empty list.
+            return {"model_version": {"version": (query or {}).get("version")}}
+        return {
+            "model_version": {
+                "version": (query or {}).get("version"),
+                "tags": [{"key": k_, "value": v} for k_, v in self._eval_tags.items()],
+            }
+        }
 
 
 def _patch_all(monkeypatch: pytest.MonkeyPatch, *, workspace=None, connect=None) -> None:
@@ -144,7 +183,9 @@ def test_everything_up_is_200_and_says_so(configured, monkeypatch: pytest.Monkey
     assert "115499" in index["detail"].replace(",", "")
 
 
-def test_a_deleted_index_is_a_503_not_a_green_tick(configured, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_deleted_index_is_a_503_not_a_green_tick(
+    configured, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """The exact state this system sits in between online windows, and the defect I-115 filed:
     `/healthz` returned `ok` for weeks with no index at all."""
 
@@ -179,7 +220,9 @@ def test_a_stopped_agent_endpoint_is_down(configured, monkeypatch: pytest.Monkey
     assert by_name["search_index"]["status"] == "ok"
 
 
-def test_lakebase_unreachable_is_down_and_named(configured, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_lakebase_unreachable_is_down_and_named(
+    configured, monkeypatch: pytest.MonkeyPatch
+) -> None:
     def _refuse(principal):
         raise OSError("connection refused")
 
@@ -259,12 +302,10 @@ def test_a_sleeping_warehouse_does_not_fail_readiness(
 
 
 def test_release_provenance_is_reported(configured, monkeypatch: pytest.MonkeyPatch) -> None:
-    """"Is the live system the thing in the zip?" — named as the biggest practical risk, and
+    """ "Is the live system the thing in the zip?" — named as the biggest practical risk, and
     today it means looking in five separate places. Two of the five are cheap here."""
     monkeypatch.setenv("FLEETGUARD_GIT_SHA", "abc1234")
-    check = next(
-        c for c in _get(monkeypatch).json()["checks"] if c["name"] == "release"
-    )
+    check = next(c for c in _get(monkeypatch).json()["checks"] if c["name"] == "release")
     assert check["status"] == "ok"
     assert "agent v7" in check["detail"]
     assert "abc1234" in check["detail"]
@@ -282,3 +323,87 @@ def test_release_provenance_never_fails_readiness_on_its_own(
     check = next(c for c in resp.json()["checks"] if c["name"] == "release")
     assert check["status"] == "ok"
     assert "unset" in check["detail"]
+
+
+def test_the_served_version_must_carry_a_passing_eval_tag(
+    configured, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The release loop's last inch, closed 2026-09-29.
+
+    `16_evaluate_agent.py` stamps `eval_hard_gates` on the UC model version after the gates
+    pass, and until now nothing read it — so "the deployed artefact is the evaluated one" was a
+    claim with no check behind it. Reported on success, because the useful thing before a demo
+    is the run id, not the word `ok`.
+    """
+    check = next(c for c in _get(monkeypatch).json()["checks"] if c["name"] == "release")
+    assert check["status"] == "ok"
+    assert "eval_hard_gates=passed" in check["detail"]
+    assert "abc123" in check["detail"], "the run id makes the scores one lookup away"
+
+
+def test_an_unevaluated_served_version_is_a_503(
+    configured, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """**Not hypothetical.** All seven registered versions were untagged on 2026-09-29 because
+    the evaluation had never been run against any of them (I-118) — the agent was rebuilt,
+    redeployed and demoed with its hard gates inert throughout. A check that called that "ok,
+    unverified" would reproduce exactly the decorative-gate failure I-118 was filed for.
+
+    Note which absence this is: the registry answered, and its answer was "no such tag". That
+    is a release-gate failure, distinct from the registry being unreachable below.
+    """
+    resp = _get(monkeypatch, workspace=_FakeWorkspace(eval_tags=None))
+    assert resp.status_code == 503
+    check = next(c for c in resp.json()["checks"] if c["name"] == "release")
+    assert check["status"] == "down"
+    assert "NEVER EVALUATED" in check["detail"]
+    assert "3.3a" in check["detail"], "say which runbook step fixes it, not just that it is wrong"
+
+
+def test_a_failed_eval_tag_is_a_503(configured, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Unreachable via `16_evaluate_agent.py`, which raises before it tags — so a version can
+    never carry `failed`. Pinned anyway: the alternative is a branch that silently treats any
+    non-`passed` value as acceptable, and "unreachable today" is not the same as "safe to get
+    wrong"."""
+    resp = _get(monkeypatch, workspace=_FakeWorkspace(eval_tags={"eval_hard_gates": "failed"}))
+    assert resp.status_code == 503
+    check = next(c for c in resp.json()["checks"] if c["name"] == "release")
+    assert check["status"] == "down"
+    assert "do not demo" in check["detail"]
+
+
+def test_an_unreachable_registry_does_not_fail_readiness(
+    configured, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Same discipline as the sleeping warehouse above: *unavailable* is not *unhealthy*. The
+    distinction from the 503 case is that here the call never produced an answer, so nothing
+    was learned about the version either way."""
+
+    class _NoRegistry(_FakeWorkspace):
+        def _do(self, *a, **k):
+            raise RuntimeError("PERMISSION_DENIED")
+
+    resp = _get(monkeypatch, workspace=_NoRegistry())
+    assert resp.status_code == 200
+    check = next(c for c in resp.json()["checks"] if c["name"] == "release")
+    assert check["status"] == "ok"
+    assert "unverified" in check["detail"]
+    assert "RuntimeError" in check["detail"], "name the cause, do not just say unverified"
+
+
+def test_the_eval_tag_read_is_free(configured, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Every check in this router is a control-plane read, and that is a constraint rather than
+    a coincidence — `/readyz` is documented as safe to poll on the live deployment. This pins
+    that the eval-tag read is a GET against the metadata endpoint and touches neither a
+    warehouse nor a serving container."""
+    seen: list[tuple] = []
+
+    class _Recording(_FakeWorkspace):
+        def _do(self, method, path, query=None, **k):
+            seen.append((method, path, (query or {}).get("version")))
+            return super()._do(method, path, query=query, **k)
+
+    _get(monkeypatch, workspace=_Recording())
+    assert seen == [
+        ("GET", "/api/2.0/mlflow/unity-catalog/model-versions/get", "7")
+    ], "must read the SERVED version (7), by GET, from the metadata endpoint"

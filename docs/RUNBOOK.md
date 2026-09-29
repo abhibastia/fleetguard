@@ -173,7 +173,11 @@ sync from zero after an internal failure. On a drop:
 databricks pipelines list-pipeline-events <PIPELINE_ID> --profile abhi
 ```
 
-Done when `status.ready: true` and `indexed_row_count == 115499`.
+Done when `status.ready: true` and `indexed_row_count` equals **the count step 3.0 printed** —
+not a number written here. *This line read `== 115499` until 2026-09-29, eighteen lines after
+the callout above saying that figure no longer applies, and it is the line an operator actually
+executes at the end of the poll. I-115 widened the source to a strict superset, so following it
+literally means reading a correct count as a failed sync.*
 
 ### 1.3 — Restore the agent endpoint
 

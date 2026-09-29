@@ -32,6 +32,109 @@ no error and passed the obvious check.
 ---
 
 ## Tooling / process
+### I-120 — fifth external review: 2 of 26 findings actionable; the docs were manufacturing a third
+
+*Date:* 2026-09-29 · *Status:* ✅ resolved on `fix/repo-review-round-5`.
+
+Two reviews triaged against `ae5f3e5`: `repo-review.md` (the fourth, already fully closed as
+I-117) and `repo-review2.md` (new, read the post-I-118 zip).
+
+**`repo-review.md` needed nothing.** All 14 findings were already fixed or deliberately
+rejected with a reason. Re-verified rather than assumed: fail-closed envelopes
+(`chat.py:217`), write-batch exclusivity (`14_fleetguard_agent.py:951`), `log.exception` on
+audit failure, depot containment in `resolve_scope`, the corpus-derived recall pool in
+`28_rag_eval.py`, `allow_inf_nan=False`.
+
+**`repo-review2.md`: 26 findings, 2 built.** The rest are evaluation-rigor work — human-labelled
+relevance sets, grouped Model B holdouts, an indirect-injection corpus, 50–100 eval cases,
+PII-redacted retrieval context — each needing days of labelling or a live index, five days
+before submission, against a Run 2 sequence that already carries three never-executed steps.
+Declined and recorded here rather than half-built. **The governing argument: the agent
+evaluation has never executed against a real model** (I-118), so every one of those findings
+improves a measurement that has not been taken. One clean run of the existing 15 cases is worth
+more than 85 more that also never run.
+
+#### Built
+
+**1. `/api/readyz` now checks that the SERVED agent version passed the hard gates.**
+I-118 started stamping `eval_hard_gates` / `eval_run_id` on the UC model version after the
+gates pass; nothing read it, so "the deployed artefact is the evaluated one" was a claim with
+no check. `_check_release` reads it now.
+
+> **`ModelVersionInfo` has no `tags` field** on `databricks-sdk` 0.89 — the typed API cannot
+> see what `mlflow.set_model_version_tag` writes. Measured live 2026-09-29 (set → read →
+> delete a throwaway tag on our own registered model, then removed):
+> `GET /api/2.0/mlflow/unity-catalog/model-versions/get` returns
+> `model_version.tags = [{"key","value"}]` and **omits the key entirely** when there are none.
+> Also measured, because it cost a minute: `set-tag` is `POST`, `delete-tag` is **`DELETE`** —
+> `POST .../delete-tag` returns *No API found*.
+
+Three outcomes, and the last two are deliberately distinct: tagged `passed` → ok, reporting the
+run id; the call **raised** → unavailable, degraded to a note exactly as a sleeping warehouse
+is; the call **succeeded with no tag** → `down`. That third case is not hypothetical — **all
+seven registered versions were untagged**, confirming I-118's finding from the other side. It
+is also the correct state between runbook steps 3.3 and 3.3a.
+
+**2. `states_match_tier` asserted, not mentioned.** It read
+`"exact" in text or "variant" in text` over the whole answer, so *"this is not an exact or
+variant match"* — the most direct way to fail I-030's requirement — scored as satisfying it.
+That is I-058 in the one scorer that never received the fix. Now goes through `_asserts` with a
+new `TIER_CLAIMS` list. The residual error moves from false-positive to false-negative (a
+sentence stating a tier *and* negating something else is skipped whole, because `_asserts`
+flattens commas on purpose); pinned as a deliberate trade, since a false negative gets read and
+a false positive is a silent pass.
+
+#### The docs were manufacturing a finding
+
+**`26_add_defect_signal_idempotency.py` described a hole the code had already shut**, and two
+separate reviews read it and filed the "`series_key IS NULL` idempotency gap" as an open defect,
+each proposing a second partial index. I-117 disproved it by hand; the fifth review repeated it
+verbatim. The comment still said `series_key` "is NULL when no make/model was supplied" —
+untrue since I-115 made `component` required and non-blank, because the key joins the non-empty
+parts of `(make, model, component)`.
+
+**A fact disproven by hand twice is a fact with no test.** Corrected the comment *and* added
+`TestSeriesKeyIsNeverNull` pinning both halves — a make-less signal gets `series_key="STEERING"`
+rather than NULL, and a whitespace-only component is refused. A stale comment describing a
+closed gap is not a harmless inaccuracy; it reproduces the same finding indefinitely.
+
+#### Found while writing that test: model-authored bad params returned 500, not 422
+
+Every handler starts by constructing its params model, which raises a bare
+`pydantic.ValidationError`. That is not an `HTTPException`, so it fell past `execute`'s
+`except HTTPException` branch, was re-raised by the generic one, and `/api/chat` answered
+**500**. Reachable from ordinary model output: a blank `component`, a negative
+`complaint_count`, an over-long `rationale`. The write was always correctly refused — what was
+wrong is that refusing bad input presented as the console breaking, and the audit row recorded
+`FAILED` when the system had worked. Same family as I-117's 422-that-became-a-500 in `main.py`,
+reached from the other side: there the error body could not serialise, here the error never
+became one. Now a 422 recorded as `REJECTED`.
+
+#### Doc corrections
+
+- **`docs/RUNBOOK.md`** said *"Done when ... `indexed_row_count == 115499`"* **eighteen lines
+  after** its own callout saying that figure no longer applies — and it is the line an operator
+  actually executes at the end of the index poll, so following it literally reads a correct
+  count as a failed sync.
+- **`PLAN.md` §Phase 3** and **`src/setup/00_create_all_objects.py`** (steps 6 and 7 of the
+  rebuild order — the from-empty path PR #18 just found was incomplete) still asserted 115,499
+  as current. Marked superseded; the real count comes from Run 2 step 3.0.
+
+#### Verified
+
+**626 passed / 24 skipped** (was 614 on this machine), ruff clean. **Every change
+mutation-checked** per I-117/I-118: gate-always-passes, untagged-treated-as-ok,
+unreachable-registry-treated-as-down, substring-scan-restored, empty `TIER_CLAIMS`,
+`series_key` dropping `component`, and the `ValidationError` branch removed — each confirmed
+red, then restored. *`tests/pipelines/` (53 Spark tests) could not run on this machine —
+`Bad CPU type in executable`, the local `java` is x86-only. Untouched by this branch; CI covers
+them.*
+
+The one workspace interaction was the read-only tag probe described above. Nothing was
+deployed; no billable resource was started.
+
+---
+
 ### I-119 — a free-edition end-to-end run surfaced 10 real bugs that had never been exercised
 
 *Date:* 2026-09-29 · *Status:* ✅ resolved — merged to `main` via PR #18 (`fa8d2b0`).

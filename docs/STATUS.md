@@ -1220,12 +1220,41 @@ than discovering it mid-demo.
 |---|---|
 | **Today** | 2026-09-29 · **submission 4 October** · **Run 2 targeted 2–3 October** |
 | **`main`** | `fa8d2b0`, pushed to `origin/main`, **CI green** (both jobs) |
+| **Unmerged** | **`fix/repo-review-round-5`** — fifth review triaged (I-120). Offline only; see below |
 | **Working tree** | clean |
 | **Billable resources running** | **none** — see "What is costing money" below |
-| **Tests** | **667 passed / 24 skipped** (backend, ~45 s), **153** vitest, ruff + typecheck clean |
+| **Tests** | **679 passed / 24 skipped** (backend, ~45 s), **153** vitest, ruff + typecheck clean — *679 is 667 + I-120's 12, arithmetic not a fresh CI reading; the 614 non-Spark half was re-run and matches. Count it yourself if it matters* |
 | **Bound job resources** | **31** (`ls resources/*.job.yml \| wc -l` — count it, do not trust this number) |
 
-#### What changed since the 2026-09-24 note, and why it does NOT touch the Run 2 plan below
+#### The fifth external review is triaged — `fix/repo-review-round-5` (I-120)
+
+**2 of 26 findings built; nothing here changes the Run 2 sequence.** `repo-review.md` (the
+fourth) needed nothing — all 14 findings were already closed as I-117. `repo-review2.md`'s
+remainder is evaluation-rigor work (human-labelled relevance sets, grouped Model B holdouts, an
+indirect-injection corpus, 50–100 eval cases, PII-redacted retrieval) that needs days of
+labelling or a live index; declined and recorded in I-120 rather than half-built.
+
+**The argument for declining, worth keeping:** the agent evaluation has never executed against
+a real model, so every one of those findings improves a measurement nobody has taken. Step
+3.3a first.
+
+What is on the branch, all offline, no workspace deploy:
+
+| | |
+|---|---|
+| `/api/readyz` fails if the **served** agent version carries no `eval_hard_gates` tag | Closes the evaluated-artefact-vs-deployed-artefact loop I-118 opened. **It will read `down` between runbook steps 3.3 and 3.3a — that is correct, not a bug to route around** |
+| `states_match_tier` now asserts rather than substring-matches | *"this is not an exact or variant match"* used to score as stating a tier |
+| `pydantic.ValidationError` from model-authored params → **422, not 500** | Found writing the test below; `/api/chat` 500'd on a blank `component` |
+| `TestSeriesKeyIsNeverNull` + a corrected comment in `26_add_defect_signal_idempotency.py` | The stale comment had made **two** reviews file the same disproven "`series_key IS NULL` hole" |
+| `RUNBOOK.md` *"Done when `indexed_row_count == 115499`"* | Contradicted its own callout 18 lines above, on the line an operator executes |
+
+> **One live call was made:** a read-only probe of the MLflow-on-UC tag API (set → read →
+> delete a throwaway tag on our own registered model, removed afterwards), because
+> `ModelVersionInfo` has no `tags` field and the response shape had to be measured rather than
+> assumed. It confirmed **all seven registered agent versions are untagged** — I-118's finding,
+> from the other side. Nothing deployed, nothing billable started.
+
+#### What changed in PR #18, and why it does NOT touch the Run 2 plan below
 
 **PR #18 (`fa8d2b0`), merged 2026-09-29 — 10 real bug fixes, ported from a separate
 `free-edition-deploy` branch's end-to-end test on a second Databricks Free Edition account.**
@@ -1295,8 +1324,8 @@ Run 2 step already committed to. Do not "fix" anything that looks unapplied:
 |---|---|
 | Agent: write-batch exclusivity, evidence TTL, sentinel stripping, untrusted-data markers, prompt rules 9–10 | **3.3** — `agents.deploy()` |
 | Index source widened to `EXACT` + `MODEL_VARIANT`; the RAG evaluation | **3.0 / 3.1a** |
-| Console: fail-closed action envelopes, `NaN` guard, depot containment, `/api/readyz` | **3.2** — `bundle run fleetguard_console` |
-| Evaluation hard gates + model-version tagging | **3.3a** |
+| Console: fail-closed action envelopes, `NaN` guard, depot containment, `/api/readyz` (incl. I-120's eval-gate check and the 422-not-500 fix) | **3.2** — `bundle run fleetguard_console` |
+| Evaluation hard gates + model-version tagging; I-120's `states_match_tier` fix | **3.3a** — **and `/api/readyz` reads `down` until this step runs, by design** |
 | I-099's loud stale-snapshot fail (`01_download_flat_files.py`) | Only on the next *ingest* — not exercised in Run 2 at all |
 
 #### Three things Run 2 owes, and nobody else can produce
