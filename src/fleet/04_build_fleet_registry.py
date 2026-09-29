@@ -39,7 +39,10 @@ import urllib.request
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), "..")))
 from fleetguard.http_retry import fetch_json  # noqa: E402
 
-CATALOG, SCHEMA = "bootcamp_students", "fleetguard"
+dbutils.widgets.text("catalog", "bootcamp_students")
+dbutils.widgets.text("schema", "fleetguard")
+CATALOG = dbutils.widgets.get("catalog")
+SCHEMA = dbutils.widgets.get("schema")
 spark.sql(f"USE {CATALOG}.{SCHEMA}")
 
 N_VEHICLES = 20_000

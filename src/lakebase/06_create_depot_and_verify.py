@@ -24,16 +24,25 @@ import os
 
 # See I-045. `psycopg[binary]` aborts the kernel with a FIPS self-test failure on serverless
 # unless this is set before import. Every other src/lakebase/*.py file that imports psycopg
-# already carries this guard; this file was missing it.
+# already carries this guard; this file was missing it (caught 2026-09-25 running against a
+# fresh free-edition environment: SIGABRT, "Python process exited unexpectedly").
 os.environ.setdefault("PSYCOPG_IMPL", "python")
 
 import psycopg  # noqa: E402 - must follow the PSYCOPG_IMPL assignment above
 from databricks.sdk import WorkspaceClient  # noqa: E402
 
-PROJECT = "projects/summer-bootcamp-2026-v2"
+dbutils.widgets.text("lakebase_project", "projects/summer-bootcamp-2026-v2")
+dbutils.widgets.text("pg_schema", "bootcamp_students")
+dbutils.widgets.text("pg_database", "databricks_postgres")
+PROJECT = dbutils.widgets.get("lakebase_project")
 ENDPOINT = f"{PROJECT}/branches/production/endpoints/primary"
-PG_SCHEMA = "bootcamp_students"
-PG_DB = "databricks_postgres"
+PG_SCHEMA = dbutils.widgets.get("pg_schema")
+PG_DB = dbutils.widgets.get("pg_database")
+dbutils.widgets.text("catalog", "bootcamp_students")
+dbutils.widgets.text("schema", "fleetguard")
+CATALOG = dbutils.widgets.get("catalog")
+SCHEMA = dbutils.widgets.get("schema")
+UC = f"{CATALOG}.{SCHEMA}"
 TABLE = "fleetguard_depot"
 
 ALL_ELEVEN = [
@@ -164,9 +173,9 @@ with conn.cursor() as cur:
 
 # COMMAND ----------
 
-depots = spark.sql("""
+depots = spark.sql(f"""
     SELECT depot_id, depot_name, region, city, state, manager_principal
-    FROM bootcamp_students.fleetguard.gold_fleet_depot ORDER BY depot_id
+    FROM {UC}.gold_fleet_depot ORDER BY depot_id
 """).collect()
 
 with conn.cursor() as cur:

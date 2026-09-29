@@ -65,7 +65,22 @@ databricks bundle deploy --target "$TARGET" --profile "$PROFILE"
 
 # ---- verify the state file actually agrees with HEAD --------------------------------------
 # The point of the guard is provenance, so check it rather than assume the guard was enough.
-ROOT="/Workspace/Users/abhisek.bastia17@gmail.com/.bundle/fleetguard/$TARGET/state/metadata.json"
+# root_path is read from databricks.yml per-target rather than hardcoded, so this works for
+# any target (prod/abhi, free_edition, or a future one) instead of only ever checking prod's
+# workspace path regardless of which target was actually deployed.
+ROOT_PATH="$(.venv/bin/python3 - "$TARGET" <<'PY'
+import sys
+import yaml
+
+target = sys.argv[1]
+with open("databricks.yml") as f:
+    doc = yaml.safe_load(f)
+root = doc["targets"][target]["workspace"]["root_path"]
+root = root.replace("${bundle.name}", doc["bundle"]["name"]).replace("${bundle.target}", target)
+print(root)
+PY
+)"
+ROOT="$ROOT_PATH/state/metadata.json"
 DEPLOYED="$(databricks workspace export "$ROOT" --format AUTO --profile "$PROFILE" 2>/dev/null \
   | python3 -c 'import json,sys; print(json.load(sys.stdin).get("config",{}).get("bundle",{}).get("git",{}).get("commit",""))' || true)"
 HEAD_SHA="$(git rev-parse HEAD)"

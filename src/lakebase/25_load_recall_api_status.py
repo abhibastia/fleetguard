@@ -61,11 +61,18 @@ if os.getenv("DATABRICKS_RUNTIME_VERSION"):
 import psycopg  # noqa: E402
 from databricks.sdk import WorkspaceClient  # noqa: E402
 
-PROJECT = "projects/summer-bootcamp-2026-v2"
+dbutils.widgets.text("lakebase_project", "projects/summer-bootcamp-2026-v2")
+dbutils.widgets.text("pg_schema", "bootcamp_students")
+dbutils.widgets.text("pg_database", "databricks_postgres")
+PROJECT = dbutils.widgets.get("lakebase_project")
 ENDPOINT = f"{PROJECT}/branches/production/endpoints/primary"
-PG_SCHEMA = "bootcamp_students"
-PG_DB = "databricks_postgres"
-UC = "bootcamp_students.fleetguard"
+PG_SCHEMA = dbutils.widgets.get("pg_schema")
+PG_DB = dbutils.widgets.get("pg_database")
+dbutils.widgets.text("catalog", "bootcamp_students")
+dbutils.widgets.text("schema", "fleetguard")
+CATALOG = dbutils.widgets.get("catalog")
+SCHEMA = dbutils.widgets.get("schema")
+UC = f"{CATALOG}.{SCHEMA}"
 
 POLL_TABLE = "fleetguard_recall_api_poll"
 ALERT_TABLE = "fleetguard_recall_api_alert"

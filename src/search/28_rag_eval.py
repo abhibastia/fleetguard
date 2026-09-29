@@ -80,7 +80,10 @@ from fleetguard.retrieval_metrics import (  # noqa: E402
     summarise,
 )
 
-CATALOG, SCHEMA = "bootcamp_students", "fleetguard"
+dbutils.widgets.text("catalog", "bootcamp_students")
+dbutils.widgets.text("schema", "fleetguard")
+CATALOG = dbutils.widgets.get("catalog")
+SCHEMA = dbutils.widgets.get("schema")
 INDEX = f"{CATALOG}.{SCHEMA}.complaint_chunk_idx"
 SOURCE = f"{CATALOG}.{SCHEMA}.silver_complaint_chunk_indexed"
 FLEET = f"{CATALOG}.{SCHEMA}.gold_fleet_vehicle"

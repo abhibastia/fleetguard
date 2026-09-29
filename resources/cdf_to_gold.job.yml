@@ -15,8 +15,21 @@
 # signals loader with no matching `fleetguard_agent_action` write, so `ALL_UPDATED` would wait
 # for a change that never comes.
 #
-# UNPAUSED on purpose. `mode: development` would pause it silently — one of the reasons this
-# bundle has no dev target.
+# UNPAUSED on purpose (for prod). `mode: development` would pause it silently — one of the
+# reasons this bundle has no dev target.
+#
+# THE TRIGGER LIVES ONLY UNDER `targets.prod` IN databricks.yml, NOT HERE. `jobs.create`
+# validates a `table_update` trigger's `table_names` against real UC tables at CREATE time
+# (measured 2026-09-25: deploying this job as-is to free_edition failed outright — "The table
+# 'bootcamp_students.bootcamp_cdc.lb_fleetguard_agent_action_history' does not exist"). Free
+# Edition deliberately has no Lakebase CDF setup at all (out of scope for that build), so no
+# table this trigger could legally watch exists there. DABs has no per-target resource
+# exclusion (confirmed: https://github.com/databricks/cli/issues/2872 is still open) — the job
+# itself has to exist under every target that includes resources/*.yml. Giving `free_edition`
+# no `trigger:` override at all leaves the job created but inert (manual-run only), which is
+# the correct shape for "CDF sync is excluded here": present in `jobs list` like the other 29,
+# never fires. See databricks.yml's `targets.prod.resources.jobs.cdf_to_gold` for the real
+# trigger definition prod keeps.
 
 resources:
   jobs:
@@ -36,13 +49,4 @@ resources:
       queue:
         enabled: true
       timeout_seconds: 0
-      trigger:
-        pause_status: UNPAUSED
-        table_update:
-          condition: ANY_UPDATED
-          min_time_between_triggers_seconds: 60
-          table_names:
-            - bootcamp_students.bootcamp_cdc.lb_fleetguard_agent_action_history
-            - bootcamp_students.bootcamp_cdc.lb_fleetguard_defect_signal_history
-          wait_after_last_change_seconds: 61
       webhook_notifications: {}

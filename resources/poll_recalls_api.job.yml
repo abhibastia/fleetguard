@@ -30,6 +30,10 @@ resources:
     poll_recalls_api:
       name: fleetguard-poll-recalls-api
       parameters:
+        - name: catalog
+          default: ${var.catalog}
+        - name: schema
+          default: ${var.schema}
         - name: max_combos
           default: "0"
         - name: failure_gate_pct

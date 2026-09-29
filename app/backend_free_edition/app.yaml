@@ -1,0 +1,58 @@
+# Databricks Apps configuration for the FREE-EDITION target ONLY.
+#
+# This file exists because Databricks Apps reads env/command from exactly one place — a
+# literal `app.yaml` in the App resource's `source_code_path` — and there is no working way
+# to template or override it per DABs target. A `config:` block on the `apps` resource looks
+# like it should work (schema accepts command/env, takes ${var.x} substitution, validates and
+# deploys clean) but silently fails to write app.yaml (github.com/databricks/cli#4901,
+# confirmed against this project's CLI v1.12.1, 2026-09-25). `app/backend/app.yaml` is prod's
+# live config; it is not touched by this file or by this target.
+#
+# `fleetguard_api/` here is a synced mirror of `app/backend/fleetguard_api/` — see
+# `scripts/sync_free_edition_app.sh`, the single source of truth is `app/backend/`. Re-run
+# that script after backend code changes and before redeploying this target.
+
+command:
+  - "uvicorn"
+  - "fleetguard_api.main:app"
+  - "--host"
+  - "0.0.0.0"
+  - "--port"
+  - "8000"
+
+env:
+  - name: FLEETGUARD_AUTH_MODE
+    value: databricks-apps
+  - name: FLEETGUARD_DATA_MODE
+    value: lakebase
+  # Free Edition's own dedicated Lakebase project (not abhi's shared bootcamp_students).
+  - name: FLEETGUARD_PG_PROJECT
+    value: projects/fleetguard-free-edition
+  # No pre-existing `fleetguard` schema on a brand-new project — Postgres's default.
+  - name: FLEETGUARD_PG_SCHEMA
+    value: public
+  - name: FLEETGUARD_PG_DATABASE
+    value: databricks_postgres
+  - name: DATABRICKS_HOST
+    value: https://dbc-6b3a5534-db75.cloud.databricks.com
+  - name: FLEETGUARD_AGENT_ENDPOINT
+    value: agents_fleetguard-capstone-fleetguard_agent
+  - name: FLEETGUARD_WAREHOUSE_ID
+    value: 6797e114217fa513
+  - name: FLEETGUARD_SEARCH_INDEX
+    value: fleetguard.capstone.complaint_chunk_idx
+  - name: FLEETGUARD_SEARCH_SOURCE
+    value: fleetguard.capstone.silver_complaint_chunk_indexed
+  # This target's own dashboard — separate workspace, separate id from prod's. Without this,
+  # the Home page's "Analytics dashboard" link fell back to the code default (prod's URL, on a
+  # host this account cannot sign into at all) since the built console JS is a byte-identical
+  # copy shared with prod (see scripts/sync_free_edition_app.sh). That was the actual "cannot
+  # access the analytics dashboard" bug, reported 2026-09-27.
+  - name: FLEETGUARD_DASHBOARD_URL
+    value: https://dbc-6b3a5534-db75.cloud.databricks.com/dashboardsv3/01f1b8d8000117c988aeffbebbe7676e/published
+  # Just the account this whole build runs under — there is no cohort of judges here.
+  - name: FLEETGUARD_APPROVERS
+    value: abhibastia90@gmail.com
+
+# OBO scopes are declared in resources/fleetguard_console.app.yml (user_api_scopes), same as
+# prod — see that file's comment for why they cannot live here (I-083).

@@ -55,8 +55,10 @@
 
 # COMMAND ----------
 
-CATALOG = "bootcamp_students"
-SCHEMA = "fleetguard"
+dbutils.widgets.text("catalog", "bootcamp_students")
+dbutils.widgets.text("schema", "fleetguard")
+CATALOG = dbutils.widgets.get("catalog")
+SCHEMA = dbutils.widgets.get("schema")
 FQ = f"{CATALOG}.{SCHEMA}"
 
 spark.sql(f"""

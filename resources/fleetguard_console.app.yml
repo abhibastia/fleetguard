@@ -59,14 +59,14 @@ resources:
 
       # WHO MAY OPEN AND START THE APP. Distinct from who may APPROVE — that is
       # `FLEETGUARD_APPROVERS` in app.yaml, enforced in application logic, and a workspace
-      # admin does not bypass it. These four grants are the live ACL; all three judges were
-      # raised to CAN_MANAGE on 2026-09-09 so none of them waits on the owner to start the app.
-      permissions:
-        - level: CAN_MANAGE
-          user_name: abhisek.bastia17@gmail.com
-        - level: CAN_MANAGE
-          user_name: raghavendra.yama@gmail.com
-        - level: CAN_MANAGE
-          user_name: sangwanrahul@icloud.com
-        - level: CAN_MANAGE
-          user_name: zach@zachwilson.tech
+      # admin does not bypass it. Deliberately NO base `permissions:` list here — each target
+      # declares its own ACL under `databricks.yml`'s `targets.<name>.resources.apps.
+      # fleetguard_console.permissions`. A target-level resource override on a list field
+      # APPENDS to a base-file list rather than replacing it (measured 2026-09-25: prod's four
+      # abhi-cohort emails aren't valid principals in the free-edition account, so appending
+      # onto them there would fail the deploy outright) — leaving the base list empty and
+      # letting each target supply its own is append-to-empty, which is a full list in
+      # practice. A `${var.x}`-style whole-field variable substitution was tried first and
+      # rejected by this CLI version ("cannot interpolate non-primitive value of type sequence
+      # into string") — that schema-advertised capability doesn't work here, so don't reach
+      # for it again without re-testing against a newer CLI.

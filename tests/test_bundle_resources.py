@@ -56,17 +56,29 @@ def _resources_of(kind: str) -> list[tuple[Path, str, dict]]:
     return out
 
 
-def test_bundle_root_parses_and_has_one_production_target():
+def test_bundle_root_parses_and_has_expected_targets():
     root = _load(BUNDLE_ROOT)
     assert root["bundle"]["name"] == "fleetguard"
 
     targets = root["targets"]
-    # A `mode: development` target would name-prefix every resource into a shared namespace
-    # AND pause the `table_update` trigger the sub-5-minute Postgres->gold path depends on.
-    # If someone adds one, this test is where they should have to argue for it.
-    assert list(targets) == ["prod"], "only a prod target is expected; see databricks.yml"
-    assert targets["prod"]["mode"] == "production"
-    assert targets["prod"]["run_as"]["user_name"]
+    # `prod` (abhi, the shared bootcamp metastore — the submission deliverable) and
+    # `free_edition` (a wholly separate account, isolated agent/app testing only) are the
+    # only two targets expected. A `mode: development` variant of either would name-prefix
+    # every resource — fine on free_edition's own account, but `prod` shares its namespace
+    # with ~296 other students and would also pause the `table_update` trigger the
+    # sub-5-minute Postgres->gold path depends on. If someone adds a third target, or a
+    # `mode: development` one, this test is where they should have to argue for it.
+    assert set(targets) == {"prod", "free_edition"}, (
+        "only prod and free_edition targets are expected; see databricks.yml"
+    )
+    for name in ("prod", "free_edition"):
+        assert targets[name]["mode"] == "production"
+        assert targets[name]["run_as"]["user_name"]
+        assert targets[name]["workspace"]["host"]
+    # The two targets must never point at the same workspace or the same deployed path —
+    # that would make a `free_edition` deploy silently collide with `prod`'s live objects.
+    assert targets["prod"]["workspace"]["host"] != targets["free_edition"]["workspace"]["host"]
+    assert targets["prod"]["run_as"]["user_name"] != targets["free_edition"]["run_as"]["user_name"]
 
 
 def test_every_resource_file_parses():
@@ -232,3 +244,72 @@ def test_dashboard_pins_its_parent_path():
         )
         file_path = (f.parent / dash["file_path"]).resolve()
         assert file_path.is_file(), f"dashboard {key} file_path does not exist: {dash['file_path']}"
+
+
+# --- the free_edition App mirror -------------------------------------------------------------
+#
+# `app/backend_free_edition/` is an rsync mirror of `app/backend/`, existing for one reason:
+# Databricks Apps reads env/command from a literal `app.yaml` in the App resource's
+# `source_code_path`, and a `config:` block on the DABs `apps` resource silently fails to write
+# one (databricks/cli#4901, confirmed on CLI v1.12.1). So each target needs its own directory,
+# and `scripts/sync_free_edition_app.sh` is what keeps the copy honest.
+#
+# WHY THIS IS TESTED RATHER THAN TRUSTED. "Re-run the script when app/backend/ changes" is the
+# same contract that produced I-096 and I-098 — a hand-synced copy that drifted silently and was
+# found only by comparing it to git. It drifted again the moment the two branches were folded
+# together (2026-09-30): the mirror was carrying a pre-I-120 `agent_actions.py` and `readyz.py`,
+# i.e. a free-edition app missing the NaN/422 fix and the readyz eval gate, with nothing
+# reporting it. A comment asking for discipline is not a mechanism; this is.
+
+APP_SRC = REPO / "app" / "backend"
+APP_MIRROR = REPO / "app" / "backend_free_edition"
+#: Exactly what `sync_free_edition_app.sh` copies — the tree plus two files. Scoped to the
+#: script's own contract rather than "everything under the directory", because the wider
+#: comparison flags `.databricks/` (gitignored CLI sync-snapshot state, which is local, per
+#: -directory, and correctly not mirrored) and a test that cries wolf gets muted.
+MIRROR_TREE = "fleetguard_api"
+MIRROR_FILES = ("requirements.txt", "README.md")
+#: `app.yaml` is excluded by the script and must stay excluded — it is the whole reason two
+#: directories exist. Pinned from the other side by the test below.
+MIRROR_SKIP = {"app.yaml"}
+
+
+def _tree(root: Path) -> dict[str, bytes]:
+    files = [
+        p
+        for p in sorted((root / MIRROR_TREE).rglob("*"))
+        if p.is_file() and "__pycache__" not in p.parts and p.name not in MIRROR_SKIP
+    ]
+    files += [root / name for name in MIRROR_FILES if (root / name).is_file()]
+    return {str(p.relative_to(root)): p.read_bytes() for p in files}
+
+
+@pytest.mark.skipif(not APP_MIRROR.exists(), reason="free_edition app mirror not present")
+def test_the_free_edition_app_mirror_has_not_drifted():
+    src, mirror = _tree(APP_SRC), _tree(APP_MIRROR)
+
+    missing = sorted(set(src) - set(mirror))
+    extra = sorted(set(mirror) - set(src))
+    changed = sorted(k for k in set(src) & set(mirror) if src[k] != mirror[k])
+
+    assert not (missing or extra or changed), (
+        "app/backend_free_edition/ has drifted from app/backend/ — run "
+        "./scripts/sync_free_edition_app.sh and commit the result.\n"
+        f"  missing from mirror: {missing or 'none'}\n"
+        f"  only in mirror:      {extra or 'none'}\n"
+        f"  contents differ:     {changed or 'none'}"
+    )
+
+
+@pytest.mark.skipif(not APP_MIRROR.exists(), reason="free_edition app mirror not present")
+def test_each_app_target_keeps_its_own_app_yaml():
+    """The one file that must NOT match. If these ever become identical, the mirror has
+    overwritten free-edition's config with prod's — which points the free-edition app at
+    abhi's Lakebase project and approvers, the exact breakage the two directories prevent."""
+    src_yaml = APP_SRC / "app.yaml"
+    mirror_yaml = APP_MIRROR / "app.yaml"
+    assert src_yaml.exists() and mirror_yaml.exists(), "both targets need their own app.yaml"
+    assert src_yaml.read_bytes() != mirror_yaml.read_bytes(), (
+        "app/backend_free_edition/app.yaml is byte-identical to prod's — the sync script "
+        "must never copy app.yaml; see its header and databricks/cli#4901"
+    )

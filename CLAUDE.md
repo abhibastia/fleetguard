@@ -459,11 +459,35 @@ claim you then have to keep true; rejected experiments belong in `src/` and `doc
   **Consequence, accepted deliberately: the 7 excluded jobs above can no longer run.** They
   were the only things still reading that tree. Their code is in `src/` and unaffected; to run
   one again, add it to the bundle rather than re-importing by hand.
-- **One `prod` target, `mode: production`, and no `dev` target — on purpose.**
-  `mode: development` name-prefixes every resource (`[dev abhisek] fleetguard-…`) into a
-  namespace already holding ~300 jobs from ~296 other students, which breaks the
-  "scope every destructive operation to the `fleetguard-` prefix" rule. It also **pauses
-  schedules and triggers**, which would silently stop `fleetguard-cdf-to-gold`.
+- **TWO targets, both `mode: production`, and still no `dev` target — on purpose (I-122,
+  2026-09-30).** `prod` is `default: true` and is the submission deliverable (abhi,
+  `dbc-7b106152`); `free_edition` points at a wholly separate Free Edition account
+  (`dbc-6b3a5534`) for end-to-end iteration. **This was one target until the
+  `free-edition-deploy` branch was folded in** — I-119 had deliberately kept that work off
+  `main`, and I-122 reversed it: the branch had already parameterised everything with bundle
+  variables, so a second *target* does the job a second *branch* was doing, without the
+  permanent merge chore. `databricks.yml` declares 9 variables (`catalog`, `schema`,
+  `warehouse_id`, `llm_endpoint`, `lakebase_project`, `pg_schema`, `pg_database`,
+  `agent_endpoint`, `scale_to_zero`) whose **defaults are the abhi values**, so `prod`
+  resolves exactly as it did before the fold.
+  `mode: development` is still refused for either: it name-prefixes every resource
+  (`[dev abhisek] fleetguard-…`) into a namespace already holding ~300 jobs from ~296 other
+  students, which breaks the "scope every destructive operation to the `fleetguard-` prefix"
+  rule. It also **pauses schedules and triggers**, which would silently stop
+  `fleetguard-cdf-to-gold`.
+- **`./scripts/deploy.sh <profile> <target>` — the target is the SECOND argument and defaults
+  to `prod`.** Deploying free edition is `./scripts/deploy.sh free-edition free_edition`.
+  Getting this wrong points a free-edition deploy at the shared bootcamp metastore.
+- **The App needs two source directories, and that is a platform bug not a choice.**
+  Databricks Apps reads env/command from a literal `app.yaml` in the App resource's
+  `source_code_path`; a `config:` block on the DABs `apps` resource accepts `command`/`env`,
+  takes `${var.x}`, validates and deploys clean — and then **silently fails to write
+  `app.yaml`** (`databricks/cli#4901`, confirmed on CLI v1.12.1, 2026-09-25). So
+  `app/backend/` is prod's and `app/backend_free_edition/` is a mirror of it produced by
+  `scripts/sync_free_edition_app.sh`, with **its own hand-maintained `app.yaml` that the
+  script never touches**. The mirror drifted within minutes of being created, so
+  `tests/test_bundle_resources.py` now fails if it is stale — do not "fix" a drift failure by
+  editing the mirror, run the script.
 - **`bundle destroy` would delete the demo.** `lifecycle.prevent_destroy: true` is set on the
   App. Never run it against `prod`.
 - **`bundle deploy` does NOT deploy the App** (I-097). It uploads source and updates the app

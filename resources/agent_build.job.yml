@@ -9,6 +9,11 @@ resources:
           notebook_task:
             notebook_path: ../src/agent/14_fleetguard_agent.py
             source: WORKSPACE
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
+              llm_endpoint: ${var.llm_endpoint}
+              warehouse_id: ${var.warehouse_id}
           run_if: ALL_SUCCESS
           timeout_seconds: 7200
       email_notifications: {}

@@ -24,7 +24,10 @@
 
 # COMMAND ----------
 
-CATALOG, SCHEMA = "bootcamp_students", "fleetguard"
+dbutils.widgets.text("catalog", "bootcamp_students")
+dbutils.widgets.text("schema", "fleetguard")
+CATALOG = dbutils.widgets.get("catalog")
+SCHEMA = dbutils.widgets.get("schema")
 MODEL_NAME = f"{CATALOG}.{SCHEMA}.fleetguard_agent"
 
 # Empty default means "latest", resolved below — the same treatment I-094 gave the evaluation
@@ -61,7 +64,16 @@ import re
 
 from databricks import agents
 
-deployment = agents.deploy(model_name=MODEL_NAME, model_version=MODEL_VERSION)
+# `scale_to_zero` defaults to False in agents.deploy() — fine on abhi (paid workspace, prod's
+# unchanged behavior), but Free Edition rejects a non-scale-to-zero endpoint outright: measured
+# 2026-09-25, `InvalidParameterValue: Scale to zero must be enabled for this workspace`. A
+# widget, not a flip of the default, so prod keeps its exact current endpoint config.
+dbutils.widgets.text("scale_to_zero", "false")
+SCALE_TO_ZERO = dbutils.widgets.get("scale_to_zero").strip().lower() == "true"
+
+deployment = agents.deploy(
+    model_name=MODEL_NAME, model_version=MODEL_VERSION, scale_to_zero=SCALE_TO_ZERO
+)
 
 # `Deployment.endpoint_name` is the documented attribute; the regex is a fallback so a
 # missing attribute degrades to a warning rather than losing the endpoint we just created.

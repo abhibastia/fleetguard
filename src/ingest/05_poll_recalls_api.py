@@ -62,9 +62,6 @@ from fleetguard.http_retry import (  # noqa: E402
     validate_recalls_payload,
 )
 
-CATALOG, SCHEMA = "bootcamp_students", "fleetguard"
-spark.sql(f"USE {CATALOG}.{SCHEMA}")
-
 API = "https://api.nhtsa.gov/recalls/recallsByVehicle"
 UA = {"User-Agent": "FleetGuard/1.0 (capstone; contact abhisek.bastia17@gmail.com)"}
 
@@ -77,6 +74,8 @@ REQ_PER_SEC = 2.0
 # `except` — so `MAX_COMBOS` was *always* 0 and the job YAML had no parameter to set it
 # with. Dead configuration surface that read as a live knob.
 try:
+    dbutils.widgets.text("catalog", "bootcamp_students")
+    dbutils.widgets.text("schema", "fleetguard")
     dbutils.widgets.text("max_combos", "0", "Max combos (0 = all)")
     dbutils.widgets.text("failure_gate_pct", "10", "Abort alert rebuild above this % failed")
 except Exception:  # noqa: BLE001 - running outside Databricks (import check, local lint)
@@ -89,6 +88,10 @@ def _widget(name: str, default: str) -> str:
     except Exception:  # noqa: BLE001
         return default
 
+
+CATALOG = _widget("catalog", "bootcamp_students")
+SCHEMA = _widget("schema", "fleetguard")
+spark.sql(f"USE {CATALOG}.{SCHEMA}")
 
 MAX_COMBOS = int(_widget("max_combos", "0"))
 
@@ -168,8 +171,10 @@ SELECT
   (SELECT COUNT(DISTINCT vin) FROM gold_fleet_exposure) AS pollable_vehicles
 """).collect()[0]
 print(f"combos to poll: {len(combos)}")
-print(f"fleet coverage: {coverage['pollable_vehicles']:,} of {coverage['fleet_total']:,} vehicles "
-      f"({coverage['pollable_vehicles']/coverage['fleet_total']:.1%}) have a known recall-vocabulary name")
+print(
+    f"fleet coverage: {coverage['pollable_vehicles']:,} of {coverage['fleet_total']:,} vehicles "
+    f"({coverage['pollable_vehicles'] / coverage['fleet_total']:.1%}) have a known recall-vocabulary name"
+)
 
 # COMMAND ----------
 
