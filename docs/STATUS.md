@@ -1361,7 +1361,7 @@ than discovering it mid-demo.
 | **Bundle targets** | **2** — `prod` (default, abhi, the submission deliverable) and `free_edition` (separate account). `./scripts/deploy.sh <profile> <target>`, target defaults to `prod`. All 9 variable defaults are the abhi values, so `prod` is unchanged by the fold |
 | **Working tree** | clean |
 | **Billable resources running** | **none** — see "What is costing money" below |
-| **Tests** | **679 passed / 24 skipped** (backend), **153** vitest, ruff + typecheck clean — *measured by CI on PR #19, run `36618884010`, not derived. Includes the 53 `tests/pipelines/` Spark tests, which cannot run on this laptop (`Bad CPU type in executable`, x86-only `java`) — CI is the only place they execute* |
+| **Tests** | **681 passed / 24 skipped** (backend), **153** vitest, ruff + typecheck clean — *measured by CI on PR #20, run `36643258085`, not derived. Includes the 53 `tests/pipelines/` Spark tests, which cannot run on this laptop (`Bad CPU type in executable`, x86-only `java`) — CI is the only place they execute* |
 | **Bound job resources** | **31** (`ls resources/*.job.yml \| wc -l` — count it, do not trust this number) |
 
 #### The fifth external review is triaged — `fix/repo-review-round-5` (I-120)
