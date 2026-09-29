@@ -9,6 +9,9 @@ resources:
           notebook_task:
             notebook_path: ../src/backtest/09_lead_time_backtest_v3.py
             source: WORKSPACE
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
           run_if: ALL_SUCCESS
           timeout_seconds: 14400
       email_notifications: {}

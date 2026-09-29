@@ -48,7 +48,10 @@ from pyspark.sql import functions as F
 from sklearn.cluster import MiniBatchKMeans
 from sklearn.preprocessing import normalize
 
-CATALOG, SCHEMA = "bootcamp_students", "fleetguard"
+dbutils.widgets.text("catalog", "bootcamp_students")
+dbutils.widgets.text("schema", "fleetguard")
+CATALOG = dbutils.widgets.get("catalog")
+SCHEMA = dbutils.widgets.get("schema")
 spark.sql(f"USE {CATALOG}.{SCHEMA}")
 
 MIN_SUBDIVIDE = 100  # series smaller than this keep the v2 grouping untouched

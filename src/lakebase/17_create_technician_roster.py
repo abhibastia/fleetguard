@@ -25,10 +25,13 @@ if os.getenv("DATABRICKS_RUNTIME_VERSION"):
 import psycopg  # noqa: E402
 from databricks.sdk import WorkspaceClient  # noqa: E402
 
-PROJECT = "projects/summer-bootcamp-2026-v2"
+dbutils.widgets.text("lakebase_project", "projects/summer-bootcamp-2026-v2")
+dbutils.widgets.text("pg_schema", "bootcamp_students")
+dbutils.widgets.text("pg_database", "databricks_postgres")
+PROJECT = dbutils.widgets.get("lakebase_project")
 ENDPOINT = f"{PROJECT}/branches/production/endpoints/primary"
-PG_SCHEMA = "bootcamp_students"
-PG_DB = "databricks_postgres"
+PG_SCHEMA = dbutils.widgets.get("pg_schema")
+PG_DB = dbutils.widgets.get("pg_database")
 
 w = WorkspaceClient()
 host = w.postgres.get_endpoint(name=ENDPOINT).status.hosts.host

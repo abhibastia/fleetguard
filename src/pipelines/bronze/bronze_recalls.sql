@@ -24,7 +24,7 @@ SELECT
   _metadata.file_modification_time     AS _source_modified_at,
   *
 FROM STREAM read_files(
-  '/Volumes/bootcamp_students/fleetguard/nhtsa_flat_files/rcl/',
+  '${nhtsa_volume_root}/rcl/',
   format            => 'csv',
   sep               => '\t',
   header            => false,

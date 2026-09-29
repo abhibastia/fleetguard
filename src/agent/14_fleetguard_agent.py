@@ -45,13 +45,17 @@
 
 # COMMAND ----------
 
-CATALOG, SCHEMA = "bootcamp_students", "fleetguard"
+dbutils.widgets.text("catalog", "bootcamp_students")
+dbutils.widgets.text("schema", "fleetguard")
+CATALOG = dbutils.widgets.get("catalog")
+SCHEMA = dbutils.widgets.get("schema")
 MODEL_NAME = f"{CATALOG}.{SCHEMA}.fleetguard_agent"
 LLM_ENDPOINT = "databricks-claude-opus-4-8"
 INDEX = f"{CATALOG}.{SCHEMA}.complaint_chunk_idx"
 
 dbutils.widgets.text("llm_endpoint", LLM_ENDPOINT)
 LLM_ENDPOINT = dbutils.widgets.get("llm_endpoint")
+dbutils.widgets.text("warehouse_id", "b15d3d6f837ba428")
 print(f"model : {MODEL_NAME}\nllm   : {LLM_ENDPOINT}\nindex : {INDEX}")
 
 # COMMAND ----------
@@ -1122,7 +1126,7 @@ print(f"model : {MODEL_NAME}\nllm   : {LLM_ENDPOINT}\nindex : {INDEX}")
 
 import yaml
 
-WAREHOUSE_ID = "b15d3d6f837ba428"
+WAREHOUSE_ID = dbutils.widgets.get("warehouse_id")
 with open("agent_config.yaml", "w") as f:
     yaml.safe_dump(
         {

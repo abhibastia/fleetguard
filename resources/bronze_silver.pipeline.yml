@@ -29,6 +29,14 @@ resources:
       schema: ${var.schema}
       serverless: true
       continuous: false
+      # The 4 bronze `read_files()` calls need the NHTSA volume path, but SQL text isn't
+      # reached by bundle variable substitution the way this YAML is — `configuration:`
+      # values ARE readable from pipeline SQL via `${key}` interpolation (confirmed in the
+      # databricks-pipelines skill's kafka.md example and sql-basics.md), so the volume root
+      # is composed here from the same catalog/schema variables and referenced as
+      # `${nhtsa_volume_root}` in each bronze_*.sql file instead of a hardcoded literal.
+      configuration:
+        nhtsa_volume_root: /Volumes/${var.catalog}/${var.schema}/nhtsa_flat_files
       lifecycle:
         # Deleting a UC pipeline drops the streaming tables it owns — bronze (2.24M complaints,
         # 5.8M TSBs) and silver. A full reload is hours. This guards `bundle destroy` and the

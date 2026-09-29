@@ -1348,19 +1348,20 @@ than discovering it mid-demo.
 
 ## Picking this up tomorrow
 
-### COLD START — state as of 2026-09-29, end of day
+### COLD START — state as of 2026-09-30
 
 **Read this section, then `docs/RUNBOOK.md` Phase 3. Nothing else is required to resume.**
 
 | | |
 |---|---|
-| **Today** | 2026-09-29 · **submission 4 October** · **Run 2 targeted 2–3 October** |
-| **`main`** | `fa8d2b0`, pushed to `origin/main`, **CI green** (both jobs) |
-| **Unmerged** | **`fix/repo-review-round-5`** — fifth review triaged (I-120). Offline only; see below |
-| **Branches** | **3 local / 2 remote, deliberately** — `main`, `fix/repo-review-round-5`, `free-edition-deploy`. 14 were deleted 2026-09-29 (**I-121**, SHAs recorded there). `deploy/render` and `feature/role-based-views` went too, against this file's own "preserved"/"not deleted" notes, on an explicit decision — the latter survives as tag `archive/role-based-views`. Docs naming `deploy/render` as a live location now name commit `2b5727a` |
+| **Today** | 2026-09-30 · **submission 4 October** · **Run 2 targeted 2–3 October** |
+| **`main`** | `b7fa9c8` (I-120 + I-121, PR #19), pushed to `origin/main`, **CI green** (both jobs) |
+| **Unmerged** | `chore/fold-free-edition-target` — I-122, the `free_edition` target fold. Offline only |
+| **Branches** | **1 local / 1 remote** — just `main`. 14 were deleted 2026-09-29 (**I-121**, SHAs recorded there) and `free-edition-deploy` was folded into `main` as the `free_edition` bundle target 2026-09-30 (**I-122**), reversing I-119. `feature/role-based-views` survives as tag `archive/role-based-views`; docs naming `deploy/render` as a live location name commit `2b5727a` |
+| **Bundle targets** | **2** — `prod` (default, abhi, the submission deliverable) and `free_edition` (separate account). `./scripts/deploy.sh <profile> <target>`, target defaults to `prod`. All 9 variable defaults are the abhi values, so `prod` is unchanged by the fold |
 | **Working tree** | clean |
 | **Billable resources running** | **none** — see "What is costing money" below |
-| **Tests** | **679 passed / 24 skipped** (backend), **153** vitest, ruff + typecheck clean — *measured by CI on PR #19, run `36618884010`, not derived. Includes the 53 `tests/pipelines/` Spark tests, which cannot run on this laptop (`Bad CPU type in executable`, x86-only `java`) — CI is the only place they execute* |
+| **Tests** | **681 passed / 24 skipped** (backend), **153** vitest, ruff + typecheck clean — *measured by CI on PR #20, run `36643258085`, not derived. Includes the 53 `tests/pipelines/` Spark tests, which cannot run on this laptop (`Bad CPU type in executable`, x86-only `java`) — CI is the only place they execute* |
 | **Bound job resources** | **31** (`ls resources/*.job.yml \| wc -l` — count it, do not trust this number) |
 
 #### The fifth external review is triaged — `fix/repo-review-round-5` (I-120)

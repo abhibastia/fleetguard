@@ -35,15 +35,19 @@
 
 import os
 
-CATALOG = "bootcamp_students"
-SCHEMA = "fleetguard"
+dbutils.widgets.text("catalog", "bootcamp_students")
+dbutils.widgets.text("schema", "fleetguard")
+CATALOG = dbutils.widgets.get("catalog")
+SCHEMA = dbutils.widgets.get("schema")
 VOLUME = "nhtsa_flat_files"
 FQ = f"{CATALOG}.{SCHEMA}"
 VOL_PATH = f"/Volumes/{CATALOG}/{SCHEMA}/{VOLUME}"
 
-# Catalog creation is NOT attempted: `bootcamp_students` is owned by another user, and on
-# free-edition workspaces `databricks catalogs create` is blocked for default storage
-# anyway. The catalog is a precondition, not something this project creates.
+# Catalog creation is NOT attempted: on the abhi target `bootcamp_students` is owned by
+# another user, and on free-edition workspaces `databricks catalogs create` is blocked for
+# default storage anyway. The catalog is a precondition, not something this project creates —
+# for a target pointed at a catalog that doesn't exist yet, create it out of band first (e.g.
+# via SQL: `CREATE CATALOG ...`, which works even where the CLI is blocked).
 print(f"target schema : {FQ}")
 print(f"target volume : {VOL_PATH}")
 

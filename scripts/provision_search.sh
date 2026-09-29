@@ -31,8 +31,6 @@ cd "$(dirname "$0")/.."
 
 ENDPOINT="fleetguard-vs"
 CATALOG_SCHEMA="bootcamp_students.fleetguard"
-INDEX="${CATALOG_SCHEMA}.complaint_chunk_idx"
-SOURCE_TABLE="${CATALOG_SCHEMA}.silver_complaint_chunk_indexed"
 EMBEDDING_MODEL="databricks-gte-large-en"
 POLL_SECONDS="${POLL_SECONDS:-300}"
 
@@ -41,10 +39,13 @@ PROFILE=""
 
 usage() {
   cat <<USAGE
-usage: $0 [--check | --create] --profile <name>
+usage: $0 [--check | --create] --profile <name> [--endpoint <name>] [--catalog-schema <catalog.schema>]
 
-  --check    (default) read endpoint + index state. Free, no writes.
-  --create   create the endpoint and index if absent, then poll until ready. BILLS.
+  --check           (default) read endpoint + index state. Free, no writes.
+  --create          create the endpoint and index if absent, then poll until ready. BILLS.
+  --endpoint        Vector Search endpoint name (default: fleetguard-vs)
+  --catalog-schema  catalog.schema the index/source table live in (default: bootcamp_students.fleetguard)
+                     -- override for a non-prod target, e.g. --catalog-schema fleetguard.capstone
 
 Teardown is deliberately NOT here. See docs/RUNBOOK.md step 2.1.
 USAGE
@@ -52,13 +53,18 @@ USAGE
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --check)   MODE="check"; shift ;;
-    --create)  MODE="create"; shift ;;
-    --profile) PROFILE="${2:-}"; shift 2 ;;
+    --check)          MODE="check"; shift ;;
+    --create)         MODE="create"; shift ;;
+    --profile)        PROFILE="${2:-}"; shift 2 ;;
+    --endpoint)       ENDPOINT="${2:-}"; shift 2 ;;
+    --catalog-schema) CATALOG_SCHEMA="${2:-}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "unknown argument: $1" >&2; usage >&2; exit 2 ;;
   esac
 done
+
+INDEX="${CATALOG_SCHEMA}.complaint_chunk_idx"
+SOURCE_TABLE="${CATALOG_SCHEMA}.silver_complaint_chunk_indexed"
 
 # No default profile, on purpose. `abhi` is a SHARED bootcamp metastore holding ~296 other
 # students' work; every other script in this repo demands the profile explicitly for the same

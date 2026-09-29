@@ -1,13 +1,15 @@
 # Deploy the agent to its serving endpoint.
 #
-# NO `base_parameters` — see `evaluate_agent.job.yml` for the twin of this bug (I-098). This
-# one was worse: the generated config pinned `model_version: "1"` while **v6** was serving, so
-# running the job — the obvious response to a stopped endpoint, which has happened three times —
-# would have rolled the live agent back five versions and come up green.
+# NO `model_version` in `base_parameters` — see `evaluate_agent.job.yml` for the twin of this
+# bug (I-098). This one was worse: the generated config pinned `model_version: "1"` while
+# **v6** was serving, so running the job — the obvious response to a stopped endpoint, which
+# has happened three times — would have rolled the live agent back five versions and come up
+# green.
 #
 # `15_deploy_agent.py` now resolves the latest registered version when the widget is blank and
 # prints which version it shipped. Its old default was also "1", so removing the parameter
-# alone would not have been enough.
+# alone would not have been enough. catalog/schema ARE passed — a different, unrelated widget
+# with no rollback hazard, needed so this job targets the right MODEL_NAME per bundle target.
 
 resources:
   jobs:
@@ -20,6 +22,10 @@ resources:
           notebook_task:
             notebook_path: ../src/agent/15_deploy_agent.py
             source: WORKSPACE
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
+              scale_to_zero: ${var.scale_to_zero}
           run_if: ALL_SUCCESS
           timeout_seconds: 5400
       email_notifications: {}

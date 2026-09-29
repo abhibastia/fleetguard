@@ -10,6 +10,12 @@ resources:
           notebook_task:
             notebook_path: ../src/lakebase/13_load_exposure.py
             source: WORKSPACE
+            base_parameters:
+              lakebase_project: ${var.lakebase_project}
+              pg_schema: ${var.pg_schema}
+              pg_database: ${var.pg_database}
+              catalog: ${var.catalog}
+              schema: ${var.schema}
           run_if: ALL_SUCCESS
           timeout_seconds: 7200
       email_notifications: {}

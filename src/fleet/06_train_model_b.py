@@ -42,7 +42,10 @@
 
 # COMMAND ----------
 
-CATALOG, SCHEMA = "bootcamp_students", "fleetguard"
+dbutils.widgets.text("catalog", "bootcamp_students")
+dbutils.widgets.text("schema", "fleetguard")
+CATALOG = dbutils.widgets.get("catalog")
+SCHEMA = dbutils.widgets.get("schema")
 spark.sql(f"USE {CATALOG}.{SCHEMA}")
 
 MODEL_NAME = f"{CATALOG}.{SCHEMA}.fleetguard_model_b"
@@ -211,7 +214,10 @@ with mlflow.start_run(run_name="fleetguard-model-b-v1") as run:
     # and the GradientBoostingClassifier it calibrates produces sklearn.tree._tree.Tree for
     # each of its estimators — both trip that gate. Trusting them here is correct, not a
     # bypass: this is a model we just trained in-process, not one loaded from an external or
-    # untrusted source — the gate exists for the latter case.
+    # untrusted source — the gate exists for the latter case. Measured 2026-09-29: a fresh
+    # `%pip install -U mlflow` started enforcing this gate on the second (nested tree) type
+    # where it hadn't before, failing an otherwise-unchanged run with "untrusted types found:
+    # ['sklearn.tree._tree.Tree']".
     model_info = mlflow.sklearn.log_model(
         clf,
         name="model",

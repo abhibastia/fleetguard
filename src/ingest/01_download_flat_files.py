@@ -28,8 +28,10 @@ from pyspark.sql.types import (
     TimestampType,
 )
 
-CATALOG = "bootcamp_students"
-SCHEMA = "fleetguard"
+dbutils.widgets.text("catalog", "bootcamp_students")
+dbutils.widgets.text("schema", "fleetguard")
+CATALOG = dbutils.widgets.get("catalog")
+SCHEMA = dbutils.widgets.get("schema")
 VOLUME = "nhtsa_flat_files"
 VOL = f"/Volumes/{CATALOG}/{SCHEMA}/{VOLUME}"
 WATERMARK = f"{CATALOG}.{SCHEMA}.ops_ingest_watermark"
@@ -259,7 +261,6 @@ def fetch(source: str, url: str, subdir: str, expected_fields):
         landed_file=name,
         outcome="downloaded",
     )
-
 
 
 for src, (u, sub, fields) in SOURCES.items():

@@ -25,6 +25,12 @@ resources:
           notebook_task:
             notebook_path: ../src/lakebase/25_load_recall_api_status.py
             source: WORKSPACE
+            base_parameters:
+              lakebase_project: ${var.lakebase_project}
+              pg_schema: ${var.pg_schema}
+              pg_database: ${var.pg_database}
+              catalog: ${var.catalog}
+              schema: ${var.schema}
           run_if: ALL_SUCCESS
           timeout_seconds: 3600
       email_notifications: {}

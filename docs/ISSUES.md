@@ -32,6 +32,81 @@ no error and passed the obvious check.
 ---
 
 ## Tooling / process
+### I-122 — the free-edition BRANCH becomes a bundle TARGET; I-119's decision reversed
+
+*Date:* 2026-09-30 · *Status:* ✅ done.
+
+**This reverses a decision recorded in I-119**, which said the free-edition scaffolding
+*"deliberately stays on `free-edition-deploy`"*. Recorded as a reversal rather than quietly
+re-decided, because the original reasoning was sound at the time and the thing that changed is
+what the branch itself had become.
+
+#### Why the branch stopped being the right shape
+
+`free-edition-deploy` was 34 commits and 127 files ahead, and the bulk of it was
+**parameterisation**: 9 bundle variables (`catalog`, `schema`, `warehouse_id`, `llm_endpoint`,
+`lakebase_project`, `pg_schema`, `pg_database`, `agent_endpoint`, `scale_to_zero`), widget-ised
+notebooks, and — decisively — **both targets already declared in one `databricks.yml`**
+(`prod` → abhi, `free_edition` → `dbc-6b3a5534`). That is the canonical DABs multi-environment
+pattern. The branch had already built the thing that makes the branch unnecessary.
+
+Keeping it as a branch required it to stay "the same as `main`" forever, which is a permanent
+manual merge chore — and this project has two scars from exactly that contract: **I-096** (the
+hand-synced workspace tree that drifted) and **I-098** (`create-remaining-tables` running code
+16 lines behind `main`). A second target is config; a second branch is a promise to remember.
+
+#### The prod target is behaviourally unchanged, and that is the safety property
+
+Every variable's **default is the abhi value**, and `prod` keeps `default: true` and overrides
+nothing. So `bundle deploy -t prod` resolves exactly as it did before the fold.
+`app/backend/app.yaml` — prod's live config — is byte-identical to its pre-merge state.
+
+#### The merge: 6 conflicts, and `--theirs` would have been wrong on 4 of them
+
+Worth recording because the obvious resolution loses work. `main` had moved on by I-119, I-120
+and I-121, so four conflicted files carried content the branch had never seen:
+
+| File | Resolution | What blind `--theirs` would have destroyed |
+|---|---|---|
+| `src/agent/16_evaluate_agent.py` | branch (comment only) | I-120's `TIER_CLAIMS` / `states_match_tier` fix — CI would have caught it |
+| `src/setup/00_create_all_objects.py` | **`main`** | I-121's 115,499 supersession fix; the branch still asserted it as current |
+| `src/fleet/06_train_model_b.py` | branch (superset) | — |
+| `src/lakebase/06_create_depot_and_verify.py` | branch | nothing — but `--ours` would have **duplicated** the `PSYCOPG_IMPL` guard, which both sides added in different places |
+| `resources/build_fleet_exposure.job.yml` | **union** | `main`'s I-059 explanatory comment *or* the branch's `base_parameters` — each side had one |
+| `src/fleet/04b_build_fleet_exposure.py` | branch | — |
+
+#### Two App source directories, forced by a CLI bug
+
+Databricks Apps reads env/command from a literal `app.yaml` in the App resource's
+`source_code_path`. A `config:` block on the DABs `apps` resource looks like the right lever —
+it accepts `command`/`env`, takes `${var.x}` substitution, validates and deploys clean — and
+then **silently fails to write `app.yaml`** (`databricks/cli#4901`, confirmed against CLI
+v1.12.1 on 2026-09-25: the uploaded `app.yaml` was byte-for-byte prod's). Editing
+`app/backend/app.yaml` per target is not an option either — it is prod's live config, so the
+next `prod` deploy would ship free-edition settings to the live App.
+
+So: `app/backend/` (prod) and `app/backend_free_edition/` (an rsync mirror from
+`scripts/sync_free_edition_app.sh`), each with its own `app.yaml`, and the script never copies
+`app.yaml`.
+
+**The mirror drifted immediately, which is why it is now tested rather than trusted.** Folding
+the branches in revealed the mirror was carrying a **pre-I-120 `agent_actions.py` and
+`readyz.py`** — a free-edition App missing the `NaN`/422 fix and the `/readyz` eval gate, with
+nothing reporting it. "Re-run the script when `app/backend/` changes" is the same contract that
+produced I-096 and I-098. `tests/test_bundle_resources.py` now fails if the mirror is stale,
+and — from the other side — fails if `app.yaml` ever becomes identical to prod's, which would
+point the free-edition App at abhi's Lakebase project and approvers. Both mutation-checked.
+
+#### Verified
+
+**628 passed / 24 skipped** (was 626; +2 mirror guards), ruff clean. 31 bound job resources.
+`prod` still `default: true` on `dbc-7b106152`; the two targets share neither host nor
+`run_as`, pinned by the branch's own `test_bundle_root_parses_and_has_expected_targets`.
+**Nothing was deployed and no billable resource was touched** — this is a code and config
+merge, verified offline. The first real exercise is the user's own free-edition run.
+
+---
+
 ### I-121 — branch cleanup: 17 local / 9 remote down to 3 / 2, and why `--merged` was no help
 
 *Date:* 2026-09-29 · *Status:* ✅ done.
