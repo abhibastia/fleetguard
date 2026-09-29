@@ -59,7 +59,12 @@ app/frontend/dist/
 /capstone-submission-requirement.pdf
 
 # Local-only: an external review dropped into the tree, not part of the project record.
-/repo-review.md
+# What survives a review is the triage — docs/ISSUES.md for the fixes, docs/STATUS.md for the
+# session entry INCLUDING an enumerated list of what was declined and why. The review file
+# itself is an input, not a record, and keeping it in git invites a later reader to treat an
+# outside opinion as a project decision. `repo-review2.md` was committed once by mistake
+# (9e8ccf9) and removed in the next commit; the glob below is so the next one cannot be.
+/repo-review*.md
 /indexing-review.md
 
 # Generated console screenshots. Regenerate with scripts/capture_screenshots.py against a
