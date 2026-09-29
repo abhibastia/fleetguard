@@ -69,7 +69,7 @@ against 11.1% on a volume-matched placebo** (1.44×, z ≈ 2.62, p ≈ 0.009).
 | 3 Chunking + AI Search | ✅ Done — **rescoped 2026-09-23** from the post-2010 series to the fleet's own make/model pairs (I-111), then widened again to the `EXACT` + `MODEL_VARIANT` tiers (I-115). Built and torn down twice; the row count is re-measured in Run 2 |
 | 4 Model B + golden set | ✅ Done — precision 83.7% / recall 96.3%, real numbers on the evidence page |
 | 5 Lakebase + CDF | ✅ Done — loaded and latency-measured |
-| 6 OAuth wiring | ✅ Done — the auth seam (E-13) with two providers, `databricks-apps` (OBO) and `static-dev`. U2M was built, flipped live, and then **retired with Render** (E-14); it is preserved on the `deploy/render` branch |
+| 6 OAuth wiring | ✅ Done — the auth seam (E-13) with two providers, `databricks-apps` (OBO) and `static-dev`. U2M was built, flipped live, and then **retired with Render** (E-14); it is preserved at commit `2b5727a` (the deleted `deploy/render` branch) |
 | 7 Agent tools + write path | ✅ Done — seven tools; both writes (`open_defect_signal`, `watch_campaign`) execute in the app under the caller's identity, see §7.1 |
 | 8 App + external surface | ✅ Done — `fleetguard-console` on Databricks Apps, verified in a real browser 2026-09-08 and re-verified across all ten `DEMO.md` beats in Run 1 (I-113). **Stopped between the two online windows by design** |
 | 9 Model A + backtest | ✅ Done — **result is negative**, see §6 |
@@ -819,8 +819,8 @@ a state that could not be demonstrated. Removing it closes that gap rather than 
 claim the system could not back.
 
 Everything Render-specific — the blueprint, both auth flows, and the session machinery behind
-them — is preserved on the **`deploy/render`** branch, at the commit where it last ran. It is
-an archive and is never merged.
+them — is preserved at commit **`2b5727a`** (the `deploy/render` branch until 2026-09-29, when the branch was deleted in a repo-wide cleanup — the commit survives and `git branch deploy/render 2b5727a` restores it),
+the commit where it last ran. It is an archive and was never merged.
 
 **What removing it left behind is the argument for the seam.** Two of four providers went,
 along with every cookie, session store and TTL check in the codebase, and no route handler
@@ -908,7 +908,7 @@ assigned only from a fixed set of six — `all-apis`, `sql`, `offline_access`, `
 `model-serving` for the chat panel) are first-party Databricks Apps OBO scopes and are not
 offered to that app type at all. So the choice was `all-apis` or nothing.
 
-Removed with Render (`deploy/render`). Databricks Apps needs no custom app registration and
+Removed with Render (commit `2b5727a`, the deleted `deploy/render` branch). Databricks Apps needs no custom app registration and
 no scope negotiation, which is the path this project took instead.
 
 **The judges have Databricks identities in this same shared workspace** (confirmed
@@ -1123,7 +1123,7 @@ unrecognised value raises at startup rather than falling through.
 Two more providers existed until 2026-09-10 — `SessionTokenProvider` (`render-u2m`, U2M OAuth
 in a session cookie) and `AppLoginTokenProvider` (`app-login`, GitHub OAuth carrying **no**
 Databricks credential, which is why startup refused it unless `FLEETGUARD_DATA_MODE=snapshot`).
-Both were Render-only and were removed with it (`deploy/render`), taking every cookie, session
+Both were Render-only and were removed with it (commit `2b5727a`, the deleted `deploy/render` branch), taking every cookie, session
 store and TTL check in the codebase with them. **No route handler changed** — which is the
 seam's entire claim, and the first time it was tested by an actual removal.
 

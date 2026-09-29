@@ -32,6 +32,93 @@ no error and passed the obvious check.
 ---
 
 ## Tooling / process
+### I-121 — branch cleanup: 17 local / 9 remote down to 3 / 2, and why `--merged` was no help
+
+*Date:* 2026-09-29 · *Status:* ✅ done.
+
+Housekeeping, logged rather than done silently for the same reason **I-114** logged deleting 7
+dead job objects: a deletion nobody recorded looks like something that went missing.
+
+#### `git branch --merged` is actively misleading on this repo
+
+This project **squash-merges**, so a merged branch's commits are never ancestors of `main`.
+`git branch --merged main` reported **2** branches out of 17. The opposite check misleads too:
+every branch was 5–101 commits *behind* `main`, so `git diff main..<branch>` showed hundreds of
+differing files that were only `main` moving on — `deploy/render` showed 231 differing files
+while being, by ancestry, fully merged.
+
+Each branch was therefore verified by **whether its work is on `main` by content**,
+cross-referenced against this file and `docs/STATUS.md`. **Two branches had their squash commits
+reworded on merge** (`chore/remove-render`, `feature/watch-campaign-action`), so subject-matching
+returned false negatives — `chore/remove-render` was confirmed absorbed only by checking that
+`main`'s tree has no `render*` file, that `authz.py` is present, and that `main:auth/tokens.py`
+contains **0** `render-u2m`/`app-login` references. Anyone repeating this audit should not trust
+commit subjects.
+
+#### Kept — 3 local, 2 remote
+
+`main` (`ae5f3e5`), `fix/repo-review-round-5` (`8d5512b`, I-120's unmerged work), and
+`free-edition-deploy` (`e7ff1b6`, I-119's separate bundle target, 34 commits ahead — the most
+unique work of any branch, and explicitly protected in local *and* origin).
+
+#### Deleted — 14 local, 7 remote
+
+Recorded with SHAs because a branch deletion removes a pointer, not commits:
+`git branch <name> <sha>` restores any of these until `git gc` prunes unreachable objects.
+All 14 SHAs were confirmed still resolvable with `git cat-file -e` after the deletions.
+
+| Branch | SHA | Absorbed by |
+|---|---|---|
+| `fix/repo-review-round-2` | `0a67965` | `40e6864` |
+| `fix/repo-review-round-3` | `6544bcc` | `f400331` |
+| `fix/repo-review-round-4` | `2d79192` | `580f8ed` |
+| `harden/agent-rag-security-mlflow` | `7d16107` | `18621ca` |
+| `fix/i115-remainder` | `1b210d7` | `901c35f` |
+| `fix/runbook-run2-drift` | `92a5e7a` | `688a5ed` |
+| `port-free-edition-fixes` | `cb37571` | `fa8d2b0` (#18) |
+| `docs/architecture-and-diagram-cleanup` | `246c43f` | `33577d3` (#11) |
+| `feature/persona-and-dashboard-link` | `dabd057` | `02e90df` (#7) |
+| `feature/console-polish-and-launched-status-2026-09-08` | `8a941f2` | `173b996` |
+| `feature/watch-campaign-action` | `ebbf978` | content check |
+| `chore/remove-render` | `5bc1356` | content check |
+| **`deploy/render`** | `2b5727a` | **not merged — see below** |
+| **`feature/role-based-views`** | `9e7a106` | **not merged — see below** |
+
+#### Two were deleted against this project's own record, on an explicit decision
+
+`docs/STATUS.md` marked both as deliberately preserved — `deploy/render` as "preserved intact",
+and `feature/role-based-views` at `STATUS.md` verbatim: *"kept, not merged, not deleted"*. Both
+deletions were proposed, the irreversibility was flagged, and **the user reaffirmed both.**
+Recorded here so a later reader does not find those lines, conclude the branches went missing,
+and go looking.
+
+- **`deploy/render`** was pushed, so `2b5727a` is unambiguous. Every doc that named the *branch*
+  as a live location now names the *commit* instead — `CLAUDE.md`'s U2M block,
+  `ARCHITECTURE.md` ×4, `ENHANCEMENTS.md` E-12, `STATUS.md`'s Phase 8a note. Historical session
+  prose that says "preserved on `deploy/render`" as a record of what was true at the time was
+  left alone; it is history, not state.
+- **`feature/role-based-views` was never pushed**, so deleting it was the only genuinely
+  irreversible step here. **Archived as tag `archive/role-based-views` before deletion** — tags
+  do not appear in `git branch`, so the repo still reads as 3 branches while the 3 commits stay
+  reachable. What would have been lost: depot enforcement via `fleetguard_depot_assignment`,
+  `tests/test_role_scoping_live.py` (211 lines), scoping/router changes.
+
+**Checked before deleting, and it is the reason this is a tolerable loss: the findings already
+live on `main` even though the code does not.** **I-070** — RLS on `fleetguard_vehicle`
+overriding app-level scoping intent, the branch's actual lesson — is documented in this file,
+and `scripts/run_local_static_dev.sh` was cherry-picked to `main` long ago as `c5b3af0`. The
+implementation went; the knowledge did not.
+
+#### Verified
+
+`git branch` → 3. `git branch -r` → `origin/HEAD`, `origin/main`,
+`origin/free-edition-deploy`. `main` unmoved at `ae5f3e5`. All 14 deleted SHAs plus the archive
+tag still resolvable. **626 passed / 24 skipped, ruff clean** after the doc edits (`tests/pipelines`'
+53 Spark tests still cannot run on this machine — `Bad CPU type in executable`, x86-only `java`).
+No code, no workspace object and no billable resource was touched.
+
+---
+
 ### I-120 — fifth external review: 2 of 26 findings actionable; the docs were manufacturing a third
 
 *Date:* 2026-09-29 · *Status:* ✅ resolved on `fix/repo-review-round-5`.

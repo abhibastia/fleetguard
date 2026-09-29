@@ -698,7 +698,8 @@ as "offline". What that forfeits is the RAG demonstration, which is a graded cat
 > The supported ways to run FleetGuard are **Databricks Apps** (`fleetguard-console`, the demo
 > surface) and a **local server** (`scripts/run_local_static_dev.sh`). The Render deployment and
 > both of its auth flows (`render-u2m` U2M OAuth, `app-login` GitHub) were removed from `main`
-> and preserved intact on the **`deploy/render`** branch.
+> and preserved intact at commit **`2b5727a`** (the `deploy/render` branch until it was
+> deleted 2026-09-29).
 > `FLEETGUARD_AUTH_MODE` now accepts only `databricks-apps` or `static-dev`.
 > **This closes former "Next" item 0** — the unconfirmed `render-u2m` browser login — by
 > removing the thing that was blocked. Detail in `ARCHITECTURE.md` §8a and `ENHANCEMENTS.md` E-12.
@@ -1356,6 +1357,7 @@ than discovering it mid-demo.
 | **Today** | 2026-09-29 · **submission 4 October** · **Run 2 targeted 2–3 October** |
 | **`main`** | `fa8d2b0`, pushed to `origin/main`, **CI green** (both jobs) |
 | **Unmerged** | **`fix/repo-review-round-5`** — fifth review triaged (I-120). Offline only; see below |
+| **Branches** | **3 local / 2 remote, deliberately** — `main`, `fix/repo-review-round-5`, `free-edition-deploy`. 14 were deleted 2026-09-29 (**I-121**, SHAs recorded there). `deploy/render` and `feature/role-based-views` went too, against this file's own "preserved"/"not deleted" notes, on an explicit decision — the latter survives as tag `archive/role-based-views`. Docs naming `deploy/render` as a live location now name commit `2b5727a` |
 | **Working tree** | clean |
 | **Billable resources running** | **none** — see "What is costing money" below |
 | **Tests** | **679 passed / 24 skipped** (backend, ~45 s), **153** vitest, ruff + typecheck clean — *679 is 667 + I-120's 12, arithmetic not a fresh CI reading; the 614 non-Spark half was re-run and matches. Count it yourself if it matters* |

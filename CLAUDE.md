@@ -245,8 +245,11 @@ post-routing invariants — if one fires, the split logic is broken, not the sou
 **Databricks U2M OAuth (custom app integration — confirmed 2026-08-31):**
 > **The console this was built for no longer exists.** It served the Render-hosted surface
 > (§8.7), which sat outside the Databricks Apps ingress and so had to obtain a user token
-> itself. Render was removed 2026-09-10; the implementation is on the **`deploy/render`**
-> branch. **The facts below stay** — they were each verified live, they apply to any custom
+> itself. Render was removed 2026-09-10; the implementation is at
+> commit **`2b5727a`**. *That was the `deploy/render` branch until 2026-09-29, when it was
+> deleted in a repo-wide branch cleanup (I-121) — the commit survives, and
+> `git branch deploy/render 2b5727a` restores it.* **The facts below stay** — they were each
+> verified live, they apply to any custom
 > OAuth app integration, and the scope finding in particular is why this path was abandoned.
 > Nothing on `main` uses U2M today: Databricks Apps supplies the token via OBO.
 - This is a *different* flow from Apps OBO above and from the M2M `client_credentials`
