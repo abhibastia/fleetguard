@@ -11,6 +11,20 @@
 #   postgres       -> generate_database_credential + get_endpoint (every Lakebase read/write)
 #   sql            -> SQL warehouse, for the routes that query UC rather than Postgres
 #   model-serving  -> POST /serving-endpoints/.../invocations, from the chat panel
+#   vector-search  -> get_index, for /api/readyz's index check (ADDED 2026-09-30, I-123)
+#
+# `vector-search` was missing until the first live run of `/api/readyz`, on free edition. The
+# index check is not optional decoration: it exists because an index can report `ready: true`
+# while being SHORT (I-105 — a sync silently restarting from zero answers every query without
+# erroring). Without the scope it returned
+# `PermissionDenied: Provided OAuth token does not have required scopes: vector-search` and,
+# because that check fails closed, **`/api/readyz` could never return 200 through the App on
+# either target.** A readiness endpoint structurally incapable of going green is worse than
+# none, because the first person to see the 503 debugs the index instead of the scope list.
+#
+# Proved to be the App's cap rather than the caller's token: the *same* bearer token returned
+# HTTP 200 calling `/api/2.0/vector-search/indexes/...` directly, and 403 through the App. The
+# Apps ingress downscopes the forwarded token to this list.
 #
 # TWO THINGS THIS FILE STILL CANNOT DO, both from I-086 — declaring the scopes is necessary
 # and not sufficient:
@@ -51,6 +65,7 @@ resources:
         - postgres
         - sql
         - model-serving
+        - vector-search
 
       lifecycle:
         # `bundle destroy` would take the demo with it. The App is the primary demoable
