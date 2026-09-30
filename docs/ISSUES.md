@@ -332,6 +332,36 @@ thing. **The fix, for after 4 October:** add `data_mode` and `snapshot_captured_
 `api.me()`, exactly as Home.tsx already reads `dashboard_url`. `api.health()` then has no caller
 inside the App at all.
 
+##### The live agent on v8 — exposure, retrieval and citations all verified
+
+Rebuilt to **v8** and deployed. Verified with **raw REST**, because the CLI's
+`serving-endpoints query` truncates this endpoint's response to `{"id","object"}` with no
+`output` (I-124).
+
+| question | result |
+|---|---|
+| *"Which fleet vehicles does recall 17V629000 affect?"* | **25 vehicles across 22 depots, all EXACT**, in 8.3 s warm — and it volunteered that there were no `MODEL_VARIANT` matches to flag. Matches the documented expected answer exactly |
+| *"Search complaints about brake failures"* | **five real narratives, each with its complaint id** — `738214`, `729017`, `667249`, `782129` |
+
+The second one is the one the index exists for: the 179,347-chunk index is genuinely serving the
+agent, not merely reporting `ready`.
+
+**It also settles I-124 from the live side.** Every id the agent emitted is **six digits**. The
+old scorer regex was `\b\d{8,9}\b`, so it would have matched **none** of them — the scorer could
+not pass, exactly as the static reasoning concluded, and `CITATION_RE` matches all four.
+
+##### I-050/I-092 recurred for the fifth time, exactly as the runbook says to assume
+
+After `deploy_agent`: v8 serving at 100%, **v7 still `DEPLOYMENT_READY` at 0% traffic** (two
+containers billing for one agent), and **v8 came up with `scale_to_zero_enabled: false`** — the
+deploy resets it every single time. The runbook's instruction is *"assume it; do not check
+hopefully"*, and that is now 5 for 5 (v1, v4, v5, v6→v7, v7→v8).
+
+Fixed with one `update-config` carrying v8's **live** `environment_vars` verbatim rather than a
+remembered set — dropping them silently misfiles MLflow tracing, which is the reason the runbook
+says to rebuild the block from `get` rather than retype it. Settled: **v8 only, `stz=true`, 100%
+traffic.**
+
 ##### The mirror-drift guard fired, correctly, on `corpus.json`
 
 Refreshing `corpus.json` failed CI on `test_the_free_edition_app_mirror_has_not_drifted` — the guard
