@@ -110,36 +110,53 @@ print("silver_complaint_chunk_indexed rebuilt (fleet make/model scope, EXACT + M
 # MAGIC %md
 # MAGIC ## Verify
 # MAGIC
-# MAGIC **The exact-equality assert is gone, and that is a downgrade made on purpose (I-115).**
-# MAGIC The old check was `n_chunks == 115_499`, cross-checked against a live independent count
-# MAGIC and matching I-035's 2026-08-31 measurement exactly — a genuinely strong guard, and the
-# MAGIC reason this scope was known to reproduce rather than merely look plausible.
+# MAGIC **MEASURED 2026-09-30 in Run 2, and the exact-equality assert is back (I-126).** It had
+# MAGIC been downgraded to a bounded floor/ceiling check at I-115, deliberately: widening the join
+# MAGIC to `MODEL_VARIANT` invalidated the old `n_chunks == 115_499` constant, the index endpoint
+# MAGIC and warehouse are torn down between the two submission windows, and writing a guessed
+# MAGIC replacement would have been exactly the failure this project keeps logging — a
+# MAGIC plausible-looking figure asserted as a measured one.
 # MAGIC
-# MAGIC Widening to `MODEL_VARIANT` changes that number, and **it has not been measured yet** —
-# MAGIC the index endpoint and the warehouse are both torn down between the two submission
-# MAGIC windows. Writing a guessed constant here would be exactly the failure this project keeps
-# MAGIC logging: a plausible-looking figure asserted as a measured one.
+# MAGIC | tier | chunks |
+# MAGIC |---|---|
+# MAGIC | `EXACT` | **115,499** |
+# MAGIC | `MODEL_VARIANT` | **63,848** |
+# MAGIC | **total** | **179,347** |
 # MAGIC
-# MAGIC So the guard degrades to a **bounded** one until the real figure exists:
+# MAGIC **Two independent derivations agree, which is why this is pinned rather than merely
+# MAGIC recorded.** The predicate below was run directly against `abhi` as an ad-hoc query
+# MAGIC *before* this job, and the job then printed the same three numbers. That is the I-035
+# MAGIC discipline: the figure four documents were waiting on is not the single output of the code
+# MAGIC it is supposed to be checking.
 # MAGIC
-# MAGIC - **Floor `115,499`** — variant matching is a strict superset of exact matching, so the
-# MAGIC   count can only go up. Below the floor means the widened predicate dropped rows, which
-# MAGIC   would be a bug, not a scope change.
-# MAGIC - **Ceiling `1,000,000`** — a blown-anchor detector, not a precision check. If
-# MAGIC   `LIKE model || ' %'` ever loses its word-boundary anchor it degenerates towards
-# MAGIC   matching the whole corpus (`silver_complaint_chunk` is ~2.2M rows), and that must fail
-# MAGIC   loudly rather than quietly commission a 2M-vector index at a different price tier.
+# MAGIC Two properties worth keeping:
 # MAGIC
-# MAGIC **Run 2 must replace this with the measured number** — recorded in `docs/STATUS.md`
-# MAGIC alongside the EXACT/MODEL_VARIANT split this cell prints. The split is the informative
-# MAGIC part: I-030 measured `MODEL_VARIANT` outnumbering `EXACT` roughly 3:1 on
-# MAGIC `gold_fleet_exposure`, so a variant share near zero here would mean the predicate is not
-# MAGIC doing what it claims.
+# MAGIC - **`EXACT` reproduces I-035's 2026-08-31 figure of 115,499 to the row.** The old scope is
+# MAGIC   exactly reproducible, which is what makes the widened total trustworthy rather than
+# MAGIC   merely plausible — and it means a future regression in the *variant* half shows up as a
+# MAGIC   change in the total while `EXACT` stays put, localising the fault.
+# MAGIC - **The cross-workspace prediction held.** Free edition measured `116,252 + 64,577 =
+# MAGIC   180,829` (I-123), and the reasoning recorded in `docs/RUNBOOK.md` — smaller corpus
+# MAGIC   (2,240,289 vs 2,249,908 complaints), 47 vs 49 make/model pairs — predicted abhi would
+# MAGIC   land *"near 180K, a few percent lower"*. Actual: **0.82% lower**.
+# MAGIC
+# MAGIC The `MODEL_VARIANT` tier is **35.6%** of the corpus here. That is a much smaller share than
+# MAGIC I-030's ~3:1 variant-to-exact ratio on `gold_fleet_exposure`, and the difference is real
+# MAGIC rather than a bug: exposure is counted per *vehicle* and the fleet's single most numerous
+# MAGIC model (2,116 F-250s) matches only as a variant, while chunks are counted per *complaint*
+# MAGIC and NHTSA's exact spellings dominate the narrative corpus. **Do not "correct" one of these
+# MAGIC two numbers to match the other** — they measure different populations.
 
 # COMMAND ----------
 
-EXACT_ONLY_FLOOR = 115_499  # I-035/I-111's measured exact-only scope; variants only add
-BLOWN_ANCHOR_CEILING = 1_000_000  # see the markdown above — a broken LIKE anchor, not a scope
+# Measured in Run 2 on `abhi` (2026-09-30, I-126), and cross-checked against an independent
+# ad-hoc count of the same predicate before this job ran. The per-tier constants are pinned as
+# well as the total: a regression that moved rows *between* tiers while preserving the sum would
+# otherwise pass, and that is precisely the I-115 failure — every F-250 silently in the wrong
+# bucket while the headline number looked right.
+EXPECTED_EXACT = 115_499  # unchanged since I-035, 2026-08-31 — the old scope reproduces exactly
+EXPECTED_VARIANT = 63_848  # the I-115 widening; 35.6% of the corpus
+EXPECTED_TOTAL = EXPECTED_EXACT + EXPECTED_VARIANT  # 179,347
 
 tiers = {
     r["match_basis"]: r["n"]
@@ -161,21 +178,26 @@ print(f"  EXACT       : {tiers.get('EXACT', 0):,}")
 print(f"  MODEL_VARIANT: {tiers.get('MODEL_VARIANT', 0):,}")
 print(f"make/model    : {n_pairs}")
 print(f"makes         : {n_makes}")
-print(f"\nRECORD {n_chunks:,} IN docs/STATUS.md — this is the number the index will build.")
+print(f"\n{n_chunks:,} chunks — this is the number the index builds (pinned, I-126).")
 
-assert n_chunks >= EXACT_ONLY_FLOOR, (
-    f"got {n_chunks:,}, below the exact-only scope of {EXACT_ONLY_FLOOR:,}. Variant matching "
-    "is a superset of exact matching, so this means the predicate DROPPED rows — a bug in "
-    "the widened join, not a smaller scope."
+# Per-tier first, then the total. A failure in one tier names itself instead of leaving the
+# operator to work out which half of the predicate moved.
+assert tiers.get("EXACT", 0) == EXPECTED_EXACT, (
+    f"EXACT is {tiers.get('EXACT', 0):,}, expected {EXPECTED_EXACT:,}. This half has been "
+    "stable since I-035 (2026-08-31) across a full silver rebuild and the I-115 widening, so a "
+    "change here is the fleet roster or the complaint corpus moving, not this predicate. Check "
+    "gold_fleet_vehicle (expect 20,000 vehicles / 47 make-model pairs / 15 makes) before "
+    "re-pinning."
 )
-assert n_chunks <= BLOWN_ANCHOR_CEILING, (
-    f"got {n_chunks:,}, above the {BLOWN_ANCHOR_CEILING:,} sanity ceiling. The word-boundary "
-    "anchor on `LIKE model || ' %'` has probably broken — check it before building an index "
-    "at this scale."
+assert tiers.get("MODEL_VARIANT", 0) == EXPECTED_VARIANT, (
+    f"MODEL_VARIANT is {tiers.get('MODEL_VARIANT', 0):,}, expected {EXPECTED_VARIANT:,}. "
+    "**Zero means this is still the old exact-only scope** — the failure I-115 was filed for, "
+    "in which all 2,116 of the fleet's F-250s are absent from the retrieval corpus and the "
+    "agent answers about them from whatever is left. Any other value means the word-boundary "
+    "anchor on `LIKE model || ' %'` changed behaviour; check it before building an index."
 )
-assert tiers.get("MODEL_VARIANT", 0) > 0, (
-    "no MODEL_VARIANT chunks at all. I-030 measured variants outnumbering exact matches ~3:1 "
-    "on gold_fleet_exposure, and every one of the fleet's 2,116 F-250s matches only as a "
-    "variant — zero here means this is still the old exact-only scope (I-115)."
+assert n_chunks == EXPECTED_TOTAL, (
+    f"got {n_chunks:,} chunks, expected {EXPECTED_TOTAL:,} — and both tiers matched "
+    "individually, so this is arithmetic, not scope. Investigate rather than re-pinning."
 )
-print(f"OK — {n_chunks:,} chunks, both tiers present (I-030, I-111, I-115)")
+print(f"OK — {n_chunks:,} chunks, both tiers exact (I-030, I-111, I-115, I-126)")
