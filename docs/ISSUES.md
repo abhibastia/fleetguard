@@ -124,10 +124,25 @@ message that names a cause contradicted by the endpoint's own state. **Third occ
 2026-09-23, this one). The recorded guidance holds and is being followed: **wait — do not
 delete-and-recreate.** Deletion was tried during I-112 and did not clear it; inaction did.
 
-At +16 min this is still inside I-112's observed ~25 min window, so it is on track rather than
-anomalous. Recorded while in progress specifically so the elapsed time is taken from the clock
-rather than reconstructed afterwards — the first draft of this paragraph said "+28 min" from a
-misread, and the wrong figure would have turned a normal stall into a new finding.
+**SELF-CLEARED at ~21 min, with no action taken — the third time inaction was the fix.** The
+progression is worth recording because it is the only visible evidence anything is happening at
+all, and it is entirely in the `message` field rather than in `indexed_row_count`:
+
+| elapsed | `indexed_row_count` | `message` |
+|---|---|---|
+| 0–19 min | `None` | *"Delta sync index creation is pending **endpoint provisioning**"* |
+| ~20 min | `0` | *"Delta sync Index creation is **pending**"* |
+| ~21 min | `0` | *"Index is currently in the process of **syncing initial data**"* |
+
+**So `indexed_row_count` is the wrong thing to watch during the stall.** It reads `None` and then
+`0` throughout, which is indistinguishable from a dead index; the state machine only shows up in
+the message string. The sync pipeline's event list stays at exactly one event (*"created
+pipeline"*) through all three stages, so it is no help either. A future operator should watch the
+**message**, and should treat `None` → `0` as the first real sign of life.
+
+Recorded while in progress specifically so the elapsed time came from the clock rather than being
+reconstructed afterwards — the first draft of this paragraph said "+28 min" from a misread, which
+would have turned a normal stall into a new finding.
 
 **What made this cheap rather than costly:** the I-111 rescope. At the old 1.75M-chunk scope a
 stall plus a rebuild was most of a working day (I-105 burned ~7 h to 62% and was abandoned). At
