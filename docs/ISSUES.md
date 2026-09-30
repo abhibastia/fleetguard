@@ -255,6 +255,31 @@ out, and `/readyz` is green without it.
 - `console built at unset` — `FLEETGUARD_GIT_SHA` is not set in free edition's `app.yaml`. Cosmetic
   on a test target; abhi's release provenance depends on it, so worth a look before Run 2.
 
+#### Why free edition indexed 180,829 where abhi recorded 115,499 — it is the widening, not a divergence
+
+Asked directly, and worth pinning because the two numbers invite the wrong conclusion. Decomposed
+via the `match_basis` column the builder writes:
+
+| | abhi | free edition |
+|---|---|---|
+| index rows | **115,499** | **180,829** |
+| `EXACT` chunks | 115,499 | **116,252** |
+| `MODEL_VARIANT` chunks | *never built* | **+64,577** |
+| `bronze_complaints` | 2,240,289 | **2,249,908** |
+| fleet make/model pairs | 47 | **49** |
+
+**abhi's figure is EXACT-only** (the I-111 scope). Free edition was built after I-115 widened the
+join, so on the *same basis* the two agree to within **0.65%** and the entire ~65K gap is
+`MODEL_VARIANT`. The 753-chunk residual is a fresher NHTSA snapshot — free edition holds 9,619
+more complaints, and since VIN generation is seeded from real complaint VINs, that also moves the
+generated roster from 47 to 49 make/model pairs.
+
+**Consequence for Run 2, now written into `docs/RUNBOOK.md` step 1.2/3.1:** abhi's rebuild should
+land near **180K, a few percent under free edition's**. The runbook previously said only
+"re-derive it from what the step prints", which gives a ~115K result no way to look wrong — and
+~115K would mean the `EXACT`-only join is still in force and all 2,116 F-250s are still excluded,
+the precise failure I-115 exists to prevent.
+
 #### Verified
 
 **628 passed / 24 skipped**, ruff clean. Bundle `validate --strict` clean; `summary` showed no
