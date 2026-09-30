@@ -14,6 +14,7 @@ no error and passed the obvious check.
 
 | ID | Area | Issue | Status |
 |---|---|---|---|
+| I-128 | Evidence | **`signals-*.png` was a screenshot of the Home page**, captioned "Emerging signals — the proactive half", in every run and in the submission zip. `#/signals` is not a route — the hash router falls through to Home — so DEMO.md beat 2 had no screenshot evidence while appearing to. Nothing errored: Home renders cleanly, so every existing check passed. Fixed to `#/emerging`, plus a rendered-content fingerprint guard that catches *any* silent route fallback, mutation-checked. | ✅ resolved |
 | I-127 | Platform / AI Search | **The AI Search endpoint vanished one minute after its index began syncing** — ONLINE with `num_indexes: 1` at 22:13, absent from `list-endpoints` at 22:15 (3 confirming reads). No delete was issued; `provision_search.sh` contains no teardown. Left a torn state: the UC table entry and a `RUNNING` sync pipeline both outlived the endpoint, and `/api/readyz` would have called it merely SHORT. `delete-index` cleans all three up silently without needing the endpoint. Distinct from I-112 (stall) and I-105 (sync restart); the only signal is polling `get-endpoint` by name. | **watch** — cause unknown |
 | I-126 | Run 2 / Provenance | **`/api/readyz` reported `console built at unset` on the submission deployment** — the release check's whole purpose, answered with a shrug. Fixed with a two-commit release (real changes, then a one-line stamp naming them); the DABs `config:` block cannot supply it (cli#4901), so it must be re-stamped by hand on any future release. Also: the `vector-search` scope gap was **not** free-edition-specific, and its sticky-consent half needs a consent DELETE + incognito. Step 3.0's count pre-verified independently at **179,347** (`EXACT` reproducing I-035's 115,499 exactly). | **in progress** |
 | I-125 | Evidence | **The Assistant screenshot is no longer deferred** — Run 2 is the only window in which the agent endpoint and the AI Search index are live together, and the index is deleted again immediately afterwards, so this image is the only evidence a reviewer gets that retrieval works. Captured by `capture_screenshots.py` (no frontend change; every selector already existed). **Verified at step 3.5.** | **open** — pending Run 2 step 3.5 |
@@ -35,6 +36,64 @@ no error and passed the obvious check.
 ---
 
 ## Tooling / process
+### I-128 — every screenshot run shipped Home labelled "Emerging signals", and reported success
+
+*Date:* 2026-09-30 · *Status:* ✅ fixed, guarded, mutation-checked. **SILENT** — nothing errored,
+and the manifest listed the view as captured.
+
+Found while adding a walkthrough recording: checking the routes for the video's beat list turned
+up `#/cost`, which does not exist — and checking *that* properly meant reading
+`App.tsx::viewFromHash()`, which revealed the one already in `VIEWS`.
+
+#### The bug
+
+```
+if (h === "emerging") return { name: "signals" };
+...
+return { name: "home" };      // every unknown hash
+```
+
+The internal View is named `signals`; the **URL** is `#/emerging`. There is no `signals` case.
+`capture_screenshots.py` asked for **`#/signals`**, which fell through to Home.
+
+So `signals-dark.png` and `signals-light.png` were **screenshots of the Home page**, captioned
+*"Emerging signals — the proactive half"*, in every run and in the submission zip. Verified
+empirically rather than by reading the router: the rendered `<main>` text at `#/signals` is
+**byte-identical** to `#/home` and differs from `#/emerging`.
+
+**Nothing failed.** Home renders cleanly and shows no `.skeleton`, so `wait_for_content` passed,
+the file was written, and `manifest.json` recorded the view as captured. This is the same shape as
+the script's original bug — twenty pixel-perfect screenshots of loading skeletons, reported as
+success — and its docstring already draws the right conclusion: *a screenshot of a spinner is
+worse than no screenshot, because it still looks like evidence.* A screenshot of **the wrong
+view** is worse again, because a spinner at least looks wrong.
+
+**What it cost:** DEMO.md beat 2 — the proactive-detection half, one of the two things the
+project claims as novel — had **no screenshot evidence at all**, while appearing to have some.
+
+#### The guard, and why it is a content check rather than a route check
+
+Asserting the route list against the router would catch this instance and nothing else. **Any**
+unknown hash falls through to Home silently, so the general failure is *"this view rendered a page
+another view already rendered"* — which a fingerprint of `<main>`'s text detects regardless of
+cause. Loud on stderr, non-fatal: the images are still worth having while someone reads the line.
+
+**Mutation-checked**, per the discipline this project applies to every guard: re-pointing the
+route at `#/signals` makes it fire (*"signals (#/signals) rendered the SAME PAGE as home"*), and
+restoring the fix silences it. The corrected `signals-dark.png` was confirmed to differ from
+`home-dark.png` on disk.
+
+#### Two smaller things found in the same pass
+
+- **`#/cost` does not exist.** Beat 7's cost figures are rendered by `ServiceCampaigns.tsx`, which
+  calls `costBreakdown()`, so the walkthrough uses `#/launched`. Checked before writing it, which
+  is the only reason it is not a second instance of this bug.
+- **`--themes ""` produced files called `signals-.png`.** My own regression, introduced minutes
+  earlier: the video loop skipped empty theme names and the stills loop did not. An empty theme
+  list must mean *none*, not *one theme whose name is the empty string*.
+
+---
+
 ### I-127 — the AI Search **endpoint itself vanished** mid-sync, leaving an orphaned index
 
 *Date:* 2026-09-30 · *Status:* **watch** — cleaned up and retried; cause unknown, not reproduced yet.
