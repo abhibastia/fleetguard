@@ -143,11 +143,52 @@ embedded, indexed and hybrid-searched (BM25 + vector), and surfaced through the 
 `search_complaints` tool into the application workflow. `silver_complaint_chunk_indexed`
 (fleet make/model scope) is in Unity Catalog now; **the AI Search index itself is deleted**
 to cap billing between verification runs, so the retrieval half cannot be demonstrated live
-until it is rebuilt (~27-39 min at the fleet scope, down from ~7 h at the old 1.75M-chunk
-scope, I-041/I-111). `scripts/provision_search.sh --create` is the rebuild, idempotent and
+until it is rebuilt. **Measured end to end on 2026-09-30: ~21 min of I-112 stall in which nothing
+appears to happen, then ~52 min of syncing — budget ~75 min, not the ~27-39 min this line used to
+claim** (I-126, I-127; the older figure was the 115,499-chunk scope). `scripts/provision_search.sh --create` is the rebuild, idempotent and
 polling for I-105's restart-from-zero.
 
-**Retrieval quality is measured in Run 2, and the harness is committed now.** Until 2026-09-24
+#### Retrieval quality — MEASURED 2026-09-30 on the shipped 179,347-chunk index
+
+`ops_rag_eval`, run `2026-09-30T23:34:06Z`, seed `20260924`, k=10. Published as measured, per the
+rule I-049 and I-111 set — and in this case the result is good, which is not a reason to present
+it any differently.
+
+| family | type | probes | hit rate | Recall@10 | P@10 | MRR | relevant pool |
+|---|---|---|---|---|---|---|---|
+| known-item | **HYBRID** | 50 | **100.0%** | **1.000** | 0.100 | 0.532 | 1 |
+| known-item | ANN | 50 | 34.0% | 0.340 | 0.034 | 0.234 | 1 |
+| topical | **HYBRID** | 48 | **83.3%** | 0.064 | **0.371** | **0.627** | 500 |
+| topical | ANN | 48 | 70.8% | 0.036 | 0.354 | 0.609 | 500 |
+
+**Read known-item first — it is the floor test, and it passes perfectly.** The query text is
+literally in the corpus, so anything below ~0.9 would mean the *index* is wrong rather than the
+retriever. HYBRID found the source chunk for **50 of 50** probes. `P@10 = 0.100` is not a weak
+score here: exactly one chunk is relevant out of ten returned, so 0.1 **is** the ceiling.
+
+**HYBRID beats ANN on every metric in both families**, which is the first evidence this project
+has that the subtype choice is load-bearing rather than a configuration preference. The
+known-item gap is the striking one: **pure vector search fails to retrieve the exact source chunk
+two times in three (0.340) even when the query text is that chunk.** It also settles the check
+I-040 flagged — if HYBRID and ANN had returned identical results the subtype would not have taken
+and every number above would be void. They differ by a factor of three.
+
+**`relevant_pool_size` is why topical Recall@10 = 0.064 is not a failure.** The median relevant
+pool is 500 chunks and k is 10, so recall is bounded near the floor by construction; the notebook
+publishes the pool beside it precisely so a correct small number is not read as broken retrieval.
+**P@10 and MRR are this family's real metrics** — 0.371 means roughly 4 of 10 returned chunks are
+genuinely about the campaign's defect, and MRR 0.627 means the first relevant hit is typically at
+rank 1 or 2.
+
+**The one soft spot, stated rather than buried:** known-item MRR is 0.532 while its recall is
+1.000. The correct chunk is always retrieved but frequently not ranked first — retrieval is
+excellent, ranking is middling. Nothing downstream depends on rank-1 (the agent reads the whole
+top-k), so this is a real limitation with no current consequence, not a defect.
+
+All three I-040 behavioural checks passed in the same run: `columns_to_sync` complete,
+`any_harm` filter effective, HYBRID differing from ANN.
+
+**The harness was committed before any of this was measured.** Until 2026-09-24
 the strongest claim available here was *"AI Search is implemented"* plus a three-query
 behavioural probe — which shows the feature is wired up, not that it works.
 `src/search/28_rag_eval.py` (job `fleetguard-rag-eval`) scores two probe families over the
