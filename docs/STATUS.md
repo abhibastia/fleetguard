@@ -1493,6 +1493,15 @@ Run 2 step already committed to. Do not "fix" anything that looks unapplied:
 3. **The index can be `ready` and SHORT.** I-105's sync restarted from zero and a partial index
    answers every query without erroring. `provision_search.sh` polls for a *drop*, not a plateau;
    `/api/readyz` compares `indexed_row_count` against the source table.
+3a. **The AI Search index has THREE distinct failure modes and they need different responses.**
+   Confused for each other, two of them cost hours. Watch `get-endpoint` *and* the index
+   `message`, never `indexed_row_count` alone:
+   | mode | signal | response |
+   |---|---|---|
+   | **I-112** stall on a fresh endpoint | rows `None`/`0`, message stuck on *"pending endpoint provisioning"*, sync pipeline has one event | **wait.** Cleared itself 3/3 times, at ~5/~21/~17 min. Delete-and-recreate was tried and did *not* clear it |
+   | **I-105** sync restart | `indexed_row_count` *decreases* | fatal to that attempt |
+   | **I-127** endpoint vanishes | `get-endpoint <name>` → not found, while the UC entry and sync pipeline survive | `delete-index` (clears all three orphans, silently, without the endpoint) then recreate |
+   `provision_search.sh` now detects all three and prints the recovery command for each.
 4. **Fail-closed action envelopes are the one change with a real failure mode.** If an mlflow
    wrapper omits item ids on the live payload, **every agent write silently stops**. It logs
    loudly on purpose — grep the App logs for `dropping an action envelope` after the first agent
