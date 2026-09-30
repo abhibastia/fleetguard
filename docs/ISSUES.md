@@ -110,7 +110,7 @@ preserving the sum would otherwise pass, which is exactly the I-115 failure.
 
 ##### I-112 recurred — third occurrence, same signature, and the endpoint contradicts the index
 
-Created 21:51 UTC. At **+28 min**: `indexed_row_count` still `None`, `ready: false`, message
+Created 21:52 UTC. At **+16 min**: `indexed_row_count` still `None`, `ready: false`, message
 *"Delta sync index creation is pending endpoint provisioning."*
 
 The endpoint says otherwise. `get-endpoint fleetguard-vs` reports `state: ONLINE` with
@@ -124,8 +124,10 @@ message that names a cause contradicted by the endpoint's own state. **Third occ
 2026-09-23, this one). The recorded guidance holds and is being followed: **wait — do not
 delete-and-recreate.** Deletion was tried during I-112 and did not clear it; inaction did.
 
-This occurrence is **longer** than either previous one (~25 min and ~5 min observed), so the "~25
-min" in I-112 should be read as an observation, not a bound.
+At +16 min this is still inside I-112's observed ~25 min window, so it is on track rather than
+anomalous. Recorded while in progress specifically so the elapsed time is taken from the clock
+rather than reconstructed afterwards — the first draft of this paragraph said "+28 min" from a
+misread, and the wrong figure would have turned a normal stall into a new finding.
 
 **What made this cheap rather than costly:** the I-111 rescope. At the old 1.75M-chunk scope a
 stall plus a rebuild was most of a working day (I-105 burned ~7 h to 62% and was abandoned). At
