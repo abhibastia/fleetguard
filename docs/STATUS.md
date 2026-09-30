@@ -1387,7 +1387,7 @@ What is on the branch, all offline, no workspace deploy:
 
 | | |
 |---|---|
-| `/api/readyz` fails if the **served** agent version carries no `eval_hard_gates` tag | Closes the evaluated-artefact-vs-deployed-artefact loop I-118 opened. **It will read `down` between runbook steps 3.3 and 3.3a — that is correct, not a bug to route around** |
+| `/api/readyz` fails if the **served** agent version carries no `eval_hard_gates` tag | Closes the evaluated-artefact-vs-deployed-artefact loop I-118 opened. **CORRECTED 2026-09-30 (I-126): it reads `down` only for a client the Apps ingress has not downscoped — i.e. a LOCAL `run_local_static_dev.sh` server, where it was confirmed to report `NEVER EVALUATED`. Through the App it is inert regardless of client**, because the registry read needs scope `mlflow`, which is not assignable; it reports `eval gates unverified (PermissionDenied)` and stays 200 |
 | `states_match_tier` now asserts rather than substring-matches | *"this is not an exact or variant match"* used to score as stating a tier |
 | `pydantic.ValidationError` from model-authored params → **422, not 500** | Found writing the test below; `/api/chat` 500'd on a blank `component` |
 | `TestSeriesKeyIsNeverNull` + a corrected comment in `26_add_defect_signal_idempotency.py` | The stale comment had made **two** reviews file the same disproven "`series_key IS NULL` hole" |
@@ -1470,7 +1470,7 @@ Run 2 step already committed to. Do not "fix" anything that looks unapplied:
 | Agent: write-batch exclusivity, evidence TTL, sentinel stripping, untrusted-data markers, prompt rules 9–10 | **3.3** — `agents.deploy()` |
 | Index source widened to `EXACT` + `MODEL_VARIANT`; the RAG evaluation | **3.0 / 3.1a** |
 | Console: fail-closed action envelopes, `NaN` guard, depot containment, `/api/readyz` (incl. I-120's eval-gate check and the 422-not-500 fix) | **3.2** — `bundle run fleetguard_console` |
-| Evaluation hard gates + model-version tagging; I-120's `states_match_tier` fix | **3.3a** — **and `/api/readyz` reads `down` until this step runs, by design** |
+| Evaluation hard gates + model-version tagging; I-120's `states_match_tier` fix | **3.3a** — and a **locally-run** `/api/readyz` reads `down` until this step runs, by design. **Not through the App** — see the corrected row above (I-126) |
 | I-099's loud stale-snapshot fail (`01_download_flat_files.py`) | Only on the next *ingest* — not exercised in Run 2 at all |
 
 #### Three things Run 2 owes, and nobody else can produce
