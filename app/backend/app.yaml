@@ -60,12 +60,16 @@ env:
   # The DABs `config:` block cannot supply this dynamically — it accepts `env` and `${var.x}`,
   # validates, deploys clean, and then silently fails to write `app.yaml` at all
   # (databricks/cli#4901, CLI v1.12.1). So a hand-maintained literal is the only mechanism that
-  # works, and it must be re-stamped by hand on any future release.
+  # works, and it must be re-stamped by hand whenever anything the console SERVES changes —
+  # `fleetguard_api/` code, the built bundle under `fleetguard_api/console/`, or `corpus.json`.
+  # Re-stamped once already: 80633b42be… -> b44339c7e6… when Run 2's measured chunk count landed
+  # in `corpus.json` (Home's scale strip). Commits that touch only `docs/` do NOT invalidate it —
+  # the claim is about the console, not about the tree.
   #
   # `readyz.py` falls back to `DATABRICKS_BUNDLE_GIT_COMMIT` then to the string `unset`; Apps
   # does not inject the former, which is why the fallback was never reached.
   - name: FLEETGUARD_GIT_SHA
-    value: 80633b42be9c4bc5c99d9a07d3a0efbea122d275
+    value: b44339c7e68c9bc0975feb010e03c22d004a9786
   # The Home page's "Analytics dashboard" link. Previously a literal in Home.tsx — broke Free
   # Edition, whose dashboard lives on a different host/workspace/id entirely, because the
   # built JS bundle is shared byte-for-byte between targets (scripts/sync_free_edition_app.sh).
