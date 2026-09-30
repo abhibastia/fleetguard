@@ -66,7 +66,7 @@ against 11.1% on a volume-matched placebo** (1.44×, z ≈ 2.62, p ≈ 0.009).
 |---|---|
 | 1 Ingestion + medallion | ✅ Done — `gold_emerging_cluster` **descoped** (cluster-grained, and there is no clustering); replaced by `gold_emerging_signal` |
 | 2 Fleet registry | ✅ Done |
-| 3 Chunking + AI Search | ✅ Done — **rescoped 2026-09-23** from the post-2010 series to the fleet's own make/model pairs (I-111), then widened again to the `EXACT` + `MODEL_VARIANT` tiers (I-115). Built and torn down twice; the row count is re-measured in Run 2 |
+| 3 Chunking + AI Search | ✅ Done — **rescoped 2026-09-23** from the post-2010 series to the fleet's own make/model pairs (I-111), then widened again to the `EXACT` + `MODEL_VARIANT` tiers (I-115). Built and torn down twice; **179,347 chunks measured in Run 2** (I-126) |
 | 4 Model B + golden set | ✅ Done — precision 83.7% / recall 96.3%, real numbers on the evidence page |
 | 5 Lakebase + CDF | ✅ Done — loaded and latency-measured |
 | 6 OAuth wiring | ✅ Done — the auth seam (E-13) with two providers, `databricks-apps` (OBO) and `static-dev`. U2M was built, flipped live, and then **retired with Render** (E-14); it is preserved at commit `2b5727a` (the deleted `deploy/render` branch) |
@@ -204,25 +204,38 @@ WMIs labelled RAM). 400 generated VINs independently verified: 400/400 exact.
 
 `complaint_chunk_idx` on endpoint `fleetguard-vs` — Delta Sync, **HYBRID**,
 `databricks-gte-large-en` (1024-dim). **Rescoped 2026-09-23 (I-111)** from the post-2010
-investigation series to the fleet's own 47 make/model pairs: **115,499 chunks**
-(`silver_complaint_chunk_indexed`) — down from 1,746,601 — same $6.72/day cost under the
-2M-vector threshold (I-035), but both AI Search builds in the submission plan now take
-minutes instead of hours, and retrieval is scoped to vehicles this fleet actually operates.
-Built and confirmed live 2026-09-23: `indexed_row_count: 115,499`, matching source exactly.
-**That figure is the EXACT-only scope and is superseded (I-115):** the join was widened on
-2026-09-23 to the `EXACT` + `MODEL_VARIANT` tiers the rest of the system already uses, because
-exact spelling excluded every one of the fleet's 2,116 F-250s from retrieval. The new count is
-a strict superset and **has not been measured** — the warehouse is torn down between
-submission windows. Run 2 records it; nothing here should quote a figure for the widened scope
-until then.
+investigation series to the fleet's own 47 make/model pairs — down from 1,746,601 — same
+$6.72/day cost under the 2M-vector threshold (I-035), but both AI Search builds in the
+submission plan now take minutes instead of hours, and retrieval is scoped to vehicles this
+fleet actually operates. **Widened again the same day (I-115)** to the `EXACT` +
+`MODEL_VARIANT` tiers the rest of the system already uses, because exact spelling excluded
+every one of the fleet's 2,116 F-250s from retrieval.
+
+**Measured 2026-09-30 in Run 2 (I-126) — `silver_complaint_chunk_indexed`:**
+
+| tier | chunks |
+|---|---|
+| `EXACT` | 115,499 |
+| `MODEL_VARIANT` | 63,848 |
+| **total** | **179,347** |
+
+`EXACT` reproduces I-035's 2026-08-31 figure to the row, so the old scope is exactly
+reproducible and the entire gap is the widening. The count is now pinned per tier in
+`src/search/27_build_chunk_index_source.py`, not merely recorded — a regression that moved rows
+between tiers while preserving the sum would otherwise pass, which is exactly the I-115 failure.
+
+The `MODEL_VARIANT` share here is **35.6%**, well below I-030's ~3:1 variant-to-exact ratio on
+`gold_fleet_exposure`. That is real, not a discrepancy: exposure counts *vehicles* and the
+fleet's most numerous model matches only as a variant, while chunks count *complaints* and
+NHTSA's exact spellings dominate the narrative corpus. The two measure different populations.
 
 **Verification status is split by scope.** The three behavioural checks (`columns_to_sync`
 completeness, `any_harm` filter, HYBRID differing from pure ANN) were re-run and passed
 against a 10K-row smoke index at this new scope (I-112) before the full build. The full
 `ops_hybrid_query_test` sweep — near-duplicate retrieval, the specific probe-query pairs —
-was last run against the **old, full-corpus** index; re-running it at the current 115,499-row
-scope and republishing the result as-is is still open (`docs/STATUS.md`'s Phase 1 action
-plan).
+was last run against the **old, full-corpus** index. Re-running it at the shipped 179,347-row
+scope is what `src/search/28_rag_eval.py` does; it writes `ops_rag_eval` and Run 2 publishes
+those figures in `docs/EVIDENCE.md` as measured, including if poor.
 
 **This is the load-bearing use of embeddings.** See §6 for the use that failed.
 

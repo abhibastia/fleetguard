@@ -131,10 +131,11 @@ stays in Delta regardless of AI Search scope. **The vector-index chunk count is 
 the 1,746,601 quoted historically** — rescoped 2026-09-23 to the fleet's own make/model pairs
 for schedule safety on the submission's two-build plan (I-111), measured at 115,499 for the
 exact-spelling scope, then widened the same day to the `EXACT` + `MODEL_VARIANT` tiers the
-rest of the system uses (I-115). The widened count is a strict superset of 115,499 and is
-**measured in Run 2** — this page will not carry a figure for it before then. The
-lakehouse-scale claim survives on the pipeline/corpus side; it is specifically the *indexed*
-figure that dropped below the 1M mark, and that reflects a deliberate retrieval-scope
+rest of the system uses (I-115). **Measured 2026-09-30 in Run 2 (I-126): 179,347 chunks**
+— 115,499 `EXACT` + 63,848 `MODEL_VARIANT`, with the `EXACT` half reproducing the 2026-08-31
+figure to the row, and the total agreeing exactly with an independent ad-hoc count run before
+the job. The lakehouse-scale claim survives on the pipeline/corpus side; it is specifically the
+*indexed* figure that dropped below the 1M mark, and that reflects a deliberate retrieval-scope
 decision, not reduced volume processed.
 
 **Variety — demonstrated, with one caveat.** Free-text complaint narratives are chunked,

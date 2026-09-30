@@ -18,7 +18,7 @@ default.
 | catalog.schema | `bootcamp_students.fleetguard` |
 | AI Search endpoint | `fleetguard-vs` (`STANDARD`) |
 | AI Search index | `complaint_chunk_idx` |
-| index source table | `bootcamp_students.fleetguard.silver_complaint_chunk_indexed` (fleet make/model scope — I-111; **row count re-measured in step 3.0**, was 115,499 under the exact-match scope I-115 replaced) |
+| index source table | `bootcamp_students.fleetguard.silver_complaint_chunk_indexed` (fleet make/model scope — I-111 + I-115; **179,347 rows** = 115,499 `EXACT` + 63,848 `MODEL_VARIANT`, measured Run 2 2026-09-30 and now pinned per tier in the builder — I-126) |
 | primary key | `chunk_id` |
 | embedding source column | `chunk_text` |
 | embedding model endpoint | `databricks-gte-large-en` |
@@ -156,8 +156,9 @@ databricks vector-search-indexes create-index \
 1.75M-row run there is no reason to space polls 45 min apart).
 
 > **Run 2 arrives here from step 3.1 — that 115,499 no longer applies.** I-115 widened the
-> source table, so re-derive the estimate from the count step 3.0 prints. The command block
-> below is unchanged; only the expected duration is.
+> source table to **179,347** rows (measured 2026-09-30, I-126), so the estimate is
+> **179,347 / 4,336 ≈ 41 min**, not 27. The command block below is unchanged; only the expected
+> duration is.
 
 
 ```bash
@@ -362,7 +363,7 @@ idle and removes a restore step from Run 2. No command needed unless it drifted 
 >
 > | What changed | Consequence for Run 2 |
 > |---|---|
-> | `src/search/27_build_chunk_index_source.py` — join widened to `EXACT` + `MODEL_VARIANT` | The **source table must be rebuilt first** (new step 3.0). The index is **not** 115,499 rows any more. |
+> | `src/search/27_build_chunk_index_source.py` — join widened to `EXACT` + `MODEL_VARIANT` | The **source table must be rebuilt first** (new step 3.0). The index is **179,347** rows, not 115,499 (measured 2026-09-30, I-126). |
 > | `src/agent/14_fleetguard_agent.py` — 4 fixes (sentinel, evidence TTL, over-fetch, docstrings) | The agent **must** be rebuilt and redeployed (3.3). v7 does not carry them. |
 > | `app/frontend/` + `app/backend/` — Home redesign, `/api/corpus` | `bundle run fleetguard_console` is **required**, not optional (3.2). Screenshots must be retaken (3.5). |
 >
@@ -383,13 +384,14 @@ This is Delta-only — free, no endpoint involved, a few minutes — and it must
 databricks bundle run build_chunk_index_source -t prod --profile abhi
 ```
 
-The job asserts a **bounded** range rather than an exact count (floor 115,499, ceiling
-1,000,000) precisely because the new figure has never been measured. It prints the count and
-the `EXACT` / `MODEL_VARIANT` split.
+**Measured 2026-09-30 (I-126) and now pinned per tier:** `EXACT` **115,499** +
+`MODEL_VARIANT` **63,848** = **179,347**. The job asserts each tier exactly, not a bounded
+range — a regression that moved rows *between* tiers while preserving the sum would otherwise
+pass, and that is precisely the I-115 failure. A `MODEL_VARIANT` count of zero means the
+exact-only scope is still in force and the fleet's 2,116 F-250s are absent from retrieval.
 
-**Write the printed count down.** It is needed for the poll estimate in 3.1, and
-`docs/STATUS.md`, `docs/ARCHITECTURE.md`, `docs/EVIDENCE.md` and `docs/DEMO.md` all currently
-say "measured in Run 2" and are waiting for it. Then refresh what the console shows:
+The four documents that said "measured in Run 2" (`STATUS.md`, `ARCHITECTURE.md`,
+`EVIDENCE.md`, `DEMO.md`) now carry the figure. Then refresh what the console shows:
 
 ```bash
 .venv/bin/python scripts/export_corpus.py --profile abhi   # updates Home's scale strip
@@ -410,12 +412,15 @@ It runs exactly the step-1.2 commands below — the *config* is unchanged and wa
 - **idempotent**: `get-endpoint`/`get-index` first, so a re-run after a dropped connection
   resumes instead of erroring on line one;
 - **reads the expected count** from the table 3.0 just rebuilt, rather than carrying a literal.
-  Do not expect 115,499 — I-115 widened the source and it is a strict superset. **Expect roughly
-  180K** (see below), and treat a result near 115K as *the widening did not take*, not as success;
+  **Expect 179,347** (measured 2026-09-30, I-126) — not 115,499, which was the exact-only scope,
+  and a result near 115K means *the widening did not take* rather than success;
 - **polls with drop detection**, and treats a *decrease* in `indexed_row_count` as fatal. That
   is I-105's only visible symptom, and it is the failure that costs a day.
 
-> **Where "roughly 180K" comes from — measured on free edition 2026-09-30 (I-123), not guessed.**
+> **CONFIRMED on abhi 2026-09-30 at 179,347 — the prediction below held to 0.82%.** Kept because
+> the reasoning, not just the number, is what made the figure trustworthy before it was measured.
+>
+> **Where "roughly 180K" came from — measured on free edition 2026-09-30 (I-123), not guessed.**
 > That workspace runs the *widened* builder and its index decomposes as **116,252 `EXACT` +
 > 64,577 `MODEL_VARIANT` = 180,829**. Its `EXACT` half is within **0.65%** of abhi's recorded
 > 115,499, so the two workspaces agree on the *old* basis and the whole gap is the widening.
@@ -424,9 +429,10 @@ It runs exactly the step-1.2 commands below — the *config* is unchanged and wa
 > pairs. So abhi's rebuild should land near 180K — **a few percent lower**, since its corpus
 > and roster are slightly smaller.
 >
-> **This is an expectation, not a pin.** Record what step 3.0 actually prints; if it comes back
-> near 115K the `EXACT`-only join is still in force and the F-250s are still excluded, which is
-> the exact failure I-115 was filed for.
+> **It is now a pin.** Step 3.0 printed 179,347 and an independent ad-hoc count of the same
+> predicate, run before the job, returned the same three numbers — so the builder asserts each
+> tier exactly (I-126). If a future run comes back near 115K the `EXACT`-only join is back in
+> force and the F-250s are excluded again, which is the exact failure I-115 was filed for.
 
 The manual path still works and is what the script wraps, if it ever needs to be run by hand:
 
