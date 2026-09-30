@@ -14,6 +14,7 @@ no error and passed the obvious check.
 
 | ID | Area | Issue | Status |
 |---|---|---|---|
+| I-127 | Platform / AI Search | **The AI Search endpoint vanished one minute after its index began syncing** — ONLINE with `num_indexes: 1` at 22:13, absent from `list-endpoints` at 22:15 (3 confirming reads). No delete was issued; `provision_search.sh` contains no teardown. Left a torn state: the UC table entry and a `RUNNING` sync pipeline both outlived the endpoint, and `/api/readyz` would have called it merely SHORT. `delete-index` cleans all three up silently without needing the endpoint. Distinct from I-112 (stall) and I-105 (sync restart); the only signal is polling `get-endpoint` by name. | **watch** — cause unknown |
 | I-126 | Run 2 / Provenance | **`/api/readyz` reported `console built at unset` on the submission deployment** — the release check's whole purpose, answered with a shrug. Fixed with a two-commit release (real changes, then a one-line stamp naming them); the DABs `config:` block cannot supply it (cli#4901), so it must be re-stamped by hand on any future release. Also: the `vector-search` scope gap was **not** free-edition-specific, and its sticky-consent half needs a consent DELETE + incognito. Step 3.0's count pre-verified independently at **179,347** (`EXACT` reproducing I-035's 115,499 exactly). | **in progress** |
 | I-125 | Evidence | **The Assistant screenshot is no longer deferred** — Run 2 is the only window in which the agent endpoint and the AI Search index are live together, and the index is deleted again immediately afterwards, so this image is the only evidence a reviewer gets that retrieval works. Captured by `capture_screenshots.py` (no frontend change; every selector already existed). **Verified at step 3.5.** | **open** — pending Run 2 step 3.5 |
 | I-118 | Agent/RAG/Security/MLflow | **The retrieval corpus is an injection surface and nothing said so** — `search_complaints` returns 2.24M public, user-submitted narratives straight into the model's context. Three layers added (untrusted-data markers + sentinel stripping, system-prompt rule 9, the existing console checks); severity is bounded by `may_approve` and server-side relevance. Also: citation rule + scorer, injection resistance promoted to a **hard gate**, and evaluation results stamped on the UC model version. **Behavioural half measured in Run 2** — and Run 2 did not run the evaluation at all until now (new runbook step 3.3a). | **open** — pending Run 2 |
@@ -34,6 +35,77 @@ no error and passed the obvious check.
 ---
 
 ## Tooling / process
+### I-127 — the AI Search **endpoint itself vanished** mid-sync, leaving an orphaned index
+
+*Date:* 2026-09-30 · *Status:* **watch** — cleaned up and retried; cause unknown, not reproduced yet.
+**SILENT** in the sense that matters: nothing failed, nothing errored, the endpoint simply stopped
+existing.
+
+#### What happened
+
+| time (UTC) | state |
+|---|---|
+| 21:51 | `create-endpoint fleetguard-vs STANDARD` → returned `state: ONLINE` immediately |
+| 21:52 | `create-index complaint_chunk_idx` accepted, HYBRID, TRIGGERED, all 7 `columns_to_sync` |
+| 21:52–22:12 | I-112's stall (see I-126) — `indexed_row_count` `None`, then `0` |
+| 22:13 | **`message` advanced to *"Index is currently in the process of syncing initial data"*** |
+| 22:13 | `get-endpoint fleetguard-vs` → `state: ONLINE`, `num_indexes: 1` |
+| **22:14** | **`get-index` → `Error: AI Search endpoint 29b9e264-… not found`** |
+| 22:15 | `get-endpoint fleetguard-vs` → **not found**, three consecutive reads 10 s apart |
+| 22:15 | `list-endpoints` → 3 endpoints, all other students'. Ours absent |
+
+**One minute** between a healthy ONLINE endpoint that had just begun syncing, and an endpoint that
+did not exist.
+
+#### It was not us, and that was checked rather than assumed
+
+- No `delete-endpoint` or `delete-index` was issued in the session — grepped across every
+  background task's captured output, zero matches.
+- `provision_search.sh` **contains no teardown at all**, by design; its header says so and its only
+  `trap` removes a temp file. Teardown is a separate human command (RUNBOOK 2.1).
+- The endpoint's `creator` was this account, so this is not another student's object being reaped.
+
+#### The torn state it left behind
+
+Three objects, two of which outlived the thing they depended on:
+
+| object | state after |
+|---|---|
+| AI Search endpoint | **gone** |
+| AI Search index (servable) | gone with it — `get-index` errors on the missing endpoint id |
+| **UC table entry `complaint_chunk_idx`** | **still present** in `SHOW TABLES` |
+| **Delta sync pipeline** | **still `RUNNING`** |
+
+So Unity Catalog still advertised a table that could not be queried, and a sync pipeline was still
+running against an endpoint that no longer existed. **`/api/readyz` would have reported this as an
+index that is merely SHORT** — its check compares `indexed_row_count` to the source table and has no
+notion of "the endpoint disappeared", which is a gap worth knowing even though a 503 is a 503.
+
+#### Cleanup, which worked cleanly
+
+`delete-index bootcamp_students.fleetguard.complaint_chunk_idx` succeeded **silently** (no output,
+exit 0) despite its endpoint being gone, and it took the orphans with it: the UC entry disappeared
+from `SHOW TABLES`, and the pipeline went from `RUNNING` to *"was not found"*. So the recovery is
+one command, and it does not need the endpoint to exist — worth knowing, because the obvious fear is
+that a dangling index has to be cleaned up through the endpoint that is missing.
+
+#### Retried, and what to watch
+
+Same names, same config — the config was proven in Run 1 and there is no evidence it is implicated.
+The retry's monitor now polls **`get-endpoint` alongside `get-index`**, because the previous watch
+only looked at the index and therefore reported *"could not read index"* when the real event was the
+endpoint disappearing. A watch that cannot name the failure it is watching for is the same class of
+gap as I-105's drop detection existing only after a drop cost a day.
+
+**If this recurs:** it is not I-112 (a stall that self-clears with `indexed_row_count` static at
+`None`/`0`) and not I-105 (a sync restarting from zero, visible as a *decrease*). It is a third,
+distinct failure — the endpoint ceasing to exist — and the only reliable signal is polling
+`get-endpoint` by name. Best current guess is a platform-side rollback or eviction on a metastore
+shared with ~296 students; that is a guess, stated as one, and this account cannot see the platform
+events that would confirm it.
+
+---
+
 ### I-126 — Run 2 on `abhi`: release provenance was `unset`, and the chunk count pre-verified exactly
 
 *Date:* 2026-09-30 · *Status:* **in progress** — pre-run findings below; measured results appended
