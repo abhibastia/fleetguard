@@ -14,6 +14,7 @@ no error and passed the obvious check.
 
 | ID | Area | Issue | Status |
 |---|---|---|---|
+| I-125 | Evidence | **The Assistant screenshot is no longer deferred** — Run 2 is the only window in which the agent endpoint and the AI Search index are live together, and the index is deleted again immediately afterwards, so this image is the only evidence a reviewer gets that retrieval works. Captured by `capture_screenshots.py` (no frontend change; every selector already existed). **Verified at step 3.5.** | **open** — pending Run 2 step 3.5 |
 | I-118 | Agent/RAG/Security/MLflow | **The retrieval corpus is an injection surface and nothing said so** — `search_complaints` returns 2.24M public, user-submitted narratives straight into the model's context. Three layers added (untrusted-data markers + sentinel stripping, system-prompt rule 9, the existing console checks); severity is bounded by `may_approve` and server-side relevance. Also: citation rule + scorer, injection resistance promoted to a **hard gate**, and evaluation results stamped on the UC model version. **Behavioural half measured in Run 2** — and Run 2 did not run the evaluation at all until now (new runbook step 3.3a). | **open** — pending Run 2 |
 | I-117 | Review | Fourth external review triaged. **8 fixed offline**: fail-closed action envelopes, `NaN`/`Infinity` reaching the work-order cost column (poisons `SUM` on a headline demo figure — **both** the app guard and the Postgres CHECK passed it), write tools exclusive in a tool-call batch, visible audit failures, depot containment, I-099's loud stale-snapshot fail, `/readyz` as release preflight, and the **degenerate topical recall metric** (always 1.0 — my bug from I-116, caught by the review). **One claim disproven** (`series_key` cannot be NULL) and one correction repeated from I-115 (versioned NHTSA paths would double the corpus). Agent + RAG halves take effect at Run 2. | **open** — pending Run 2 |
 | I-116 | Review | I-115's four remaining items built offline: `/readyz` (demo readiness, free to poll — state reads only, never a query that would wake the agent), `scripts/provision_search.sh` (idempotent, drop-detecting), the RAG retrieval evaluation (harness + unit-tested metrics now; **numbers measured in Run 2**), and the CDF fingerprint split. Also corrected a wrong reason inside I-115 itself: that trigger is **UNPAUSED**, not paused. Remaining: the RAG numbers, which need the live index. | **open** — pending Run 2 |
@@ -32,6 +33,73 @@ no error and passed the obvious check.
 ---
 
 ## Tooling / process
+### I-125 — the Assistant screenshot stops being deferred, because Run 2 is the only window
+
+*Date:* 2026-09-30 · *Status:* ✅ built; **captured for the first time in Run 2** (step 3.5).
+
+`scripts/capture_screenshots.py` shipped with a `DEFERRED` list holding exactly one entry — the
+Assistant panel — annotated *"needs the agent endpoint"*. It was honest about the gap and it was
+never going to close on its own, because the two things it waits for are the two things the
+two-window cost plan deliberately tears down between runs.
+
+**What changed is not the capability but the schedule.** Run 2 brings the agent endpoint and
+`complaint_chunk_idx` up together, and the decision taken this session is to **delete the index
+again immediately afterwards** rather than hold it through submission (judges hold `CAN_MANAGE`
+and can start the App themselves; the index is the only meaningful recurring cost). So:
+
+- Run 2 is the **only** window in which the panel can be photographed at all, and
+- after the teardown this image is the **only** evidence a reviewer gets that retrieval works.
+  A judge starting the App afterwards gets `/api/readyz` **503** and an Assistant whose
+  `search_complaints` fails. Lakebase persists, so queue / signals / work-orders / audit-log /
+  depot-risk all still answer live — the agent and retrieval path do not.
+
+That moves the shot from *nice-to-have* to the load-bearing piece of visual evidence, which is
+why it became code rather than a manual screenshot someone takes once and cannot reproduce.
+
+#### No frontend change was needed, and that is worth recording
+
+Every selector already existed in the shipped UI: `aria-label="Open assistant"` on the FAB
+(`App.tsx`), the input placeholder in `Assistant.tsx`, and the `.turn.agent` / `.thinking`
+classes it renders. Nothing was added to accommodate a test harness, so the capture exercises
+the real product rather than a screenshot affordance.
+
+#### Two design choices that mirror this script's original bug
+
+The first run of this script produced **twenty pixel-perfect screenshots of loading skeletons**
+and reported success — `networkidle` fires long before a `useEffect` has issued its fetch. The
+docstring's conclusion, that *a screenshot of a spinner is worse than no screenshot because it
+still looks like evidence*, applies with more force here: the spinner in this panel says
+`running tools`, so a mistimed capture would be positive-looking evidence that the agent does
+**not** work.
+
+1. **Separate pass, its own browser context, after every other view.** A cold endpoint, a deleted
+   index or a declining model must not cost the twenty images that do not depend on the agent.
+   Failure prints loudly to stderr and returns `None`; the run still exits 0.
+2. **Two independent conditions, both required, and no image written otherwise** — `.thinking`
+   detached **and** `.turn.agent` present. Waiting on only the first would photograph the moment
+   an error replaced the spinner.
+
+The 150 s budget is not a number to trim: the endpoint is scale-to-zero (~47 s cold start
+measured), the agent budgets 90 s for tool calls against the client's 120 s, and `/api/chat`
+fails at 120 s. An early timeout here is indistinguishable from a broken agent.
+
+#### The default question exercises retrieval on purpose
+
+`"Search complaints about brake failures"`, not the deterministic exposure question. The
+exposure path is already evidenced by RUNBOOK 1.4's raw REST call and by `gold_fleet_exposure`
+itself. What nothing else evidences is retrieval over the 2.24M-narrative corpus with complaint
+ids cited back — which is also the path `_neutralise` defends (I-118) and the one
+`cites_complaint_ids` scores (I-124). Overridable with `--assistant-question`.
+
+`--no-assistant` skips the pass, for a UI-only re-shoot while the agent and index are down. It
+is the only pass in this script that calls a billed endpoint — twice, once per theme.
+
+`manifest.json` records the question asked and an explicit `assistant_not_captured` list, empty
+or not. Every other view is unconditional, so an absent Assistant image is the one gap a reader
+could not infer from the file listing.
+
+---
+
 ### I-124 — end-to-end review: `cites_complaint_ids` could never pass; AI Gateway guardrails are unavailable
 
 *Date:* 2026-09-30 · *Status:* ✅ scorer fixed; gateway request answered **not available, measured**.
