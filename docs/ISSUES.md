@@ -108,6 +108,82 @@ rows/min this is a **~42 min** index build (the script's own estimate from the l
 **exact per tier** — not just the total, because a regression that moved rows *between* tiers while
 preserving the sum would otherwise pass, which is exactly the I-115 failure.
 
+##### I-112 recurred — third occurrence, same signature, and the endpoint contradicts the index
+
+Created 21:51 UTC. At **+28 min**: `indexed_row_count` still `None`, `ready: false`, message
+*"Delta sync index creation is pending endpoint provisioning."*
+
+The endpoint says otherwise. `get-endpoint fleetguard-vs` reports `state: ONLINE` with
+`num_indexes: 1`, and `list-pipeline-events` on the sync pipeline
+(`bdf49a59-d1ce-48b0-8cf3-9ff2a9181c7f`) returns **exactly one event** — *"User … created
+pipeline"* — and nothing since. So the index is blocked on a provisioning step the endpoint
+already completed, and the sync pipeline has never run a single update.
+
+That is I-112's signature exactly: fresh endpoint, first index on it, zero sync activity, a
+message that names a cause contradicted by the endpoint's own state. **Third occurrence** (two on
+2026-09-23, this one). The recorded guidance holds and is being followed: **wait — do not
+delete-and-recreate.** Deletion was tried during I-112 and did not clear it; inaction did.
+
+This occurrence is **longer** than either previous one (~25 min and ~5 min observed), so the "~25
+min" in I-112 should be read as an observation, not a bound.
+
+**What made this cheap rather than costly:** the I-111 rescope. At the old 1.75M-chunk scope a
+stall plus a rebuild was most of a working day (I-105 burned ~7 h to 62% and was abandoned). At
+179,347 rows the whole build is ~42 min, so even a full restart costs less than the stall itself
+has already taken.
+
+##### The SHA stamp works, and `eval gates unverified` is now known to be unconditional
+
+First live `/api/readyz` on abhi after the deploy, called **programmatically with a CLI bearer
+token** (naming the client, per I-086's rule):
+
+| check | result |
+|---|---|
+| `lakebase` | ok — `connected as abhisek.bastia17@gmail.com` |
+| `agent_endpoint` | down — `ready=NOT_READY, serving v7` (expected before step 3.3) |
+| `search_index` | down — index still syncing (expected) |
+| `snapshots` | ok |
+| `release` | ok — **`console built at b44339c7e68…`**, no longer `unset` |
+
+**The provenance fix is verified live.** So is the `vector-search` scope: the index check *ran* and
+reported a row count rather than a `403`.
+
+**And a correction to what this session predicted.** The plan said a programmatic CLI bearer token
+would carry broad scopes through the App and so exercise the eval-gate check for real. It does not:
+`release` reported *`eval gates unverified (PermissionDenied: Provided OAuth token does not have
+required scopes: mlflow)`*. **The Apps ingress downscopes to `user_api_scopes` regardless of client**
+— programmatic or browser — and `mlflow` is not assignable. So the eval-gate check is inert through
+the App **unconditionally**, not merely for browser sessions.
+
+`CLAUDE.md`'s note that *"a programmatic CLI bearer token carries broad scopes and never touches the
+consent flow"* is still true of calling **Databricks APIs directly**; it does not survive being
+routed *through* an App. The two halves of that sentence come apart: consent is bypassed (which is
+why the index check worked without a consent reset), but scope is not. The only place I-120's check
+does real work is a **local** `run_local_static_dev.sh` server, whose token is not downscoped by any
+ingress.
+
+##### The SNAPSHOT banner cannot render inside a Databricks App
+
+`/healthz` at the bare app URL is intercepted by the Apps ingress — 200, **zero-byte body**, no line
+in `apps logs`. That much was measured 2026-09-27 and is written into `main.py`'s `Me` docstring,
+which is why `dashboard_url` moved to `/api/me`.
+
+**Home.tsx was migrated off `/healthz`; `App.tsx` was not.** It still calls `api.health()`, whose
+`r.json()` therefore rejects on the empty body, `setHealth(null)` runs, and the
+`health?.data_mode === "snapshot"` banner is unreachable. Its own comment states the stakes: *"A
+console showing point-in-time data while implying it is live is the interface version of reporting a
+failed query as 'no results'."* That honesty guard is structurally dead in the one environment the
+product actually ships in.
+
+**Zero impact on the submission and deliberately not fixed.** `FLEETGUARD_DATA_MODE=lakebase` on both
+targets, so the banner correctly stays hidden; the failure is that it would *also* stay hidden if the
+mode were `snapshot`. Fixing it means a frontend change plus a console rebuild, an App redeploy and a
+provenance re-stamp, days before submission, to correct a banner that is already showing the right
+thing. **The fix, for after 4 October:** add `data_mode` and `snapshot_captured_at` to the `Me` model
+(it has only `user_name`, `token_source`, `dashboard_url`) and have `App.tsx` read them from
+`api.me()`, exactly as Home.tsx already reads `dashboard_url`. `api.health()` then has no caller
+inside the App at all.
+
 ##### The mirror-drift guard fired, correctly, on `corpus.json`
 
 Refreshing `corpus.json` failed CI on `test_the_free_edition_app_mirror_has_not_drifted` — the guard

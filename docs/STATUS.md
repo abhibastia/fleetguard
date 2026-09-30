@@ -1358,16 +1358,17 @@ than discovering it mid-demo.
 
 | | |
 |---|---|
-| **Today** | 2026-09-30 · **submission 4 October** · **Run 2 targeted 2–3 October** |
-| **`main`** | `b7fa9c8` (I-120 + I-121, PR #19), pushed to `origin/main`, **CI green** (both jobs) |
-| **Unmerged** | `chore/fold-free-edition-target` — I-122, the `free_edition` target fold. Offline only |
+| **Today** | 2026-09-30 · **submission 4 October** · **RUN 2 IS EXECUTING NOW** (brought forward from 2–3 October) |
+| **`main`** | `833cc69` (PRs #22–#27), pushed, **CI green**. PRs #22 citation scorer · #23 chunk-count expectation · #24 Assistant screenshot · #25 + #27 provenance stamp · #26 the measured 179,347 |
+| **Unmerged** | none |
+| ⚠️ **Release provenance is a HAND-MAINTAINED literal** | `FLEETGUARD_GIT_SHA` in `app/backend/app.yaml` names **`b44339c`**, which is `HEAD~1`. A file cannot hold its own commit's SHA, so a release is two commits: content, then the stamp. **Re-stamp whenever anything the console SERVES changes** — `fleetguard_api/`, the built bundle, or `corpus.json`. Docs-only commits do **not** invalidate it. The DABs `config:` block cannot supply it (cli#4901). See I-126 |
 | **Branches** | **2 local / 2 remote** — `main` plus **`free-edition-deploy`, retained deliberately** (2026-09-30) though its work is now all on `main`. 14 others were deleted 2026-09-29 (**I-121**, SHAs recorded there). `feature/role-based-views` survives as tag `archive/role-based-views`; docs naming `deploy/render` as a live location name commit `2b5727a` |
 | ⚠️ **`free-edition-deploy` is a FROZEN PRE-FOLD SNAPSHOT** | Tip `e7ff1b6`, **4 commits behind `main`**. It is kept as a fallback, **not as a live branch — do not deploy free edition from it.** It predates I-120, so its `agent_actions.py` and `readyz.py` lack the `NaN`/422 fix and the `/readyz` eval gate, and it still carries the stale `series_key IS NULL` comment two reviews mis-filed. Free-edition work lives on `main`: `./scripts/deploy.sh <profile> free_edition` |
 | **Bundle targets** | **2** — `prod` (default, abhi, the submission deliverable) and `free_edition` (separate account). `./scripts/deploy.sh <profile> <target>`, target defaults to `prod`. All 9 variable defaults are the abhi values, so `prod` is unchanged by the fold |
 | **Free-edition e2e** | ✅ **run 2026-09-30 from `main`** (I-123). `/api/readyz` **200**, 14 routes live, the 422 fix confirmed, both evals re-run. Found and fixed: the App's OBO scopes lacked `vector-search`, so `/api/readyz` **could never return 200 on either target**. Still open: the eval-gate check needs scope `mlflow`, which is **not assignable** — it degrades to "unverified" forever |
 | **Working tree** | clean |
-| **Billable resources running** | **none** — see "What is costing money" below |
-| **Tests** | **681 passed / 24 skipped** (backend), **153** vitest, ruff + typecheck clean — *measured by CI on PR #20, run `36643258085`, not derived. Includes the 53 `tests/pipelines/` Spark tests, which cannot run on this laptop (`Bad CPU type in executable`, x86-only `java`) — CI is the only place they execute* |
+| ⚠️ **Billable resources running** | **`fleetguard-vs` — ~$6.72/day, created 2026-09-30 21:51 UTC.** DELETE IT once screenshots and provenance are captured (RUNBOOK 2.1); billing continues 24 h after the last index is deleted. **The decision taken this session is that it does NOT stay up through submission** — judges hold `CAN_MANAGE` and can start the App themselves |
+| **Tests** | **694 passed / 24 skipped** (backend), **153** vitest, ruff + typecheck clean — *measured by CI on PR #27, not derived. Includes the 53 `tests/pipelines/` Spark tests, which cannot run on this laptop (`Bad CPU type in executable`, x86-only `java`) — CI is the only place they execute* |
 | **Bound job resources** | **31** (`ls resources/*.job.yml \| wc -l` — count it, do not trust this number) |
 
 #### The fifth external review is triaged — `fix/repo-review-round-5` (I-120)
