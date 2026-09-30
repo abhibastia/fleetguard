@@ -237,6 +237,15 @@ post-routing invariants — if one fires, the split logic is broken, not the sou
 - AI Gateway PII guardrail: `None` / `Block` / `Mask`, set via
   `PUT /api/2.0/serving-endpoints/{name}/ai-gateway`. **Output guardrails do not apply to
   streaming responses** — a streaming agent UI silently bypasses the PII output check.
+  **NONE OF IT IS AVAILABLE TO THIS PROJECT — measured on both workspaces 2026-09-30 (I-124).**
+  On an agent/custom-model serving endpoint the API refuses `guardrails` (*"AI Guardrails is not
+  currently supported for this endpoint type in this workspace"*) and `rate_limits` (same shape).
+  `inference_table_config` is the **only** gateway feature that works, it is already enabled on
+  abhi (E-04), and it is refused outright on free edition. So there is nothing left to configure:
+  do not claim AI Gateway protects PII or throttles this agent, and do not re-propose it without
+  re-measuring. Rejections are **wholesale** — a refused `PUT` changes nothing — but always
+  include the existing `inference_table_config` in the body anyway, because this is a PUT and a
+  partial body would drop E-04's observability.
 - Lakebase CDF adds `_sort_by` alongside `_pg_change_type`/`_pg_lsn`/`_pg_xid`/`_timestamp`;
   `_pg_change_type` values are `insert`/`delete`/`update_preimage`/`update_postimage`;
   flush is ~15 s; destination tables auto-suffix on collision (`lb_users_history_1`).

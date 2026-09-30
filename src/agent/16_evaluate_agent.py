@@ -306,6 +306,12 @@ REQUEST_CLAIMS = [
 # `"exact" in text or "variant" in text` over the whole answer, so *"this is not an exact or
 # variant match"* — the agent correctly declining to claim a tier — scored as having stated
 # one. That is I-058's bug in the one scorer that never got the fix.
+#: Complaint ids as the agent actually emits them. 6-7 digits (`complaint_id`, max 2249903),
+#: NOT the 8-9 of `odi_number` — see `cites_complaint_ids` for why that distinction cost two
+#: clean 0.000 scores. The lookahead drops mileage, the one likely 6-7 digit collision in ODI
+#: narrative text. Extracted by name in tests/test_scorer_negation.py; do not duplicate it there.
+CITATION_RE = re.compile(r"\b\d{6,7}\b(?!\s*(?:miles|mile|mi\b|km|kilometers|kilometres))", re.I)
+
 TIER_CLAIMS = [
     "exact match",
     "exact matches",
@@ -411,9 +417,33 @@ def never_claims_launched(inputs, outputs):
 def cites_complaint_ids(inputs, outputs):
     """Rule 10. A narrative claim must name the complaint ids it rests on.
 
-    ODI complaint numbers are 8-9 digits, which is specific enough to match without catching
-    the counts and percentages that appear in every answer — `25 vehicles`, `16.0%`, `1.44x`
-    are all too short to collide.
+    **THIS SCORER COULD NOT PASS UNTIL 2026-09-30, AND SCORED A CLEAN 0.000 TWICE SAYING SO.**
+    It read `\\b\\d{8,9}\\b` on the stated premise that "ODI complaint numbers are 8-9 digits".
+    Two different columns were conflated, and the premise is true of the wrong one:
+
+      * `odi_number` (ODINO) — **8 digits on 1,841,020 rows.** Not what the agent sees.
+      * `complaint_id` (CMPLID) — **1 to 7 digits, never 8.** Max in the whole corpus is
+        `2249903`. This is what `columns_to_sync` publishes, so it is what `search_complaints`
+        returns and what the agent cites.
+
+    So the regex could not match a real citation, and `cites_complaint_ids: 0.000` was read as
+    *the agent never cites its evidence*. It does: asked the live citation case, it returned a
+    markdown table of eight ids — `816627`, `798264`, `963642`, `794820`, `484565`, `1064462`,
+    `736910`, `584433`. **The agent was doing its job and the measurement was broken.**
+
+    The test that should have caught it asserted the same false premise: it matched a
+    *fabricated* 8-digit id (`11234567`) rather than one from the corpus. Code and test shared
+    the wrong assumption, so only real data could break the tie — which is the same
+    tests-that-cannot-fail lesson as I-117's degenerate recall and I-118's uncalled
+    `_neutralise`, in its inverse form: a scorer that cannot succeed.
+
+    **What this checks now, and what it still does not.** `\\b\\d{6,7}\\b` is the real id width.
+    The negative lookahead drops the one likely collision in this domain — ODI narratives quote
+    mileage constantly, so `150000 miles` would otherwise satisfy a citation requirement. A bare
+    odometer figure with no unit word (`odometer read 150000`) still can. That is a proxy's
+    floor, not a bug to regex around: the robust form is `cited_ids ⊆ retrieved_ids`, which needs
+    trace-level scoring (see `ENHANCEMENTS.md`). Stated because a scorer that implies more than
+    it checks is the failure this evaluation exists to avoid.
 
     **Not scored against the retrieved set**, deliberately: `predict_fn` returns the answer
     text only, so this scorer cannot see which ids the tool actually returned and cannot tell
@@ -425,7 +455,7 @@ def cites_complaint_ids(inputs, outputs):
     case = CASE_BY_Q.get(_q(inputs))
     if not case or not case.get("must_cite"):
         return None
-    return bool(re.search(r"\b\d{8,9}\b", outputs or ""))
+    return bool(CITATION_RE.search(outputs or ""))
 
 
 @scorer

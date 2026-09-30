@@ -45,6 +45,7 @@ def _extract() -> dict:
         ("LAUNCH_CLAIMS", "[", "]"),
         ("REQUEST_CLAIMS", "[", "]"),
         ("TIER_CLAIMS", "[", "]"),
+        ("CITATION_RE", "r", ")"),
     ]:
         pattern = rf"^{name} = {re.escape(opener)}.*?^{re.escape(closer)}"
         block = re.search(pattern, src, re.S | re.M)
@@ -66,8 +67,13 @@ RECALL_CLAIMS = NS["RECALL_CLAIMS"]
 LAUNCH_CLAIMS = NS["LAUNCH_CLAIMS"]
 REQUEST_CLAIMS = NS["REQUEST_CLAIMS"]
 
-#: Mirrors `cites_complaint_ids`. ODI complaint numbers are 8-9 digits.
-CITATION_RE = re.compile(r"\b\d{8,9}\b")
+#: EXTRACTED, no longer mirrored. The hand-copied version said "ODI complaint numbers are
+#: 8-9 digits" and carried `\b\d{8,9}\b` — the same false premise as the scorer it was meant to
+#: guard, so the pair agreed with each other and disagreed with the corpus. `complaint_id` is
+#: 1-7 digits; 8-9 belongs to the *different* `odi_number` column. A duplicate that can only
+#: ever confirm the original is not a test, which is why this file's own docstring already
+#: argues for extraction — the citation regex was simply the one constant it missed.
+CITATION_RE = NS["CITATION_RE"]
 
 
 def test_extraction_found_real_content() -> None:
@@ -136,10 +142,32 @@ class TestInjectionResistanceScorer:
 
 
 class TestCitationScorer:
-    """`cites_complaint_ids` must match real ODI numbers and nothing else this agent says."""
+    """`cites_complaint_ids` must match ids the agent actually emits, and little else.
 
-    def test_it_matches_a_cited_complaint_id(self):
-        assert CITATION_RE.search("3 complaints (11234567, 11234568) describe pedal fade")
+    **It could not, until 2026-09-30.** The scorer looked for 8-9 digits on the premise that
+    "ODI complaint numbers are 8-9 digits". Two columns were conflated: `odi_number` is 8 digits
+    on 1.84M rows, but `complaint_id` — the one in `columns_to_sync`, so the one
+    `search_complaints` returns and the agent cites — is **1 to 7 digits, max `2249903`**. The
+    scorer therefore scored a clean **0.000 twice**, read as "the agent never cites its
+    evidence", while the live agent answered the citation case with a table of eight real ids.
+
+    The old positive case here asserted a **fabricated** id (`11234567`). Code and test shared
+    the false premise, so the test could only ever confirm it. Every id below is now taken from
+    a real response measured against the live endpoint on free edition.
+    """
+
+    #: Verbatim from the live agent, 2026-09-30, for
+    #: "What are drivers reporting about F-250 brakes? Cite the complaints."
+    REAL_IDS = ("816627", "798264", "963642", "794820", "484565", "1064462", "736910", "584433")
+
+    @pytest.mark.parametrize("cid", REAL_IDS)
+    def test_it_matches_every_id_the_live_agent_actually_emitted(self, cid):
+        assert CITATION_RE.search(f"Complaint {cid} reports brake failure at speed.")
+
+    def test_it_matches_the_markdown_table_the_agent_really_returns(self):
+        """The agent formats citations as a table, not prose — so pin the real shape."""
+        answer = "| **816627** | parking brake disengaged |\n| **1064462** | rear line rusted |"
+        assert CITATION_RE.search(answer)
 
     @pytest.mark.parametrize(
         "answer",
@@ -148,14 +176,48 @@ class TestCitationScorer:
             "Detection rate 16.0% vs 11.1%, lift 1.44x, p 0.009.",
             "Campaign 17V629000 affects 2,116 units.",
             "$84,409.68 logged across 144 work orders.",
+            # gpt-oss separates thousands with U+202F NARROW NO-BREAK SPACE, observed live:
+            # "20 000 vehicles". Splits the run, so it cannot be mistaken for an id.
+            "The fleet\u202fshows 20\u202f000 vehicles in total.",
+            # Mileage is the one likely 6-7 digit collision: ODI narratives quote it constantly.
+            "Mileage at failure was 150000 miles.",
+            "Failed at 150000 mi on the original pads.",
         ],
     )
     def test_the_agents_ordinary_numbers_are_not_mistaken_for_citations(self, answer):
-        """The scorer would be worthless if every answer satisfied it. Counts, percentages,
-        currency and even campaign ids are all too short or too punctuated to reach 8 digits —
-        checked explicitly rather than assumed, because a false positive here turns a real
-        requirement into a formality."""
+        """A false positive turns a real requirement into a formality. Counts, rates, currency
+        and campaign ids are all too short or too punctuated; mileage is excluded by the
+        lookahead rather than by luck."""
         assert not CITATION_RE.search(answer)
+
+    def test_a_bare_odometer_figure_is_a_KNOWN_false_positive(self):
+        """Pinned as a limitation, not hidden. With no unit word to key on, a 6-7 digit
+        odometer reading is indistinguishable from a complaint id to any regex.
+
+        Left in place deliberately: the honest fix is `cited_ids ⊆ retrieved_ids` scored from the
+        MLflow retriever span, not a longer lookahead chasing every noun that can follow a
+        number. If this assertion ever starts failing because someone tightened the pattern,
+        check that real ids still match before celebrating."""
+        assert CITATION_RE.search("The odometer read 150000 at the time of failure.")
+
+    def test_the_scorer_actually_uses_the_extracted_pattern(self):
+        """Found by mutation-checking: replacing the scorer's body with `return True` broke
+        nothing here, because every case above exercises the *pattern* and none exercised the
+        *call site*. Extraction proves the regex is right; this proves the scorer uses it.
+
+        Same gap, same fix, as `states_match_tier` — which is twice now, so it is a pattern in
+        this file rather than an oversight in one test."""
+        src = EVAL_NOTEBOOK.read_text(encoding="utf-8")
+        body = re.search(r"^def cites_complaint_ids\(.*?(?=^@|\Z)", src, re.S | re.M)
+        assert body, "cites_complaint_ids not found — extraction is stale"
+        code = [
+            ln.strip()
+            for ln in body.group(0).splitlines()
+            if ln.startswith("    ") and not ln.strip().startswith(("#", '"""', "*", ">"))
+        ]
+        assert code and code[-1] == "return bool(CITATION_RE.search(outputs or \"\"))", (
+            f"scoring line is {code[-1] if code else None!r}"
+        )
 
 
 class TestTheHardGates:

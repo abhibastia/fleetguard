@@ -32,6 +32,112 @@ no error and passed the obvious check.
 ---
 
 ## Tooling / process
+### I-124 — end-to-end review: `cites_complaint_ids` could never pass; AI Gateway guardrails are unavailable
+
+*Date:* 2026-09-30 · *Status:* ✅ scorer fixed; gateway request answered **not available, measured**.
+
+#### The bug: a scorer structurally incapable of passing
+
+`cites_complaint_ids` read `\b\d{8,9}\b` on the stated premise that *"ODI complaint numbers are
+8-9 digits"*. **Two columns were conflated, and the premise is true of the wrong one:**
+
+| column | digits | is it what the agent sees? |
+|---|---|---|
+| `odi_number` (ODINO) | **8 digits on 1,841,020 rows** | no |
+| `complaint_id` (CMPLID) | **1–7, max `2249903`, never 8** | **yes** — it is in `columns_to_sync`, so `search_complaints` returns it |
+
+So the regex could not match a real citation, and the clean `0.000` in both eval runs (I-123) was
+read as *the agent never cites its evidence*. **It does.** Asked the live citation case against the
+free-edition endpoint, it returned a markdown table of eight real ids — `816627`, `798264`,
+`963642`, `794820`, `484565`, `1064462`, `736910`, `584433`. The agent was doing its job; the
+measurement was broken.
+
+**The test shared the false premise, so it could only confirm it.** `TestCitationScorer`'s positive
+case asserted a **fabricated** id (`11234567`) and `CITATION_RE` was **hand-copied** into the test
+file — the one constant this file's own docstring had not extracted. Code and test agreed with each
+other and disagreed with the corpus; only real data could break the tie. Same lesson as I-117's
+degenerate recall and I-118's uncalled `_neutralise`, in its **inverse** form: not a test that
+cannot fail, a scorer that cannot succeed.
+
+**Fixed:** `\b\d{6,7}\b` with a lookahead dropping mileage (ODI narratives quote it constantly, so
+`150000 miles` would otherwise satisfy a citation requirement). `CITATION_RE` now lives in the
+notebook and is **extracted** by the test. Every positive case is an id the live agent actually
+emitted, including the markdown-table shape it really returns.
+
+**A bare odometer figure with no unit word still satisfies it** — pinned as a *known* false
+positive rather than hidden, because the honest fix is `cited_ids ⊆ retrieved_ids` from the
+retriever span, not a longer lookahead chasing every noun that can follow a number.
+
+> **Mutation-checking found a second gap mid-fix.** Replacing the scorer body with `return True`
+> broke **nothing**: every case exercised the *pattern*, none the *call site*. That is the second
+> time in this file (`states_match_tier` was the first), so a call-site pin is now a standing
+> requirement here, not a one-off.
+
+#### The gateway request: guardrails and rate limits cannot be set on an agent endpoint
+
+Asked to configure Unity AI Gateway guardrails and inference tables "whichever applicable".
+Measured, both workspaces, `PUT /api/2.0/serving-endpoints/{name}/ai-gateway`:
+
+| feature | abhi | free edition |
+|---|---|---|
+| `inference_table_config` | ✅ **already enabled** (E-04, 2026-09-02) | ❌ *"not supported for this endpoint type in this workspace"* |
+| `usage_tracking_config` | settable (currently `false`) | ❌ same |
+| **`guardrails`** | ❌ *"AI Guardrails is not currently supported for this endpoint type in this workspace"* | ❌ same |
+| **`rate_limits`** | ❌ *"Rate limits is not currently supported…"* | ❌ same |
+
+So **there is nothing to configure that is not already configured.** This extends E-01, which
+established only that you cannot build your own pay-per-token LLM endpoint to hang a guardrail on;
+it did not test the agent endpoint directly. E-04's parenthetical — inference tables are "the one
+Gateway feature that *is* supported on agent endpoints" — is now **proven** rather than implied.
+
+`usage_tracking_config` was left `false` deliberately: E-04 records that
+`system.serving.endpoint_usage` covers only foundation-model PAYG calls and never custom agent
+endpoints, so enabling it would add a switch with no table behind it.
+
+**abhi was verified byte-identical to its pre-test backup afterwards** — the rejections are
+wholesale, nothing partially applied. Both attempts deliberately included the existing
+`inference_table_config`, because this endpoint is a **PUT** and a partial body would have dropped
+E-04's observability.
+
+**Consequence for the claims:** repo-review2 #16 was right and stays right — do not claim AI Gateway
+protects PII or throttles this agent. Application-level throttling is now the *only* available
+form, and it is not built.
+
+#### Security review — no findings
+
+Swept deliberately rather than assumed, since five prior reviews have already been through this:
+
+- **SQL injection: none.** Every backend query binds parameters; the agent's `_run_sql` takes
+  `StatementParameterListItem` and the one dynamic fragment (`lookup_fleet_models`'s `WHERE`) is
+  selected by *presence* of a filter, never built from its content.
+- **XSS: none.** No `dangerouslySetInnerHTML`, `innerHTML` or `eval` anywhere in the frontend;
+  `markdown.tsx` builds React nodes, which escape by default. This matters more than usual here
+  because agent output can be influenced by retrieved complaint text.
+- **HMAC comparison is constant-time** (`hmac.compare_digest`, not `==`).
+- **No token is ever logged or printed** in any Python path.
+- **`may_approve` fails closed** — empty `FLEETGUARD_APPROVERS` means nobody, and it re-reads the
+  env each call, so there is no stale-allowlist window.
+- **Every list route clamps its limit** with `ge`/`le`.
+
+#### Also found
+
+- **`serving-endpoints query` (the CLI) returns an empty envelope** — `{"id":…, "object":"response"}`
+  with no `output` — against this `ResponsesAgent`, for every question tried. A raw
+  `POST /serving-endpoints/{name}/invocations` with the same payload returns **HTTP 200** and full
+  output. The CLI sends a shape the agent ignores. **Do not use the CLI to smoke-test the agent**
+  — it looks exactly like a broken endpoint. `/api/chat` uses the invocations path and is fine.
+- **gpt-oss-120b emits U+202F (narrow no-break space) as a thousands separator** — `20 000`, not
+  `20,000`. Harmless for the current scorers (`must_contain` uses `"25"` and `"RAM"`), but it would
+  silently break any future scorer matching a formatted number, and it is pinned in the negative
+  cases now.
+
+#### Verified
+
+**641 passed / 24 skipped** (was 628, +13 citation cases), ruff clean. Both fixes
+mutation-checked; abhi's gateway config confirmed unchanged.
+
+---
+
 ### I-123 — first end-to-end run of the folded `free_edition` target; `/api/readyz` could never go green
 
 *Date:* 2026-09-30 · *Status:* ✅ one fix shipped, one finding **open and unfixable via OBO**.
