@@ -14,6 +14,7 @@ no error and passed the obvious check.
 
 | ID | Area | Issue | Status |
 |---|---|---|---|
+| I-126 | Run 2 / Provenance | **`/api/readyz` reported `console built at unset` on the submission deployment** — the release check's whole purpose, answered with a shrug. Fixed with a two-commit release (real changes, then a one-line stamp naming them); the DABs `config:` block cannot supply it (cli#4901), so it must be re-stamped by hand on any future release. Also: the `vector-search` scope gap was **not** free-edition-specific, and its sticky-consent half needs a consent DELETE + incognito. Step 3.0's count pre-verified independently at **179,347** (`EXACT` reproducing I-035's 115,499 exactly). | **in progress** |
 | I-125 | Evidence | **The Assistant screenshot is no longer deferred** — Run 2 is the only window in which the agent endpoint and the AI Search index are live together, and the index is deleted again immediately afterwards, so this image is the only evidence a reviewer gets that retrieval works. Captured by `capture_screenshots.py` (no frontend change; every selector already existed). **Verified at step 3.5.** | **open** — pending Run 2 step 3.5 |
 | I-118 | Agent/RAG/Security/MLflow | **The retrieval corpus is an injection surface and nothing said so** — `search_complaints` returns 2.24M public, user-submitted narratives straight into the model's context. Three layers added (untrusted-data markers + sentinel stripping, system-prompt rule 9, the existing console checks); severity is bounded by `may_approve` and server-side relevance. Also: citation rule + scorer, injection resistance promoted to a **hard gate**, and evaluation results stamped on the UC model version. **Behavioural half measured in Run 2** — and Run 2 did not run the evaluation at all until now (new runbook step 3.3a). | **open** — pending Run 2 |
 | I-117 | Review | Fourth external review triaged. **8 fixed offline**: fail-closed action envelopes, `NaN`/`Infinity` reaching the work-order cost column (poisons `SUM` on a headline demo figure — **both** the app guard and the Postgres CHECK passed it), write tools exclusive in a tool-call batch, visible audit failures, depot containment, I-099's loud stale-snapshot fail, `/readyz` as release preflight, and the **degenerate topical recall metric** (always 1.0 — my bug from I-116, caught by the review). **One claim disproven** (`series_key` cannot be NULL) and one correction repeated from I-115 (versioned NHTSA paths would double the corpus). Agent + RAG halves take effect at Run 2. | **open** — pending Run 2 |
@@ -33,6 +34,78 @@ no error and passed the obvious check.
 ---
 
 ## Tooling / process
+### I-126 — Run 2 on `abhi`: release provenance was `unset`, and the chunk count pre-verified exactly
+
+*Date:* 2026-09-30 · *Status:* **in progress** — pre-run findings below; measured results appended
+as each step lands.
+
+#### `/api/readyz` reported `console built at unset` on abhi too
+
+I-123 found this on free edition and recorded it as *cosmetic*. On `abhi` it is not cosmetic: this
+is the **submission** deployment, and the release check's entire purpose is answering *"is the live
+system the thing in the zip?"* — the question a review named as the biggest practical risk (I-110).
+Reporting `unset` answers it with a shrug.
+
+`readyz.py` reads `FLEETGUARD_GIT_SHA`, falls back to `DATABRICKS_BUNDLE_GIT_COMMIT`, then to the
+literal `unset`. **Apps does not inject the fallback**, so it was never reached; neither target's
+`app.yaml` set the first.
+
+**Fixed with a two-commit release, and the shape is the point.** A file cannot contain its own
+commit's SHA, so: one commit carries every real change, then a one-line stamp names it. The value
+is therefore `HEAD~1` at deploy time — and because the stamp commit touches nothing but that line,
+*"the console was built at `<sha>`"* stays literally true. `git show --stat <sha>..HEAD` should show
+the stamp block and nothing else.
+
+**The DABs `config:` block cannot do this dynamically.** It accepts `env` and `${var.x}`, validates,
+deploys clean — and then silently fails to write `app.yaml` at all (`databricks/cli#4901`, CLI
+v1.12.1, already recorded in `CLAUDE.md`). A hand-maintained literal is the only mechanism that
+works here, which means **it must be re-stamped by hand on any future release**. Only prod's
+`app.yaml` is stamped; the free-edition mirror keeps its own file by design
+(`tests/test_bundle_resources.py::test_each_app_target_keeps_its_own_app_yaml`).
+
+#### The `vector-search` scope gap existed on abhi as well, and deploying it is not sufficient
+
+Measured before any deploy: `apps get fleetguard-console` returned
+`user_api_scopes: [postgres, sql, model-serving]` — **no `vector-search`**. So I-123's finding was
+never free-edition-specific: **`/api/readyz` could never return 200 on the submission deployment
+either.** The base declaration in `resources/fleetguard_console.app.yml` fixes both targets at once.
+
+The trap is that the fix has **three** parts, and the first two look complete on their own (I-086).
+A per-user consent grant is **sticky** — it does not widen when the app's scope list widens — and
+this account had opened the abhi App before. Deploy + restart alone leaves the *identical*
+`403 Invalid scope` a never-granted app returns. All three are required:
+
+1. `bundle deploy` (re-asserts the scope on the app resource),
+2. restart the App,
+3. `DELETE /api/2.0/oauth-app-integrations/ed81b232-1eff-44ee-a422-ac522cf38de9/user-consent/me`,
+   then reopen in a **fresh incognito** window — revocation does not invalidate already-issued
+   tokens (~1 h), so a warm session keeps failing after a correct fix and imitates the bug.
+
+#### Step 3.0's chunk count was pre-verified independently, and the prediction held
+
+Run against `abhi` **before** the job, with the builder's own predicate copied verbatim:
+
+| tier | chunks |
+|---|---|
+| `EXACT` | **115,499** |
+| `MODEL_VARIANT` | **63,848** |
+| **total** | **179,347** |
+
+Two things worth keeping:
+
+- **`EXACT` reproduces I-035's 2026-08-31 figure of 115,499 to the row.** The old scope is exactly
+  reproducible, which is what makes the widened total trustworthy rather than merely plausible.
+- **PR #23's prediction held.** It reasoned from free edition's `116,252 + 64,577 = 180,829` that
+  abhi should land *"near 180K, a few percent lower"* — smaller corpus (2,240,289 vs 2,249,908
+  complaints) and 47 vs 49 make/model pairs. Actual: **0.82% lower**. The roster was confirmed
+  live at 20,000 vehicles / 47 pairs / 15 makes.
+
+So step 3.0's printed count has an independent cross-check to agree with, in the I-035 discipline —
+rather than being the single derivation of a number four documents are waiting on. At ~4,336
+rows/min this is a **~41 min** index build.
+
+---
+
 ### I-125 — the Assistant screenshot stops being deferred, because Run 2 is the only window
 
 *Date:* 2026-09-30 · *Status:* ✅ built; **captured for the first time in Run 2** (step 3.5).

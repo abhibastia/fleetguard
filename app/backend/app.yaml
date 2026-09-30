@@ -44,6 +44,28 @@ env:
   # script uses, rather than whatever the runtime happens to supply.
   - name: DATABRICKS_HOST
     value: https://dbc-7b106152-caf3.cloud.databricks.com
+  # RELEASE PROVENANCE — the one line `/api/readyz`'s release check exists to print, and it
+  # read `console built at unset` on both targets until Run 2 (I-123 found it on free edition,
+  # I-126 on abhi). A provenance check that reports "unset" answers *"is the live system the
+  # thing in the zip?"* with a shrug, which is the whole question a review named as the biggest
+  # practical risk (I-110).
+  #
+  # **THIS NAMES THE PREVIOUS COMMIT, AND THAT IS NOT A MISTAKE.** A file cannot contain its own
+  # commit's SHA. So the release lands as two commits: one carrying every real change (this
+  # value), then this one-line stamp on top. The commit named here is therefore HEAD~1 at deploy
+  # time — and because the stamp commit touches nothing but this line, "the console was built at
+  # <sha>" stays literally true. Verify with `git show --stat <sha>..HEAD` if it ever looks off:
+  # the diff should be this block and nothing else.
+  #
+  # The DABs `config:` block cannot supply this dynamically — it accepts `env` and `${var.x}`,
+  # validates, deploys clean, and then silently fails to write `app.yaml` at all
+  # (databricks/cli#4901, CLI v1.12.1). So a hand-maintained literal is the only mechanism that
+  # works, and it must be re-stamped by hand on any future release.
+  #
+  # `readyz.py` falls back to `DATABRICKS_BUNDLE_GIT_COMMIT` then to the string `unset`; Apps
+  # does not inject the former, which is why the fallback was never reached.
+  - name: FLEETGUARD_GIT_SHA
+    value: 80633b42be9c4bc5c99d9a07d3a0efbea122d275
   # The Home page's "Analytics dashboard" link. Previously a literal in Home.tsx — broke Free
   # Edition, whose dashboard lives on a different host/workspace/id entirely, because the
   # built JS bundle is shared byte-for-byte between targets (scripts/sync_free_edition_app.sh).
