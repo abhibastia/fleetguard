@@ -102,7 +102,29 @@ Two things worth keeping:
 
 So step 3.0's printed count has an independent cross-check to agree with, in the I-035 discipline —
 rather than being the single derivation of a number four documents are waiting on. At ~4,336
-rows/min this is a **~41 min** index build.
+rows/min this is a **~42 min** index build (the script's own estimate from the live table).
+
+**Confirmed by the job:** the same three numbers, and the builder's assert is back from bounded to
+**exact per tier** — not just the total, because a regression that moved rows *between* tiers while
+preserving the sum would otherwise pass, which is exactly the I-115 failure.
+
+##### The mirror-drift guard fired, correctly, on `corpus.json`
+
+Refreshing `corpus.json` failed CI on `test_the_free_edition_app_mirror_has_not_drifted` — the guard
+added one day earlier (I-124). It is inside the mirrored tree, and `export_corpus.py` writes only
+prod's copy.
+
+The fix is the one the test names: run `scripts/sync_free_edition_app.sh`, never hand-edit the
+mirror. But it exposes something worth stating rather than rediscovering:
+
+**the byte-identical mirror means free edition's Home scale strip displays *abhi's* corpus
+figures**, down to `source_schema: bootcamp_students.fleetguard` in the provenance `statement`. That
+is pre-existing — the mirror carried 115,499 and abhi's schema name before this change — and it is
+accepted, because free edition is an iteration target and not a deliverable. The trap is the
+*remedy*: running `export_corpus.py --profile free-edition` would write free-edition numbers into
+prod's file and then fail the same drift test. There is no way to give the two targets different
+corpus figures without giving `corpus.json` the same per-target treatment `app.yaml` has, which is
+not worth doing for a strip of numbers on a test environment's home page.
 
 ---
 
