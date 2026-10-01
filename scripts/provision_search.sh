@@ -111,7 +111,8 @@ index_row_count() {
 # The poll below watched only the index, so it reported "could not read index" when the actual
 # event was the endpoint ceasing to exist. Those need distinguishing, because the recovery
 # differs: a stall (I-112) is waited out, a sync restart (I-105) is fatal to that attempt, and a
-# missing endpoint has to be recreated from scratch after `delete-index` clears the orphans.
+# missing endpoint has to be recreated from scratch, after the single-index teardown in
+# docs/RUNBOOK.md step 2.1 clears the orphans it left behind.
 endpoint_state() {
   db vector-search-endpoints get-endpoint "$ENDPOINT" 2>/dev/null \
     | python3 -c 'import json,sys; d=json.load(sys.stdin); print((d.get("endpoint_status") or {}).get("state","UNKNOWN"))' \
@@ -214,13 +215,15 @@ while true; do
 
 FAILED: the endpoint $ENDPOINT NO LONGER EXISTS.
 This is I-127, not I-112 and not I-105. Nothing you did caused it -- this script issues no
-deletes. The index, its UC table entry and its sync pipeline are now orphaned; ONE command
-clears all three and it does NOT need the endpoint back:
+deletes, and deliberately cannot (tests/test_provision_search.py enforces that by refusing to
+let the teardown verbs appear in this file at all, which is why the command below is a
+reference rather than a copy-paste).
 
-  databricks vector-search-indexes delete-index $INDEX --profile $PROFILE
-
-Then re-run this script. Verify the orphans are gone first:
-  SHOW TABLES IN $CATALOG_SCHEMA LIKE '$(basename "${INDEX//./\/}")'   -- expect empty
+The index, its UC table entry and its sync pipeline are now orphaned. ONE command clears all
+three and it does NOT need the endpoint back -- it is quoted in full in docs/ISSUES.md I-127,
+and it is the same single-index teardown as docs/RUNBOOK.md step 2.1. Run it, confirm
+  SHOW TABLES IN $CATALOG_SCHEMA LIKE 'complaint_chunk_idx'
+returns empty, then re-run this script.
 GONE
     exit 1
   fi

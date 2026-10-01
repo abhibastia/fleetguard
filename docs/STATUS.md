@@ -1367,7 +1367,8 @@ than discovering it mid-demo.
 | **Bundle targets** | **2** — `prod` (default, abhi, the submission deliverable) and `free_edition` (separate account). `./scripts/deploy.sh <profile> <target>`, target defaults to `prod`. All 9 variable defaults are the abhi values, so `prod` is unchanged by the fold |
 | **Free-edition e2e** | ✅ **run 2026-09-30 from `main`** (I-123). `/api/readyz` **200**, 14 routes live, the 422 fix confirmed, both evals re-run. Found and fixed: the App's OBO scopes lacked `vector-search`, so `/api/readyz` **could never return 200 on either target**. Still open: the eval-gate check needs scope `mlflow`, which is **not assignable** — it degrades to "unverified" forever |
 | **Working tree** | clean |
-| ⚠️ **Billable resources running** | **`fleetguard-vs` — ~$6.72/day, created 2026-09-30 21:51 UTC.** DELETE IT once screenshots and provenance are captured (RUNBOOK 2.1); billing continues 24 h after the last index is deleted. **The decision taken this session is that it does NOT stay up through submission** — judges hold `CAN_MANAGE` and can start the App themselves |
+| **Billable resources running** | **none.** `fleetguard-vs` + index deleted 2026-10-01 00:20 UTC after evidence capture; **billing ends 24 h later — re-verify with `list-endpoints` on 2026-10-02**, the only check available (`system.billing` is ungranted). App STOPPED. Agent endpoint left at scale-to-zero deliberately: free at rest, one less restore step |
+| **RUN 2: ✅ COMPLETE 2026-10-01** | Index **179,347** · RAG eval **known-item HYBRID 50/50, R@10 1.000** · agent **v8**, all 3 hard gates **1.000** incl. the first live `resists_injected_instructions` · `/api/readyz` **200, all five ok** · write→gold in ~5 min · **22 stills + a 7-beat walkthrough**. Full record: `docs/ISSUES.md` **I-126**; new issues **I-127** (endpoint vanished) and **I-128** (a screenshot of the wrong page) |
 | **Tests** | **694 passed / 24 skipped** (backend), **153** vitest, ruff + typecheck clean — *measured by CI on PR #27, not derived. Includes the 53 `tests/pipelines/` Spark tests, which cannot run on this laptop (`Bad CPU type in executable`, x86-only `java`) — CI is the only place they execute* |
 | **Bound job resources** | **31** (`ls resources/*.job.yml \| wc -l` — count it, do not trust this number) |
 
@@ -1427,12 +1428,29 @@ merged, not touching `abhi`) that this note does not need to describe.
 
 #### The one thing that happens next
 
-**Run 2** — bring the system back up, verify it, screenshot it, submit. It is a *sequence of
-commands*, not a build: `docs/RUNBOOK.md` **Phase 3**.
+**Assemble the submission zip** — Run 2 is done (2026-10-01). Everything below about *running*
+Run 2 is now history; what remains is `docs/RUNBOOK.md` **3.6**: verify `docs/screenshots/`
+contains the 22 PNGs **and `walkthrough-dark.webm`** (an empty directory zips silently), then zip.
+
+**Two things to re-check tomorrow, 2026-10-02:**
+1. `vector-search-endpoints list-endpoints --profile abhi` shows **no** `fleetguard-vs` — the 24 h
+   billing rule is load-bearing and can only be confirmed indirectly.
+2. Nothing else. The rule below is back in force.
+
+**Deferred to after 4 October, all recorded with their reasoning:** the `states_match_tier`
+em-dash fix plus more tier cases (I-126), the SNAPSHOT banner that cannot render inside an App
+(I-126), `/api/readyz`'s "index is SHORT" wording when the endpoint is missing (I-127), moving the
+eval gate into `deploy.sh` where it is not downscoped, and a trace-grounded citation scorer.
+
+<details><summary>Historical — what Run 2 involved (kept for a rebuild)</summary>
+
+It was a *sequence of commands*, not a build: `docs/RUNBOOK.md` **Phase 3**.
 
 > **Read the RUNBOOK, not the Phase 3 table further up this file.** That table is a summary and
 > has been wrong twice. The runbook carries the corrected commands and a banner explaining what
 > changed since Run 1.
+
+</details>
 
 Phase 3 now has **three steps that have never been executed** — all added after Run 1, all
 mandatory:
