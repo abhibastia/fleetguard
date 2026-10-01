@@ -194,6 +194,18 @@ Current live state (checked 2026-09-23): `DEPLOYMENT_STOPPED`. There is no `star
 subcommand — only `update-config`, rebuilt from the *live* served-entity config so nothing
 (especially `environment_vars`, which silently misfiles MLflow tracing if dropped) is lost:
 
+> **The asymmetry, recorded 2026-10-01.** **Stop is UI-only** — absent from the CLI, the Python
+> SDK and the public REST reference alike (`POST .../stop` → `ENDPOINT_NOT_FOUND`), yet present
+> as a button in the Serving UI. That is how this endpoint reached `DEPLOYMENT_STOPPED` in the
+> first place. **Restore is CLI-only in practice** (`update-config`), so the two halves of this
+> endpoint's lifecycle live in two different places — which is worth knowing before hunting for
+> a `start` that does not exist.
+>
+> **Stopped is not scale-to-zero, and the difference bites during a demo.** A *stopped* endpoint
+> refuses requests outright (`400 The given endpoint is stopped`); a *scaled-to-zero* one wakes
+> in ~47 s. `scale_to_zero_enabled` reads `true` in **both** states and distinguishes nothing
+> (I-092) — read `deployment_state_message`.
+
 ```bash
 databricks serving-endpoints get agents_bootcamp_students-fleetguard-fleetguard_agent --profile abhi
 ```
