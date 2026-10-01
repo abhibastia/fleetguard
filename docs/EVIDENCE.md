@@ -235,7 +235,7 @@ minutes" for the round trip.
 | Measured processing latency | §8 above, with the two-number caveat |
 | API request and error-handling code | `src/fleetguard/http_retry.py`, `src/ingest/05_poll_recalls_api.py`, `src/fleet/04_build_fleet_registry.py` |
 | Agent tool definitions | `src/agent/14_fleetguard_agent.py`; reference table in ARCHITECTURE §7.2 |
-| Screenshots / demo transcripts | `scripts/capture_screenshots.py` produces 20 images + a `manifest.json` into the gitignored `docs/screenshots/`; `docs/DEMO.md` is the guided walkthrough. **Generate these into the submission zip** — they are not in the repo |
+| Screenshots / demo transcripts | **Both, and in the zip.** `docs/TRANSCRIPTS.md` — five verbatim agent exchanges, *generated from the saved JSON responses rather than retyped*. `docs/screenshots/` — 22 stills (both themes, incl. the Assistant answering with citations), `walkthrough-dark.webm` + `.mp4` (7 beats, following `docs/DEMO.md`'s order), and `manifest.json` with per-beat timings. `docs/DEMO.md` is the guided walkthrough. The transcripts exist because an image and a video are only evidence to a reader that can open them |
 
 ## Deliberately still missing
 

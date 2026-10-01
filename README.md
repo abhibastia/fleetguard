@@ -204,7 +204,8 @@ Read `docs/STATUS.md` first if you're picking this up cold — it's the one page
 
 | Document | Job |
 |---|---|
-| [`docs/EVIDENCE.md`](docs/EVIDENCE.md) | **What backs each claim** — the artefact, table, job or measured number behind every graded line, and what is deliberately still missing |
+| [`docs/EVIDENCE.md`](docs/EVIDENCE.md) | **What backs each claim** — the artefact, table, job or measured number behind every graded line, and what is deliberately still missing. **Start here**: it is organised by the eight rubric categories |
+| [`docs/TRANSCRIPTS.md`](docs/TRANSCRIPTS.md) | **Five verbatim agent exchanges from Run 2**, generated from the saved JSON responses rather than retyped — deterministic exposure, retrieval with cited complaint ids, a write reaching the lakehouse, graceful degradation after the index was deleted, and what the endpoint returns right now |
 | [`docs/DEMO.md`](docs/DEMO.md) | **Start here to look around** — pre-flight, the ten beats, numbers with sources, what not to claim |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | The living spec — what the system *is*, kept true with the code |
 | [`docs/API.md`](docs/API.md) | Every console REST endpoint and every external API this project consumes, one page |
