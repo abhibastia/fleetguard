@@ -201,10 +201,20 @@ subcommand — only `update-config`, rebuilt from the *live* served-entity confi
 > endpoint's lifecycle live in two different places — which is worth knowing before hunting for
 > a `start` that does not exist.
 >
-> **Stopped is not scale-to-zero, and the difference bites during a demo.** A *stopped* endpoint
-> refuses requests outright (`400 The given endpoint is stopped`); a *scaled-to-zero* one wakes
-> in ~47 s. `scale_to_zero_enabled` reads `true` in **both** states and distinguishes nothing
-> (I-092) — read `deployment_state_message`.
+> **Stopped is not scale-to-zero, and the difference bites during a demo.** Both verified live
+> 2026-10-01 after stopping v8 from the UI:
+> ```
+> deployment         : DEPLOYMENT_STOPPED
+> deployment_message : 'Stopped'
+> scale_to_zero_enabled : true        <-- still true. I-092, live.
+>
+> POST .../invocations -> HTTP 400
+> {"error_code":"BAD_REQUEST","message":"The given endpoint is stopped,
+>  please retry after starting the endpoint."}
+> ```
+> A *scaled-to-zero* endpoint wakes in ~47 s; a *stopped* one refuses outright. And
+> `scale_to_zero_enabled` reads `true` in **both** states, so it distinguishes nothing — read
+> `deployment_state_message`.
 
 ```bash
 databricks serving-endpoints get agents_bootcamp_students-fleetguard-fleetguard_agent --profile abhi
