@@ -106,6 +106,28 @@ index_row_count() {
     2>/dev/null || echo "MISSING false"
 }
 
+# I-127: the ENDPOINT vanished one minute after its index began syncing — ONLINE with
+# num_indexes=1, then not present in `list-endpoints` at all, with no delete issued by anyone.
+# The poll below watched only the index, so it reported "could not read index" when the actual
+# event was the endpoint ceasing to exist. Those need distinguishing, because the recovery
+# differs: a stall (I-112) is waited out, a sync restart (I-105) is fatal to that attempt, and a
+# missing endpoint has to be recreated from scratch, after the single-index teardown in
+# docs/RUNBOOK.md step 2.1 clears the orphans it left behind.
+endpoint_state() {
+  db vector-search-endpoints get-endpoint "$ENDPOINT" 2>/dev/null \
+    | python3 -c 'import json,sys; d=json.load(sys.stdin); print((d.get("endpoint_status") or {}).get("state","UNKNOWN"))' \
+    2>/dev/null || echo "GONE"
+}
+
+# The stall's only real signal. I-112 recurred a third time in Run 2 and `indexed_row_count` sat
+# at None/0 throughout, indistinguishable from a dead index; the state machine is visible only
+# here. Printed so a waiting operator can see progress instead of guessing.
+index_message() {
+  db vector-search-indexes get-index "$INDEX" 2>/dev/null \
+    | python3 -c 'import json,sys; d=json.load(sys.stdin); print(((d.get("status") or {}).get("message") or "")[:64])' \
+    2>/dev/null || echo ""
+}
+
 echo "profile:  $PROFILE"
 echo "endpoint: $ENDPOINT"
 echo "index:    $INDEX"
@@ -181,14 +203,45 @@ echo
 echo "polling every ${POLL_SECONDS}s. A DROP in indexed_row_count is the failure (I-105);"
 echo "a plateau is not."
 last=-1
+last_msg=""
 while true; do
   sleep "$POLL_SECONDS"
-  read -r rows ready <<<"$(index_row_count)"
-  if [[ "$rows" == "MISSING" ]]; then
-    echo "error: index disappeared mid-build" >&2
+
+  # Endpoint FIRST. If it is gone the index reads are meaningless, and reporting them instead
+  # sends the operator to debug the index -- which is what happened in I-127.
+  ep="$(endpoint_state)"
+  if [[ "$ep" == "GONE" ]]; then
+    cat <<GONE >&2
+
+FAILED: the endpoint $ENDPOINT NO LONGER EXISTS.
+This is I-127, not I-112 and not I-105. Nothing you did caused it -- this script issues no
+deletes, and deliberately cannot (tests/test_provision_search.py enforces that by refusing to
+let the teardown verbs appear in this file at all, which is why the command below is a
+reference rather than a copy-paste).
+
+The index, its UC table entry and its sync pipeline are now orphaned. ONE command clears all
+three and it does NOT need the endpoint back -- it is quoted in full in docs/ISSUES.md I-127,
+and it is the same single-index teardown as docs/RUNBOOK.md step 2.1. Run it, confirm
+  SHOW TABLES IN $CATALOG_SCHEMA LIKE 'complaint_chunk_idx'
+returns empty, then re-run this script.
+GONE
     exit 1
   fi
-  printf '%s  indexed_row_count=%s / %s  ready=%s\n' "$(date -u +%H:%M:%SZ)" "$rows" "$EXPECTED" "$ready"
+
+  read -r rows ready <<<"$(index_row_count)"
+  if [[ "$rows" == "MISSING" ]]; then
+    echo "error: index disappeared mid-build (endpoint is $ep, so this is the index alone)" >&2
+    exit 1
+  fi
+
+  # The message is the stall's only signal -- print it when it changes (I-112, third recurrence).
+  msg="$(index_message)"
+  if [[ "$msg" != "$last_msg" ]]; then
+    printf '%s  status: %s\n' "$(date -u +%H:%M:%SZ)" "$msg"
+    last_msg="$msg"
+  fi
+
+  printf '%s  indexed_row_count=%s / %s  ready=%s  endpoint=%s\n' "$(date -u +%H:%M:%SZ)" "$rows" "$EXPECTED" "$ready" "$ep"
   if (( last >= 0 && rows < last )); then
     cat <<DROP >&2
 

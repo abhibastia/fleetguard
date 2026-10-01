@@ -54,6 +54,14 @@ right, not a formality — if the smoke index's `get-index` output doesn't show 
 > on a *fresh* endpoint (~296 other students on this metastore). **If this recurs: wait, do
 > not delete-and-recreate** — that was tried in between and did not clear it; inaction did.
 > Full writeup in `docs/ISSUES.md` I-112.
+>
+> **RECURRED a third time in Run 2 (2026-09-30) and again self-cleared, at ~21 min.** Watch the
+> `message` field, **not `indexed_row_count`** — the count reads `None` then `0` throughout the
+> stall, indistinguishable from a dead index, and `list-pipeline-events` stays at exactly one
+> event (*"created pipeline"*) the whole time. The only signal is the message moving
+> *"pending endpoint provisioning"* → *"creation is pending"* → *"syncing initial data"*.
+> Treat `None` → `0` as the first sign of life. Budget ~20 min of nothing before the ~42 min
+> build even starts.
 
 Scope a 10K-row subset from the already-fleet-scoped table (free — Delta only):
 

@@ -1358,16 +1358,18 @@ than discovering it mid-demo.
 
 | | |
 |---|---|
-| **Today** | 2026-09-30 · **submission 4 October** · **Run 2 targeted 2–3 October** |
-| **`main`** | `b7fa9c8` (I-120 + I-121, PR #19), pushed to `origin/main`, **CI green** (both jobs) |
-| **Unmerged** | `chore/fold-free-edition-target` — I-122, the `free_edition` target fold. Offline only |
+| **Today** | 2026-09-30 · **submission 4 October** · **RUN 2 IS EXECUTING NOW** (brought forward from 2–3 October) |
+| **`main`** | `833cc69` (PRs #22–#27), pushed, **CI green**. PRs #22 citation scorer · #23 chunk-count expectation · #24 Assistant screenshot · #25 + #27 provenance stamp · #26 the measured 179,347 |
+| **Unmerged** | none |
+| ⚠️ **Release provenance is a HAND-MAINTAINED literal** | `FLEETGUARD_GIT_SHA` in `app/backend/app.yaml` names **`b44339c`**, which is `HEAD~1`. A file cannot hold its own commit's SHA, so a release is two commits: content, then the stamp. **Re-stamp whenever anything the console SERVES changes** — `fleetguard_api/`, the built bundle, or `corpus.json`. Docs-only commits do **not** invalidate it. The DABs `config:` block cannot supply it (cli#4901). See I-126 |
 | **Branches** | **2 local / 2 remote** — `main` plus **`free-edition-deploy`, retained deliberately** (2026-09-30) though its work is now all on `main`. 14 others were deleted 2026-09-29 (**I-121**, SHAs recorded there). `feature/role-based-views` survives as tag `archive/role-based-views`; docs naming `deploy/render` as a live location name commit `2b5727a` |
 | ⚠️ **`free-edition-deploy` is a FROZEN PRE-FOLD SNAPSHOT** | Tip `e7ff1b6`, **4 commits behind `main`**. It is kept as a fallback, **not as a live branch — do not deploy free edition from it.** It predates I-120, so its `agent_actions.py` and `readyz.py` lack the `NaN`/422 fix and the `/readyz` eval gate, and it still carries the stale `series_key IS NULL` comment two reviews mis-filed. Free-edition work lives on `main`: `./scripts/deploy.sh <profile> free_edition` |
 | **Bundle targets** | **2** — `prod` (default, abhi, the submission deliverable) and `free_edition` (separate account). `./scripts/deploy.sh <profile> <target>`, target defaults to `prod`. All 9 variable defaults are the abhi values, so `prod` is unchanged by the fold |
 | **Free-edition e2e** | ✅ **run 2026-09-30 from `main`** (I-123). `/api/readyz` **200**, 14 routes live, the 422 fix confirmed, both evals re-run. Found and fixed: the App's OBO scopes lacked `vector-search`, so `/api/readyz` **could never return 200 on either target**. Still open: the eval-gate check needs scope `mlflow`, which is **not assignable** — it degrades to "unverified" forever |
 | **Working tree** | clean |
-| **Billable resources running** | **none** — see "What is costing money" below |
-| **Tests** | **681 passed / 24 skipped** (backend), **153** vitest, ruff + typecheck clean — *measured by CI on PR #20, run `36643258085`, not derived. Includes the 53 `tests/pipelines/` Spark tests, which cannot run on this laptop (`Bad CPU type in executable`, x86-only `java`) — CI is the only place they execute* |
+| **Billable resources running** | **none.** `fleetguard-vs` + index deleted 2026-10-01 00:20 UTC after evidence capture; **billing ends 24 h later — re-verify with `list-endpoints` on 2026-10-02**, the only check available (`system.billing` is ungranted). App STOPPED. Agent endpoint left at scale-to-zero deliberately: free at rest, one less restore step |
+| **RUN 2: ✅ COMPLETE 2026-10-01** | Index **179,347** · RAG eval **known-item HYBRID 50/50, R@10 1.000** · agent **v8**, all 3 hard gates **1.000** incl. the first live `resists_injected_instructions` · `/api/readyz` **200, all five ok** · write→gold in ~5 min · **22 stills + a 7-beat walkthrough**. Full record: `docs/ISSUES.md` **I-126**; new issues **I-127** (endpoint vanished) and **I-128** (a screenshot of the wrong page) |
+| **Tests** | **694 passed / 24 skipped** (backend), **153** vitest, ruff + typecheck clean — *measured by CI on PR #27, not derived. Includes the 53 `tests/pipelines/` Spark tests, which cannot run on this laptop (`Bad CPU type in executable`, x86-only `java`) — CI is the only place they execute* |
 | **Bound job resources** | **31** (`ls resources/*.job.yml \| wc -l` — count it, do not trust this number) |
 
 #### The fifth external review is triaged — `fix/repo-review-round-5` (I-120)
@@ -1386,7 +1388,7 @@ What is on the branch, all offline, no workspace deploy:
 
 | | |
 |---|---|
-| `/api/readyz` fails if the **served** agent version carries no `eval_hard_gates` tag | Closes the evaluated-artefact-vs-deployed-artefact loop I-118 opened. **It will read `down` between runbook steps 3.3 and 3.3a — that is correct, not a bug to route around** |
+| `/api/readyz` fails if the **served** agent version carries no `eval_hard_gates` tag | Closes the evaluated-artefact-vs-deployed-artefact loop I-118 opened. **CORRECTED 2026-09-30 (I-126): it reads `down` only for a client the Apps ingress has not downscoped — i.e. a LOCAL `run_local_static_dev.sh` server, where it was confirmed to report `NEVER EVALUATED`. Through the App it is inert regardless of client**, because the registry read needs scope `mlflow`, which is not assignable; it reports `eval gates unverified (PermissionDenied)` and stays 200 |
 | `states_match_tier` now asserts rather than substring-matches | *"this is not an exact or variant match"* used to score as stating a tier |
 | `pydantic.ValidationError` from model-authored params → **422, not 500** | Found writing the test below; `/api/chat` 500'd on a blank `component` |
 | `TestSeriesKeyIsNeverNull` + a corrected comment in `26_add_defect_signal_idempotency.py` | The stale comment had made **two** reviews file the same disproven "`series_key IS NULL` hole" |
@@ -1426,12 +1428,29 @@ merged, not touching `abhi`) that this note does not need to describe.
 
 #### The one thing that happens next
 
-**Run 2** — bring the system back up, verify it, screenshot it, submit. It is a *sequence of
-commands*, not a build: `docs/RUNBOOK.md` **Phase 3**.
+**Assemble the submission zip** — Run 2 is done (2026-10-01). Everything below about *running*
+Run 2 is now history; what remains is `docs/RUNBOOK.md` **3.6**: verify `docs/screenshots/`
+contains the 22 PNGs **and `walkthrough-dark.webm`** (an empty directory zips silently), then zip.
+
+**Two things to re-check tomorrow, 2026-10-02:**
+1. `vector-search-endpoints list-endpoints --profile abhi` shows **no** `fleetguard-vs` — the 24 h
+   billing rule is load-bearing and can only be confirmed indirectly.
+2. Nothing else. The rule below is back in force.
+
+**Deferred to after 4 October, all recorded with their reasoning:** the `states_match_tier`
+em-dash fix plus more tier cases (I-126), the SNAPSHOT banner that cannot render inside an App
+(I-126), `/api/readyz`'s "index is SHORT" wording when the endpoint is missing (I-127), moving the
+eval gate into `deploy.sh` where it is not downscoped, and a trace-grounded citation scorer.
+
+<details><summary>Historical — what Run 2 involved (kept for a rebuild)</summary>
+
+It was a *sequence of commands*, not a build: `docs/RUNBOOK.md` **Phase 3**.
 
 > **Read the RUNBOOK, not the Phase 3 table further up this file.** That table is a summary and
 > has been wrong twice. The runbook carries the corrected commands and a banner explaining what
 > changed since Run 1.
+
+</details>
 
 Phase 3 now has **three steps that have never been executed** — all added after Run 1, all
 mandatory:
@@ -1469,7 +1488,7 @@ Run 2 step already committed to. Do not "fix" anything that looks unapplied:
 | Agent: write-batch exclusivity, evidence TTL, sentinel stripping, untrusted-data markers, prompt rules 9–10 | **3.3** — `agents.deploy()` |
 | Index source widened to `EXACT` + `MODEL_VARIANT`; the RAG evaluation | **3.0 / 3.1a** |
 | Console: fail-closed action envelopes, `NaN` guard, depot containment, `/api/readyz` (incl. I-120's eval-gate check and the 422-not-500 fix) | **3.2** — `bundle run fleetguard_console` |
-| Evaluation hard gates + model-version tagging; I-120's `states_match_tier` fix | **3.3a** — **and `/api/readyz` reads `down` until this step runs, by design** |
+| Evaluation hard gates + model-version tagging; I-120's `states_match_tier` fix | **3.3a** — and a **locally-run** `/api/readyz` reads `down` until this step runs, by design. **Not through the App** — see the corrected row above (I-126) |
 | I-099's loud stale-snapshot fail (`01_download_flat_files.py`) | Only on the next *ingest* — not exercised in Run 2 at all |
 
 #### Three things Run 2 owes, and nobody else can produce
@@ -1492,6 +1511,15 @@ Run 2 step already committed to. Do not "fix" anything that looks unapplied:
 3. **The index can be `ready` and SHORT.** I-105's sync restarted from zero and a partial index
    answers every query without erroring. `provision_search.sh` polls for a *drop*, not a plateau;
    `/api/readyz` compares `indexed_row_count` against the source table.
+3a. **The AI Search index has THREE distinct failure modes and they need different responses.**
+   Confused for each other, two of them cost hours. Watch `get-endpoint` *and* the index
+   `message`, never `indexed_row_count` alone:
+   | mode | signal | response |
+   |---|---|---|
+   | **I-112** stall on a fresh endpoint | rows `None`/`0`, message stuck on *"pending endpoint provisioning"*, sync pipeline has one event | **wait.** Cleared itself 3/3 times, at ~5/~21/~17 min. Delete-and-recreate was tried and did *not* clear it |
+   | **I-105** sync restart | `indexed_row_count` *decreases* | fatal to that attempt |
+   | **I-127** endpoint vanishes | `get-endpoint <name>` → not found, while the UC entry and sync pipeline survive | `delete-index` (clears all three orphans, silently, without the endpoint) then recreate |
+   `provision_search.sh` now detects all three and prints the recovery command for each.
 4. **Fail-closed action envelopes are the one change with a real failure mode.** If an mlflow
    wrapper omits item ids on the live payload, **every agent write silently stops**. It logs
    loudly on purpose — grep the App logs for `dropping an action envelope` after the first agent

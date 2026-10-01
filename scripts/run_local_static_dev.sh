@@ -29,7 +29,17 @@ PORT="${1:-8811}"
 echo "==> minting a live token for --profile $PROFILE"
 TOKEN=$(databricks auth token --profile "$PROFILE" -o json | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
 
+# Release provenance, so `/api/readyz` reports a real commit instead of `unset`. The App gets
+# this from `app/backend/app.yaml`, which this script does not read — and a local server saying
+# `console built at unset` is both unhelpful and ambiguous, because `unset` is also what a
+# *misconfigured deployment* looks like (I-126). Here it can just be the truth: whatever is
+# checked out. `-dirty` is appended when the tree has uncommitted changes, which for a --reload
+# dev server is the normal case and is exactly the thing worth seeing.
+GIT_SHA="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
+[ -n "$(git status --porcelain 2>/dev/null)" ] && GIT_SHA="$GIT_SHA-dirty"
+
 echo "==> starting uvicorn on :$PORT (static-dev, live Lakebase, $DEV_USER is an approver)"
+FLEETGUARD_GIT_SHA="$GIT_SHA" \
 FLEETGUARD_AUTH_MODE=static-dev \
 FLEETGUARD_DEV_TOKEN="$TOKEN" \
 FLEETGUARD_DEV_USER="$DEV_USER" \

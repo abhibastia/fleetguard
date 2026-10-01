@@ -41,6 +41,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -54,7 +55,12 @@ VIEWPORT = {"width": 1440, "height": 1000}
 VIEWS: list[tuple[str, str, str]] = [
     ("#/home", "home", "Orientation: what the product is and who it is for"),
     ("#/queue", "queue", "Recall queue, ranked consequence-before-volume"),
-    ("#/signals", "signals", "Emerging signals — the proactive half"),
+    # `#/emerging`, NOT `#/signals`. The hash router has no `signals` case and falls through to
+    # Home, so this line shipped a screenshot of Home captioned "the proactive half" in every
+    # run to date — and reported success, because Home renders cleanly (I-128). The internal
+    # View name is `signals`; only the URL is `emerging`. The slug stays `signals` so the file
+    # name and caption still match the view a reader is looking for.
+    ("#/emerging", "signals", "Emerging signals — the proactive half"),
     ("#/evidence", "evidence", "The measured backtest, including the negative result"),
     ("#/launched", "launched", "Launched service campaigns"),
     ("#/work-orders", "work-orders", "Work orders, assignment and actual cost"),
@@ -107,18 +113,50 @@ def wait_for_content(page, slug: str) -> None:
     page.wait_for_timeout(900)
 
 
+def _fingerprint(page) -> str:
+    """Collapsed text of `<main>` — enough to tell two views apart, stable across runs."""
+    try:
+        return " ".join(page.locator("main").inner_text().split())[:400]
+    except Exception:  # noqa: BLE001 - a fingerprint is a check, never the reason a run fails
+        return ""
+
+
 def capture(base_url: str, theme: str, browser) -> list[dict]:
     ctx = browser.new_context(viewport=VIEWPORT, device_scale_factor=1)
     # Must run before first paint: index.html reads this synchronously to avoid a flash.
     ctx.add_init_script(f"localStorage.setItem('fleetguard.theme', '{theme}');")
     page = ctx.new_page()
     captured = []
+    seen: dict[str, str] = {}  # fingerprint -> slug that produced it first
     for route, slug, caption in VIEWS:
         page.goto(f"{base_url}/{route}", wait_until="networkidle")
         wait_for_content(page, slug)
         name = f"{slug}-{theme}.png"
         page.screenshot(path=str(OUT_DIR / name))
         captured.append({"file": name, "route": route, "theme": theme, "caption": caption})
+
+        # THE GUARD THIS SCRIPT DID NOT HAVE (I-128). `#/signals` is not a route — the hash
+        # router falls through to Home — so `signals-*.png` was a screenshot of Home captioned
+        # "Emerging signals, the proactive half", in every run, in the submission zip. Nothing
+        # failed: Home renders cleanly, no skeleton, so every existing check passed and the
+        # manifest listed the view as captured. A mislabelled screenshot is worse than a missing
+        # one for the same reason a spinner is (see `wait_for_content`) — it still looks like
+        # evidence.
+        #
+        # Any route that silently falls back produces a page some other slug already produced,
+        # so comparing rendered text across views catches the whole class rather than this one
+        # instance. Loud, and non-fatal: the images are still worth having while someone reads
+        # this line.
+        fp = _fingerprint(page)
+        if fp and fp in seen:
+            print(
+                f"    ! {slug} ({route}) rendered the SAME PAGE as {seen[fp]} — {name} is "
+                f"mislabelled. Check the route against App.tsx's viewFromHash(); an unknown "
+                f"hash falls through to Home without erroring (I-128).",
+                file=sys.stderr,
+            )
+        elif fp:
+            seen[fp] = slug
         print(f"  {name}")
     ctx.close()
     return captured
@@ -187,6 +225,110 @@ def capture_assistant(base_url: str, theme: str, browser, question: str) -> dict
         ctx.close()
 
 
+#: The walkthrough video's beats, in `docs/DEMO.md`'s order and using its framing. Taken from
+#: that file rather than invented here, so the video and the spoken demo cannot tell different
+#: stories — `detect -> scope -> decide -> dispatch -> prove`.
+#:
+#: **Beat 5 (the human approval gate) is deliberately absent, and it is DEMO.md's strongest
+#: moment.** Recording it means actually approving a campaign, which writes a service campaign
+#: and a fan-out of work orders into the submission database. A video is not worth mutating the
+#: dataset a reviewer will read, so the walkthrough is **read-only navigation plus one agent
+#: question** — itself a read. `manifest.json` says so explicitly rather than letting the
+#: omission read as coverage.
+#:
+#: **Beat 9 is absent too**, for a duller reason: it is a tour of the Databricks workspace, not
+#: of this console, so there is nothing here to film.
+WALKTHROUGH: list[tuple[str, float, str]] = [
+    ("#/evidence", 5.0, "Beat 1 — Evidence first, including the negative result"),
+    ("#/emerging", 5.0, "Beat 2 — Emerging signals, the proactive half"),
+    ("#/queue", 5.0, "Beat 3 — Recall queue, consequence before volume"),
+    ("#/work-orders", 4.0, "Beat 6 — Work orders, closing the loop"),
+    # Beat 7's cost figures live on the launched-campaigns view (ServiceCampaigns.tsx calls
+    # `costBreakdown()`); there is no `#/cost` route. Checked against the router rather than
+    # assumed — the same mistake one line up cost this script two mislabelled screenshots.
+    ("#/launched", 4.0, "Beat 7 — Launched campaigns and cost, not one blended $/vehicle"),
+    ("#/audit-log", 4.0, "Beat 10 — The append-only audit trail"),
+]
+
+
+def record_walkthrough(base_url: str, theme: str, browser, question: str) -> dict | None:
+    """Record a silent walkthrough of the console as `.webm`, via Playwright's own recorder.
+
+    **Why video at all.** The index is torn down immediately after Run 2 to stop billing, so a
+    reviewer opening the App gets a working console with a dead retrieval path — `/api/readyz`
+    503s and the Assistant cannot answer. Stills prove each view rendered; only a recording shows
+    the *flow* the product is actually about, which is the thing a torn-down demo loses.
+
+    **Playwright's recorder, not a desktop capture.** Same dependency already in `.venv`, runs
+    headless, needs no screen-recording permission, and re-runs identically — the same argument
+    that made the stills a committed script instead of someone's saved PNGs. A `screencapture`
+    or `ffmpeg` recording would film whatever else was on the desktop and could not be
+    reproduced.
+
+    **Nothing is injected into the page.** No caption overlays, no highlight boxes, no synthetic
+    cursor. Those would make the video show something that is not the product, in a file whose
+    whole purpose is to be evidence of the product. The cost is that clicks are invisible and the
+    page appears to change on its own — so the beats and their timings go in `manifest.json`
+    instead, and `docs/DEMO.md` remains the narration.
+
+    One context, one video: Playwright writes the file when the context closes, and a per-beat
+    context would produce six clips of a product that is meant to be one flow.
+    """
+    ctx = browser.new_context(
+        viewport=VIEWPORT,
+        device_scale_factor=1,
+        record_video_dir=str(OUT_DIR),
+        record_video_size=VIEWPORT,
+    )
+    ctx.add_init_script(f"localStorage.setItem('fleetguard.theme', '{theme}');")
+    page = ctx.new_page()
+    beats: list[dict] = []
+    started = time.monotonic()
+    try:
+        for route, dwell, caption in WALKTHROUGH:
+            at = round(time.monotonic() - started, 1)
+            page.goto(f"{base_url}/{route}", wait_until="networkidle")
+            wait_for_content(page, f"walkthrough{route}")
+            page.wait_for_timeout(int(dwell * 1000))
+            beats.append({"at_seconds": at, "route": route, "caption": caption})
+
+        # Beat 8 last, because it is the slowest and the only one that can fail: if the agent
+        # is cold or the index is gone, the six beats above are already recorded.
+        at = round(time.monotonic() - started, 1)
+        page.get_by_role("button", name="Open assistant").click()
+        page.wait_for_selector('[role="dialog"][aria-label="Assistant"]', timeout=5_000)
+        box = page.get_by_placeholder("Ask about a campaign or a symptom…")
+        box.fill(question)
+        box.press("Enter")
+        page.wait_for_selector(".thinking", timeout=15_000)
+        page.wait_for_selector(".thinking", state="detached", timeout=150_000)
+        page.wait_for_selector(".turn.agent", timeout=5_000)
+        page.wait_for_timeout(6_000)  # long enough to read the answer back
+        beats.append({"at_seconds": at, "route": "#/queue", "caption": f"Beat 8 — {question}"})
+    except Exception as exc:  # noqa: BLE001 - keep whatever was recorded before the failure
+        print(
+            f"  ! walkthrough cut short: {type(exc).__name__}: "
+            f"{' '.join(str(exc).split())[:140]}",
+            file=sys.stderr,
+        )
+
+    video = page.video
+    ctx.close()  # the file is only written on close
+    if video is None:
+        print("  ! no video was produced", file=sys.stderr)
+        return None
+    name = f"walkthrough-{theme}.webm"
+    try:
+        video.save_as(str(OUT_DIR / name))
+        video.delete()  # drop playwright's random-named original
+    except Exception as exc:  # noqa: BLE001
+        print(f"  ! could not save the video: {exc}", file=sys.stderr)
+        return None
+    size_mb = (OUT_DIR / name).stat().st_size / 1_048_576
+    print(f"  {name}  ({size_mb:.1f} MB, {len(beats)} beats)")
+    return {"file": name, "theme": theme, "beats": beats, "size_mb": round(size_mb, 1)}
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--base-url", default="http://127.0.0.1:8811")
@@ -196,6 +338,17 @@ def main() -> int:
         "--no-assistant",
         action="store_true",
         help="skip the Assistant capture (the only pass that calls the billed agent endpoint)",
+    )
+    ap.add_argument(
+        "--no-video",
+        action="store_true",
+        help="skip the walkthrough recording (also calls the agent, once per theme)",
+    )
+    ap.add_argument(
+        "--video-themes",
+        default="dark",
+        help="themes to record a walkthrough for (default: dark only — a second theme doubles "
+        "the runtime and the agent calls for a film of the same flow)",
     )
     args = ap.parse_args()
 
@@ -234,11 +387,14 @@ def main() -> int:
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     shots: list[dict] = []
+    videos: list[dict] = []
     missing_assistant: list[str] = []
     with sync_playwright() as pw:
         browser = pw.chromium.launch()
         for raw in args.themes.split(","):
             theme = raw.strip()
+            if not theme:
+                continue  # `--themes ""` must mean none, not a theme whose name is empty
             print(f"{theme} theme:")
             shots += capture(args.base_url, theme, browser)
             if args.no_assistant:
@@ -248,6 +404,18 @@ def main() -> int:
                 shots.append(shot)
             else:
                 missing_assistant.append(theme)
+
+        if not args.no_video:
+            for raw in args.video_themes.split(","):
+                theme = raw.strip()
+                if not theme:
+                    continue
+                print(f"{theme} walkthrough:")
+                clip = record_walkthrough(
+                    args.base_url, theme, browser, args.assistant_question
+                )
+                if clip:
+                    videos.append(clip)
         browser.close()
 
     MANIFEST.write_text(
@@ -262,6 +430,14 @@ def main() -> int:
                 # cannot infer from the file listing — every other view is unconditional — so
                 # the manifest says so explicitly rather than leaving it to be noticed.
                 "assistant_question": args.assistant_question,
+                # What the walkthrough does NOT do, said here rather than inferred from its
+                # absence: no approval is performed (DEMO.md beat 5), because recording it means
+                # writing a service campaign and its work orders into the submission database.
+                "videos": videos,
+                "video_scope": (
+                    "read-only navigation plus one agent question; no approval is performed "
+                    "(DEMO.md beat 5) and nothing is injected into the page"
+                ),
                 "assistant_not_captured": [
                     {"theme": t, "blocked_on": "agent endpoint + AI Search index"}
                     for t in missing_assistant
@@ -271,7 +447,7 @@ def main() -> int:
         )
         + "\n"
     )
-    print(f"\n{len(shots)} screenshots -> {OUT_DIR.relative_to(ROOT)}")
+    print(f"\n{len(shots)} screenshots, {len(videos)} video(s) -> {OUT_DIR.relative_to(ROOT)}")
     if missing_assistant:
         print(
             f"!! the Assistant shot is MISSING for: {', '.join(missing_assistant)}.\n"

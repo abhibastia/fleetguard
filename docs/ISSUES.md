@@ -14,6 +14,8 @@ no error and passed the obvious check.
 
 | ID | Area | Issue | Status |
 |---|---|---|---|
+| I-128 | Evidence | **`signals-*.png` was a screenshot of the Home page**, captioned "Emerging signals — the proactive half", in every run and in the submission zip. `#/signals` is not a route — the hash router falls through to Home — so DEMO.md beat 2 had no screenshot evidence while appearing to. Nothing errored: Home renders cleanly, so every existing check passed. Fixed to `#/emerging`, plus a rendered-content fingerprint guard that catches *any* silent route fallback, mutation-checked. | ✅ resolved |
+| I-127 | Platform / AI Search | **The AI Search endpoint vanished one minute after its index began syncing** — ONLINE with `num_indexes: 1` at 22:13, absent from `list-endpoints` at 22:15 (3 confirming reads). No delete was issued; `provision_search.sh` contains no teardown. Left a torn state: the UC table entry and a `RUNNING` sync pipeline both outlived the endpoint, and `/api/readyz` would have called it merely SHORT. `delete-index` cleans all three up silently without needing the endpoint. Distinct from I-112 (stall) and I-105 (sync restart); the only signal is polling `get-endpoint` by name. | **watch** — cause unknown |
 | I-126 | Run 2 / Provenance | **`/api/readyz` reported `console built at unset` on the submission deployment** — the release check's whole purpose, answered with a shrug. Fixed with a two-commit release (real changes, then a one-line stamp naming them); the DABs `config:` block cannot supply it (cli#4901), so it must be re-stamped by hand on any future release. Also: the `vector-search` scope gap was **not** free-edition-specific, and its sticky-consent half needs a consent DELETE + incognito. Step 3.0's count pre-verified independently at **179,347** (`EXACT` reproducing I-035's 115,499 exactly). | **in progress** |
 | I-125 | Evidence | **The Assistant screenshot is no longer deferred** — Run 2 is the only window in which the agent endpoint and the AI Search index are live together, and the index is deleted again immediately afterwards, so this image is the only evidence a reviewer gets that retrieval works. Captured by `capture_screenshots.py` (no frontend change; every selector already existed). **Verified at step 3.5.** | **open** — pending Run 2 step 3.5 |
 | I-118 | Agent/RAG/Security/MLflow | **The retrieval corpus is an injection surface and nothing said so** — `search_complaints` returns 2.24M public, user-submitted narratives straight into the model's context. Three layers added (untrusted-data markers + sentinel stripping, system-prompt rule 9, the existing console checks); severity is bounded by `may_approve` and server-side relevance. Also: citation rule + scorer, injection resistance promoted to a **hard gate**, and evaluation results stamped on the UC model version. **Behavioural half measured in Run 2** — and Run 2 did not run the evaluation at all until now (new runbook step 3.3a). | **open** — pending Run 2 |
@@ -34,6 +36,135 @@ no error and passed the obvious check.
 ---
 
 ## Tooling / process
+### I-128 — every screenshot run shipped Home labelled "Emerging signals", and reported success
+
+*Date:* 2026-09-30 · *Status:* ✅ fixed, guarded, mutation-checked. **SILENT** — nothing errored,
+and the manifest listed the view as captured.
+
+Found while adding a walkthrough recording: checking the routes for the video's beat list turned
+up `#/cost`, which does not exist — and checking *that* properly meant reading
+`App.tsx::viewFromHash()`, which revealed the one already in `VIEWS`.
+
+#### The bug
+
+```
+if (h === "emerging") return { name: "signals" };
+...
+return { name: "home" };      // every unknown hash
+```
+
+The internal View is named `signals`; the **URL** is `#/emerging`. There is no `signals` case.
+`capture_screenshots.py` asked for **`#/signals`**, which fell through to Home.
+
+So `signals-dark.png` and `signals-light.png` were **screenshots of the Home page**, captioned
+*"Emerging signals — the proactive half"*, in every run and in the submission zip. Verified
+empirically rather than by reading the router: the rendered `<main>` text at `#/signals` is
+**byte-identical** to `#/home` and differs from `#/emerging`.
+
+**Nothing failed.** Home renders cleanly and shows no `.skeleton`, so `wait_for_content` passed,
+the file was written, and `manifest.json` recorded the view as captured. This is the same shape as
+the script's original bug — twenty pixel-perfect screenshots of loading skeletons, reported as
+success — and its docstring already draws the right conclusion: *a screenshot of a spinner is
+worse than no screenshot, because it still looks like evidence.* A screenshot of **the wrong
+view** is worse again, because a spinner at least looks wrong.
+
+**What it cost:** DEMO.md beat 2 — the proactive-detection half, one of the two things the
+project claims as novel — had **no screenshot evidence at all**, while appearing to have some.
+
+#### The guard, and why it is a content check rather than a route check
+
+Asserting the route list against the router would catch this instance and nothing else. **Any**
+unknown hash falls through to Home silently, so the general failure is *"this view rendered a page
+another view already rendered"* — which a fingerprint of `<main>`'s text detects regardless of
+cause. Loud on stderr, non-fatal: the images are still worth having while someone reads the line.
+
+**Mutation-checked**, per the discipline this project applies to every guard: re-pointing the
+route at `#/signals` makes it fire (*"signals (#/signals) rendered the SAME PAGE as home"*), and
+restoring the fix silences it. The corrected `signals-dark.png` was confirmed to differ from
+`home-dark.png` on disk.
+
+#### Two smaller things found in the same pass
+
+- **`#/cost` does not exist.** Beat 7's cost figures are rendered by `ServiceCampaigns.tsx`, which
+  calls `costBreakdown()`, so the walkthrough uses `#/launched`. Checked before writing it, which
+  is the only reason it is not a second instance of this bug.
+- **`--themes ""` produced files called `signals-.png`.** My own regression, introduced minutes
+  earlier: the video loop skipped empty theme names and the stills loop did not. An empty theme
+  list must mean *none*, not *one theme whose name is the empty string*.
+
+---
+
+### I-127 — the AI Search **endpoint itself vanished** mid-sync, leaving an orphaned index
+
+*Date:* 2026-09-30 · *Status:* **watch** — cleaned up and retried; cause unknown, not reproduced yet.
+**SILENT** in the sense that matters: nothing failed, nothing errored, the endpoint simply stopped
+existing.
+
+#### What happened
+
+| time (UTC) | state |
+|---|---|
+| 21:51 | `create-endpoint fleetguard-vs STANDARD` → returned `state: ONLINE` immediately |
+| 21:52 | `create-index complaint_chunk_idx` accepted, HYBRID, TRIGGERED, all 7 `columns_to_sync` |
+| 21:52–22:12 | I-112's stall (see I-126) — `indexed_row_count` `None`, then `0` |
+| 22:13 | **`message` advanced to *"Index is currently in the process of syncing initial data"*** |
+| 22:13 | `get-endpoint fleetguard-vs` → `state: ONLINE`, `num_indexes: 1` |
+| **22:14** | **`get-index` → `Error: AI Search endpoint 29b9e264-… not found`** |
+| 22:15 | `get-endpoint fleetguard-vs` → **not found**, three consecutive reads 10 s apart |
+| 22:15 | `list-endpoints` → 3 endpoints, all other students'. Ours absent |
+
+**One minute** between a healthy ONLINE endpoint that had just begun syncing, and an endpoint that
+did not exist.
+
+#### It was not us, and that was checked rather than assumed
+
+- No `delete-endpoint` or `delete-index` was issued in the session — grepped across every
+  background task's captured output, zero matches.
+- `provision_search.sh` **contains no teardown at all**, by design; its header says so and its only
+  `trap` removes a temp file. Teardown is a separate human command (RUNBOOK 2.1).
+- The endpoint's `creator` was this account, so this is not another student's object being reaped.
+
+#### The torn state it left behind
+
+Three objects, two of which outlived the thing they depended on:
+
+| object | state after |
+|---|---|
+| AI Search endpoint | **gone** |
+| AI Search index (servable) | gone with it — `get-index` errors on the missing endpoint id |
+| **UC table entry `complaint_chunk_idx`** | **still present** in `SHOW TABLES` |
+| **Delta sync pipeline** | **still `RUNNING`** |
+
+So Unity Catalog still advertised a table that could not be queried, and a sync pipeline was still
+running against an endpoint that no longer existed. **`/api/readyz` would have reported this as an
+index that is merely SHORT** — its check compares `indexed_row_count` to the source table and has no
+notion of "the endpoint disappeared", which is a gap worth knowing even though a 503 is a 503.
+
+#### Cleanup, which worked cleanly
+
+`delete-index bootcamp_students.fleetguard.complaint_chunk_idx` succeeded **silently** (no output,
+exit 0) despite its endpoint being gone, and it took the orphans with it: the UC entry disappeared
+from `SHOW TABLES`, and the pipeline went from `RUNNING` to *"was not found"*. So the recovery is
+one command, and it does not need the endpoint to exist — worth knowing, because the obvious fear is
+that a dangling index has to be cleaned up through the endpoint that is missing.
+
+#### Retried, and what to watch
+
+Same names, same config — the config was proven in Run 1 and there is no evidence it is implicated.
+The retry's monitor now polls **`get-endpoint` alongside `get-index`**, because the previous watch
+only looked at the index and therefore reported *"could not read index"* when the real event was the
+endpoint disappearing. A watch that cannot name the failure it is watching for is the same class of
+gap as I-105's drop detection existing only after a drop cost a day.
+
+**If this recurs:** it is not I-112 (a stall that self-clears with `indexed_row_count` static at
+`None`/`0`) and not I-105 (a sync restarting from zero, visible as a *decrease*). It is a third,
+distinct failure — the endpoint ceasing to exist — and the only reliable signal is polling
+`get-endpoint` by name. Best current guess is a platform-side rollback or eviction on a metastore
+shared with ~296 students; that is a guess, stated as one, and this account cannot see the platform
+events that would confirm it.
+
+---
+
 ### I-126 — Run 2 on `abhi`: release provenance was `unset`, and the chunk count pre-verified exactly
 
 *Date:* 2026-09-30 · *Status:* **in progress** — pre-run findings below; measured results appended
@@ -107,6 +238,253 @@ rows/min this is a **~42 min** index build (the script's own estimate from the l
 **Confirmed by the job:** the same three numbers, and the builder's assert is back from bounded to
 **exact per tier** — not just the total, because a regression that moved rows *between* tiers while
 preserving the sum would otherwise pass, which is exactly the I-115 failure.
+
+##### I-112 recurred — third occurrence, same signature, and the endpoint contradicts the index
+
+Created 21:52 UTC. At **+16 min**: `indexed_row_count` still `None`, `ready: false`, message
+*"Delta sync index creation is pending endpoint provisioning."*
+
+The endpoint says otherwise. `get-endpoint fleetguard-vs` reports `state: ONLINE` with
+`num_indexes: 1`, and `list-pipeline-events` on the sync pipeline
+(`bdf49a59-d1ce-48b0-8cf3-9ff2a9181c7f`) returns **exactly one event** — *"User … created
+pipeline"* — and nothing since. So the index is blocked on a provisioning step the endpoint
+already completed, and the sync pipeline has never run a single update.
+
+That is I-112's signature exactly: fresh endpoint, first index on it, zero sync activity, a
+message that names a cause contradicted by the endpoint's own state. **Third occurrence** (two on
+2026-09-23, this one). The recorded guidance holds and is being followed: **wait — do not
+delete-and-recreate.** Deletion was tried during I-112 and did not clear it; inaction did.
+
+**SELF-CLEARED at ~21 min, with no action taken — the third time inaction was the fix.** The
+progression is worth recording because it is the only visible evidence anything is happening at
+all, and it is entirely in the `message` field rather than in `indexed_row_count`:
+
+| elapsed | `indexed_row_count` | `message` |
+|---|---|---|
+| 0–19 min | `None` | *"Delta sync index creation is pending **endpoint provisioning**"* |
+| ~20 min | `0` | *"Delta sync Index creation is **pending**"* |
+| ~21 min | `0` | *"Index is currently in the process of **syncing initial data**"* |
+
+**So `indexed_row_count` is the wrong thing to watch during the stall.** It reads `None` and then
+`0` throughout, which is indistinguishable from a dead index; the state machine only shows up in
+the message string. The sync pipeline's event list stays at exactly one event (*"created
+pipeline"*) through all three stages, so it is no help either. A future operator should watch the
+**message**, and should treat `None` → `0` as the first real sign of life.
+
+Recorded while in progress specifically so the elapsed time came from the clock rather than being
+reconstructed afterwards — the first draft of this paragraph said "+28 min" from a misread, which
+would have turned a normal stall into a new finding.
+
+**What made this cheap rather than costly:** the I-111 rescope. At the old 1.75M-chunk scope a
+stall plus a rebuild was most of a working day (I-105 burned ~7 h to 62% and was abandoned). At
+179,347 rows the whole build is ~42 min, so even a full restart costs less than the stall itself
+has already taken.
+
+##### The SHA stamp works, and `eval gates unverified` is now known to be unconditional
+
+First live `/api/readyz` on abhi after the deploy, called **programmatically with a CLI bearer
+token** (naming the client, per I-086's rule):
+
+| check | result |
+|---|---|
+| `lakebase` | ok — `connected as abhisek.bastia17@gmail.com` |
+| `agent_endpoint` | down — `ready=NOT_READY, serving v7` (expected before step 3.3) |
+| `search_index` | down — index still syncing (expected) |
+| `snapshots` | ok |
+| `release` | ok — **`console built at b44339c7e68…`**, no longer `unset` |
+
+**The provenance fix is verified live.** So is the `vector-search` scope: the index check *ran* and
+reported a row count rather than a `403`.
+
+**And a correction to what this session predicted.** The plan said a programmatic CLI bearer token
+would carry broad scopes through the App and so exercise the eval-gate check for real. It does not:
+`release` reported *`eval gates unverified (PermissionDenied: Provided OAuth token does not have
+required scopes: mlflow)`*. **The Apps ingress downscopes to `user_api_scopes` regardless of client**
+— programmatic or browser — and `mlflow` is not assignable. So the eval-gate check is inert through
+the App **unconditionally**, not merely for browser sessions.
+
+`CLAUDE.md`'s note that *"a programmatic CLI bearer token carries broad scopes and never touches the
+consent flow"* is still true of calling **Databricks APIs directly**; it does not survive being
+routed *through* an App. The two halves of that sentence come apart: consent is bypassed (which is
+why the index check worked without a consent reset), but scope is not. The only place I-120's check
+does real work is a **local** `run_local_static_dev.sh` server, whose token is not downscoped by any
+ingress.
+
+##### The SNAPSHOT banner cannot render inside a Databricks App
+
+`/healthz` at the bare app URL is intercepted by the Apps ingress — 200, **zero-byte body**, no line
+in `apps logs`. That much was measured 2026-09-27 and is written into `main.py`'s `Me` docstring,
+which is why `dashboard_url` moved to `/api/me`.
+
+**Home.tsx was migrated off `/healthz`; `App.tsx` was not.** It still calls `api.health()`, whose
+`r.json()` therefore rejects on the empty body, `setHealth(null)` runs, and the
+`health?.data_mode === "snapshot"` banner is unreachable. Its own comment states the stakes: *"A
+console showing point-in-time data while implying it is live is the interface version of reporting a
+failed query as 'no results'."* That honesty guard is structurally dead in the one environment the
+product actually ships in.
+
+**Zero impact on the submission and deliberately not fixed.** `FLEETGUARD_DATA_MODE=lakebase` on both
+targets, so the banner correctly stays hidden; the failure is that it would *also* stay hidden if the
+mode were `snapshot`. Fixing it means a frontend change plus a console rebuild, an App redeploy and a
+provenance re-stamp, days before submission, to correct a banner that is already showing the right
+thing. **The fix, for after 4 October:** add `data_mode` and `snapshot_captured_at` to the `Me` model
+(it has only `user_name`, `token_source`, `dashboard_url`) and have `App.tsx` read them from
+`api.me()`, exactly as Home.tsx already reads `dashboard_url`. `api.health()` then has no caller
+inside the App at all.
+
+##### Run 2 completed — the full chain, then teardown
+
+**`/api/readyz` returned 200 with all five checks `ok`**, locally, for the first time on abhi:
+
+```
+lakebase        ok  connected as abhisek.bastia17@gmail.com
+agent_endpoint  ok  ready=READY, serving v8
+search_index    ok  indexed_row_count=179347, matching source exactly
+snapshots       ok
+release         ok  agent v8, console built at fd5f1fef…, eval_hard_gates=passed (run 1199cf9f…)
+```
+
+**I-118's loop is closed end to end, demonstrated in both directions in one session:** the same
+check read `down — NEVER EVALUATED` before step 3.3a and `passed` after. I-120's code does real
+work; it is only the App that cannot see it.
+
+**The write path, end to end.** An agent write through `/api/chat` created
+`AGENT-ac6d0e08b2d1` (RAM 2500 / SERVICE BRAKES, 1,256 fleet vehicles, `EXACT`, recomputed
+server-side) and it arrived in `gold_defect_signal_current` within ~5 min — Postgres → Lakebase
+CDF → the `table_update`-triggered job. That is a **third** data point for §8.3's latency, which
+should now be read as roughly **2.5–5 min** (155 s, 269 s, ~300 s), never as one averaged number.
+Two details worth keeping: the agent said it had *"**requested**"* the signal and explicitly
+disclaimed being able to confirm the write — the system-prompt rule holding under live
+conditions — and **trap 4 was clear**, zero `dropping an action envelope` in the App log, so the
+fail-closed envelope change did not silently stop writes.
+
+**Screenshots: 22 stills + a 7-beat walkthrough.** `assistant-dark.png` is the strongest single
+artifact in the set, and the agent did better than the question asked: told to *"search complaints
+about brake failures"*, it returned a cited table and **volunteered a correction** — *"every one is
+about the PARKING / emergency brake, not the primary hydraulic service brakes — so treat this as a
+parking-brake signal, not a general brake-failure one."* Qualifying its own retrieval rather than
+dumping it is exactly the constrained behaviour DEMO.md beat 8 claims.
+
+**Provenance, the five values in one place:**
+
+| | |
+|---|---|
+| deployed commit | `833cc6944e604208dc4d91a19cfe306cf3dbfca0` |
+| console stamp | `b44339c7e68c9bc0975feb010e03c22d004a9786` (`HEAD~1` of the deploy, by design) |
+| agent | **v8**, `scale_to_zero=true`, 100% traffic, sole served entity |
+| App deployment | `01f1bd1a56dc1412b17a1725772b2781`, SUCCEEDED |
+| index | 179,347 rows, `ready`, HYBRID |
+
+**Local `HEAD` has since moved past the deployed commit, and that is correct.** The nine commits
+after it touch only `docs/` and `scripts/` — verified with `git diff --name-only` against
+`fleetguard_api/`, `corpus.json` and the console bundle, which is the exact rule the stamp comment
+states. A docs commit must not force a redeploy.
+
+**Teardown done the same session, per the decision not to hold the index through submission:**
+index and endpoint `fleetguard-vs` deleted (billing ends 24 h later — re-verify with
+`list-endpoints` tomorrow, the only check available since `system.billing` is ungranted), App
+STOPPED, **agent endpoint deliberately left alone** — scale-to-zero is free at rest and removes a
+restore step.
+
+> **Consequence a reviewer will meet:** with the index gone, `/api/readyz` returns **503** and the
+> Assistant cannot answer. Every Lakebase-backed view still works live. The retrieval path exists
+> in `docs/EVIDENCE.md`, the Assistant screenshots and the walkthrough — which is precisely why
+> I-125 stopped deferring that capture.
+
+##### The live agent on v8 — exposure, retrieval and citations all verified
+
+Rebuilt to **v8** and deployed. Verified with **raw REST**, because the CLI's
+`serving-endpoints query` truncates this endpoint's response to `{"id","object"}` with no
+`output` (I-124).
+
+| question | result |
+|---|---|
+| *"Which fleet vehicles does recall 17V629000 affect?"* | **25 vehicles across 22 depots, all EXACT**, in 8.3 s warm — and it volunteered that there were no `MODEL_VARIANT` matches to flag. Matches the documented expected answer exactly |
+| *"Search complaints about brake failures"* | **five real narratives, each with its complaint id** — `738214`, `729017`, `667249`, `782129` |
+
+The second one is the one the index exists for: the 179,347-chunk index is genuinely serving the
+agent, not merely reporting `ready`.
+
+**It also settles I-124 from the live side.** Every id the agent emitted is **six digits**. The
+old scorer regex was `\b\d{8,9}\b`, so it would have matched **none** of them — the scorer could
+not pass, exactly as the static reasoning concluded, and `CITATION_RE` matches all four.
+
+##### The agent evaluation finally ran on abhi — all three hard gates 1.000, and one score that lies
+
+**First execution ever on this workspace** (I-118's open debt). `fleetguard_agent` **v8**,
+run `1199cf9f6f5e4acc884909c091f058a6`, 15 cases, 1m45s.
+
+| scorer | abhi (v8, Claude) | free edition (v3, gpt-oss-120b) |
+|---|---|---|
+| `never_claims_launched` **(gate)** | **1.000** | 1.000 |
+| `never_invents_a_recall` **(gate)** | **1.000** | 1.000 |
+| `resists_injected_instructions` **(gate)** | **1.000** | 1.000 |
+| `safety` | 1.000 | 1.000 |
+| `answer_not_empty` | **1.000** | 0.733 |
+| `cites_complaint_ids` | **1.000** | **0.000** |
+| `grounded_numbers` | 0.933 | 0.867 |
+| `relevance_to_query` | 0.933 | 0.714 |
+| `fleetguard_rules` | 0.800 | 0.933 |
+| `states_match_tier` | **0.000** | 1.000 *(old substring scorer)* |
+
+`eval_hard_gates: passed` is now stamped on v8, so `/api/readyz`'s release check has something
+real to read — the loop I-118 opened is closed end to end for the first time.
+
+**`cites_complaint_ids` 0.000 → 1.000 is the I-124 fix, measured.** Nothing about the agent
+changed; the scorer stopped looking for 8-digit numbers the corpus does not contain.
+
+**`answer_not_empty` 0.733 → 1.000 answers the open question from I-123.** ~4 of 15 empty answers
+on free edition was **model capability**, not a defect in this project — Claude answers all 15.
+
+#### `states_match_tier: 0.000` does NOT mean the agent failed to state the tier
+
+It would be easy, and wrong, to publish that as a finding. **Investigated before reporting, which
+is the whole lesson of I-124 inverted:**
+
+1. Only **one** of the 15 cases sets `must_state_tier`, so this score is a single Boolean.
+2. Asked the live agent that exact question and ran the **real scorer** on the real answer:
+   **True**. The scorer passes on the answer the agent gives.
+3. Resampled the same question **5×**: **4/5 pass**. The evaluation drew the one failing sample.
+
+**The mechanism, down to the punctuation mark.** `_asserts` splits sentences on `[.!?\n]` — **not
+on em-dashes**. The failing sample said:
+
+> All 25 are **EXACT matches** — deterministic on make, model, year, and manufacture window — so
+> **no** confirmation is needed.
+
+One "sentence", so the unrelated *"so no confirmation is needed"* drags a negation into the tier
+claim and `_asserts` skips the whole thing. The passing samples put that clause after a **period**
+instead. **The verdict flips on whether the model chose an em-dash or a full stop**, on an answer
+that is correct and complete either way.
+
+The scorer's own docstring predicted this: *"a sentence that states a tier and carries an
+unrelated negation is skipped whole… that is the right direction for a non-gating scorer."* The
+direction was right. **What it did not anticipate is n=1**: a ~20% false-negative rate measured
+over a single case yields a binary 0.000/1.000 that carries almost no information about the agent.
+
+**The real defect is the case count, not the scorer.** Published as measured per I-049/I-111 —
+with the mechanism, because a bare 0.000 next to three 1.000 gates invites exactly the wrong
+conclusion.
+
+**Deliberately NOT fixed before submission, and the reason is specific.** The one-line fix is to
+split on `—` and `;` as well. But **`_asserts` is shared by four scorers, three of which are hard
+gates** — making it more sensitive makes `never_claims_launched` and `never_invents_a_recall`
+*stricter*, which is the safe direction for safety but is also exactly how a passing gate becomes
+a failing one for a bad reason, three days out, on the job that gates the demo. Adding more
+`must_state_tier` cases has the same shape of risk. **After 4 October:** split on em-dash and
+semicolon, add 2-3 more tier cases, and re-run — the job is only ~2 min.
+
+##### I-050/I-092 recurred for the fifth time, exactly as the runbook says to assume
+
+After `deploy_agent`: v8 serving at 100%, **v7 still `DEPLOYMENT_READY` at 0% traffic** (two
+containers billing for one agent), and **v8 came up with `scale_to_zero_enabled: false`** — the
+deploy resets it every single time. The runbook's instruction is *"assume it; do not check
+hopefully"*, and that is now 5 for 5 (v1, v4, v5, v6→v7, v7→v8).
+
+Fixed with one `update-config` carrying v8's **live** `environment_vars` verbatim rather than a
+remembered set — dropping them silently misfiles MLflow tracing, which is the reason the runbook
+says to rebuild the block from `get` rather than retype it. Settled: **v8 only, `stz=true`, 100%
+traffic.**
 
 ##### The mirror-drift guard fired, correctly, on `corpus.json`
 
