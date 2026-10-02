@@ -206,7 +206,7 @@ WMIs labelled RAM). 400 generated VINs independently verified: 400/400 exact.
 `databricks-gte-large-en` (1024-dim). **Rescoped 2026-09-23 (I-111)** from the post-2010
 investigation series to the fleet's own 47 make/model pairs — down from 1,746,601 — same
 $6.72/day cost under the 2M-vector threshold (I-035), but both AI Search builds in the
-submission plan now take minutes instead of hours, and retrieval is scoped to vehicles this
+build plan now take minutes instead of hours, and retrieval is scoped to vehicles this
 fleet actually operates.
 
 **Widened again the same day (I-115)** to the `EXACT` +
@@ -468,7 +468,7 @@ input, same rule as `harm_share`. Written 2026-09-08; not yet executed against l
 the Lakebase loader / `routers/signals.py` / `Signals.tsx` do not read the new columns yet.
 Closes the gap between this section's design claim and what `src/` actually contained — until
 this cell existed, `ai_extract` was never called anywhere in the codebase, despite being named
-as a Spark-pipeline strength in the graded proposal feedback.
+as a Spark-pipeline strength in the original proposal.
 
 ---
 
@@ -868,8 +868,8 @@ requires membership of `FLEETGUARD_APPROVERS` — being authenticated proves who
 that you may dispatch work orders against a fleet. That gate (`authz.may_approve`) is checked
 unconditionally on `principal.source`, so it applies to an Apps-OBO principal exactly as it
 does to a local developer's; it used to be skipped for token-carrying principals, which
-mattered once the workspace turned out to be shared with the judging cohort (fixed
-2026-09-03, `tests/test_approval_gate.py`). Where snapshot mode *is* selected, the approval endpoint
+mattered once the workspace turned out to be shared with other identities in the same
+workspace (fixed 2026-09-03, `tests/test_approval_gate.py`). Where snapshot mode *is* selected, the approval endpoint
 returns **501** rather than simulating a write: a plausible service-campaign id for a campaign
 that was never created would be a lie told by the safety-critical path.
 
@@ -928,9 +928,9 @@ offered to that app type at all. So the choice was `all-apis` or nothing.
 Removed with Render (commit `2b5727a`, the deleted `deploy/render` branch). Databricks Apps needs no custom app registration and
 no scope negotiation, which is the path this project took instead.
 
-**The judges have Databricks identities in this same shared workspace** (confirmed
-2026-09-03) — which makes `databricks-apps` OBO the actually strong path for them to check
-the system: they sign in with their own account, and Unity
+**Other identities in this same shared workspace have their own Databricks accounts**
+(confirmed 2026-09-03) — which makes `databricks-apps` OBO the actually strong path for them
+to check the system: they sign in with their own account, and Unity
 Catalog / Postgres evaluate access under their genuine identity — §5.1's claim demonstrated,
 not simulated. Read access being open to anyone in the shared workspace is therefore the
 intended shape, not a leak.
@@ -939,9 +939,9 @@ Write access is a different question, and was a real gap until this same session
 `approval.py`'s `FLEETGUARD_APPROVERS` allowlist used to be checked only when an app-owned
 login flow was configured, so any principal carrying a real Databricks token — including
 `databricks-apps` OBO — skipped it entirely. That was defensible when "has a Databricks identity here" implied "is a trusted
-operator"; it stopped being defensible the moment the workspace turned out to include the
-judges and cohort too, since every one of them could then have launched real service
-campaigns, not just viewed them.
+operator"; it stopped being defensible the moment the workspace turned out to include other
+identities too, since any of them could then have launched real service campaigns, not just
+viewed them.
 
 **Fixed 2026-09-03:** the gate now applies unconditionally
 — `if not may_approve(approver)` (`authz.py`), regardless of `principal.source` — so sign-in

@@ -79,7 +79,8 @@ VIEWS: list[tuple[str, str, str]] = [
 #:
 #: **The default question exercises `search_complaints` on purpose.** The deterministic
 #: exposure answer (`Which fleet vehicles does recall 17V629000 affect?`) is already evidenced
-#: by RUNBOOK 1.4's raw REST call and by `gold_fleet_exposure` itself. What nothing else
+#: by docs/RUNBOOK.md's raw REST call (agent restore/verification steps) and by
+#: `gold_fleet_exposure` itself. What nothing else
 #: evidences is retrieval over the 2.24M-narrative corpus with complaint ids cited back — which
 #: is also the path `_neutralise` defends (I-118) and the one `cites_complaint_ids` scores.
 ASSISTANT_QUESTION = "Search complaints about brake failures"
@@ -307,8 +308,7 @@ def record_walkthrough(base_url: str, theme: str, browser, question: str) -> dic
         beats.append({"at_seconds": at, "route": "#/queue", "caption": f"Beat 8 — {question}"})
     except Exception as exc:  # noqa: BLE001 - keep whatever was recorded before the failure
         print(
-            f"  ! walkthrough cut short: {type(exc).__name__}: "
-            f"{' '.join(str(exc).split())[:140]}",
+            f"  ! walkthrough cut short: {type(exc).__name__}: {' '.join(str(exc).split())[:140]}",
             file=sys.stderr,
         )
 
@@ -411,9 +411,7 @@ def main() -> int:
                 if not theme:
                     continue
                 print(f"{theme} walkthrough:")
-                clip = record_walkthrough(
-                    args.base_url, theme, browser, args.assistant_question
-                )
+                clip = record_walkthrough(args.base_url, theme, browser, args.assistant_question)
                 if clip:
                     videos.append(clip)
         browser.close()

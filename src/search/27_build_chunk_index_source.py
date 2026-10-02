@@ -25,18 +25,18 @@
 # MAGIC rather than rewritten, so all four now agree by construction.
 # MAGIC
 # MAGIC **Rescoped 2026-09-23** to the fleet's own make/model pairs — 47 pairs across 15 makes,
-# MAGIC read live from `gold_fleet_vehicle` — for the two-window submission plan in
+# MAGIC read live from `gold_fleet_vehicle` — for the two-window cost plan in
 # MAGIC `docs/STATUS.md`. That plan runs the AI Search build twice (a dress rehearsal, then the
-# MAGIC real thing before submission), and at the post-2010 scope that is ~13.4 h of index-build
-# MAGIC exposure against a hard 4 October deadline, with I-105 already showing one rebuild can
+# MAGIC real thing before release), and at the post-2010 scope that is ~13.4 h of index-build
+# MAGIC exposure against a tight deadline, with I-105 already showing one rebuild can
 # MAGIC fail outright. At the fleet scope both builds together take under an hour.
 # MAGIC
 # MAGIC Cost is identical either way — every scope under 2M vectors bills the same $6.72/day
-# MAGIC (I-035) — so this buys schedule safety for free. It also reads better to a judge: a
+# MAGIC (I-035) — so this buys schedule safety for free. It also reads better to a reviewer: a
 # MAGIC fleet-safety tool retrieving complaints about vehicles this fleet does not operate is a
 # MAGIC weaker demo than one scoped to what the fleet actually runs.
 # MAGIC
-# MAGIC **What this invalidates, and must be corrected before submission — not silently:**
+# MAGIC **What this invalidates, and must be corrected before release — not silently:**
 # MAGIC
 # MAGIC - `docs/ARCHITECTURE.md` §4.4, `docs/DEMO.md` and `docs/EVIDENCE.md` all quote
 # MAGIC   **1,746,601 chunks**; EVIDENCE calls it "well past the 1M" — both become wrong and need
@@ -66,7 +66,7 @@ CREATE OR REPLACE TABLE {FQ}.silver_complaint_chunk_indexed
 COMMENT 'AI Search source: complaint chunks for make/model pairs in the fleet roster
 (gold_fleet_vehicle), matched in the same EXACT-then-MODEL_VARIANT tiers as the gold
 exposure table, the agent write path and the emerging detector. Rescoped 2026-09-23 from
-the post-2010 ODI investigation series (1,746,601 chunks) for the two-window submission
+the post-2010 ODI investigation series (1,746,601 chunks) for the two-window cost
 plan (I-111); the exact-only join was widened to variants 2026-09-23 (I-115) because it
 excluded every one of the fleet''s 2,116 F-250s. Same $6.72/day cost under the 2M-vector
 single-unit threshold (I-035). See docs/ISSUES.md I-111, I-115.'
@@ -82,7 +82,7 @@ SELECT
   -- agent_actions.py and 10_emerging_signals.py. Carried into the table so a later pass can
   -- sync it and let the agent say *how* a retrieved complaint relates to the fleet. NOT in
   -- columns_to_sync today -- adding it changes the index-creation command away from the one
-  -- proven in Run 1, which is not a thing to do days before submission (see docs/RUNBOOK.md).
+  -- that's already proven, which is not a thing to do close to a demo (see docs/RUNBOOK.md).
   CASE
     WHEN EXISTS (
       SELECT 1 FROM fleet f WHERE f.make = c.make AND f.model = c.model
@@ -113,7 +113,7 @@ print("silver_complaint_chunk_indexed rebuilt (fleet make/model scope, EXACT + M
 # MAGIC **MEASURED 2026-09-30 in Run 2, and the exact-equality assert is back (I-126).** It had
 # MAGIC been downgraded to a bounded floor/ceiling check at I-115, deliberately: widening the join
 # MAGIC to `MODEL_VARIANT` invalidated the old `n_chunks == 115_499` constant, the index endpoint
-# MAGIC and warehouse are torn down between the two submission windows, and writing a guessed
+# MAGIC and warehouse are torn down between the two cost-plan windows, and writing a guessed
 # MAGIC replacement would have been exactly the failure this project keeps logging — a
 # MAGIC plausible-looking figure asserted as a measured one.
 # MAGIC

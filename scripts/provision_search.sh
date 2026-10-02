@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
 # Bring the AI Search endpoint and index up, idempotently, with drop detection.
 #
-# WHY THIS EXISTS. The commands live in `docs/RUNBOOK.md` and they are correct — Run 1
-# executed them start to finish on 2026-09-23. But a documented sequence is not the same as a
-# runnable one. It is not idempotent (a re-run after a dropped SSH session errors on
-# `create-endpoint`), it does not poll, and the poll it describes has a failure signal a human
-# has to remember to watch for. Run 2 executes this under deadline pressure. That is the wrong
-# moment to be reading prose and retyping a 20-line JSON body.
+# WHY THIS EXISTS. The commands live in `docs/RUNBOOK.md` and they are correct — they have been
+# run start to finish and verified. But a documented sequence is not the same as a runnable one.
+# It is not idempotent (a re-run after a dropped SSH session errors on `create-endpoint`), it
+# does not poll, and the poll it describes has a failure signal a human has to remember to watch
+# for. That is the wrong moment to be reading prose and retyping a 20-line JSON body.
 #
 # WHY IT IS A SCRIPT AND NOT BUNDLE YAML. Not a shortcut — DABs has no vector-search resource
 # type at all. `bundle summary` exposes exactly four resource keys: apps, dashboards, jobs,
@@ -18,7 +17,7 @@
 # **billing continues for 24 h after the last index is deleted**, so this is not a resource to
 # leave running "just in case". `--check` (the default) only reads control-plane state and is
 # free — which is why it is the default. Nothing here is destructive; teardown stays a
-# deliberate, separate, human command (`docs/RUNBOOK.md` step 2.1).
+# deliberate, separate, human command (docs/RUNBOOK.md's teardown section, §4).
 #
 # THE POLL WATCHES FOR A DROP, NOT A PLATEAU. I-105: a sync that failed internally restarted
 # from zero, and the only visible symptom was `indexed_row_count` going *backwards*. A plateau
@@ -45,9 +44,9 @@ usage: $0 [--check | --create] --profile <name> [--endpoint <name>] [--catalog-s
   --create          create the endpoint and index if absent, then poll until ready. BILLS.
   --endpoint        Vector Search endpoint name (default: fleetguard-vs)
   --catalog-schema  catalog.schema the index/source table live in (default: bootcamp_students.fleetguard)
-                     -- override for a non-prod target, e.g. --catalog-schema fleetguard.capstone
+                     -- override for a non-prod target, e.g. --catalog-schema fleetguard.dev
 
-Teardown is deliberately NOT here. See docs/RUNBOOK.md step 2.1.
+Teardown is deliberately NOT here. See docs/RUNBOOK.md's teardown section (§4).
 USAGE
 }
 
@@ -112,7 +111,7 @@ index_row_count() {
 # event was the endpoint ceasing to exist. Those need distinguishing, because the recovery
 # differs: a stall (I-112) is waited out, a sync restart (I-105) is fatal to that attempt, and a
 # missing endpoint has to be recreated from scratch, after the single-index teardown in
-# docs/RUNBOOK.md step 2.1 clears the orphans it left behind.
+# docs/RUNBOOK.md's teardown section (§4) clears the orphans it left behind.
 endpoint_state() {
   db vector-search-endpoints get-endpoint "$ENDPOINT" 2>/dev/null \
     | python3 -c 'import json,sys; d=json.load(sys.stdin); print((d.get("endpoint_status") or {}).get("state","UNKNOWN"))' \
@@ -172,7 +171,7 @@ printf 'source rows: %s  (~%s min at the measured 4,336 rows/min)\n' \
 cat <<WARN
 
 THIS BILLS. Endpoint ~\$6.72/day, and billing continues 24 h AFTER the last index is deleted.
-Tear down with docs/RUNBOOK.md step 2.1 as soon as the evidence is captured.
+Tear down with docs/RUNBOOK.md's teardown section (§4) as soon as the evidence is captured.
 
 WARN
 read -r -p "continue? [y/N] " reply
@@ -221,7 +220,7 @@ reference rather than a copy-paste).
 
 The index, its UC table entry and its sync pipeline are now orphaned. ONE command clears all
 three and it does NOT need the endpoint back -- it is quoted in full in docs/ISSUES.md I-127,
-and it is the same single-index teardown as docs/RUNBOOK.md step 2.1. Run it, confirm
+and it is the same single-index teardown as docs/RUNBOOK.md's teardown section (§4). Run it, confirm
   SHOW TABLES IN $CATALOG_SCHEMA LIKE 'complaint_chunk_idx'
 returns empty, then re-run this script.
 GONE

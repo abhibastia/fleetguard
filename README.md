@@ -87,6 +87,27 @@ confirmed working, having stalled on an account-admin scope grant.
 The **Evidence** tab needs no identity on either surface — it's the published backtest result
 above, sourced from the same measurement.
 
+## How to review this
+
+A short, linear path for checking the claims in this repo without needing anything from the
+author.
+
+1. **Run the test suite locally.** No Databricks credentials needed — see *Getting set up*
+   below. Nothing here touches a billable resource.
+2. **Check whether the live demo is up right now.** `GET /api/readyz` answers "would this
+   system work right now" across five independent checks (Lakebase, the agent endpoint, the AI
+   Search index's health, the two public snapshots, and whether the live model version carries
+   a passing evaluation) — 200 only if all five pass, 503 with the same detail otherwise.
+3. **Start the live demo app and look around.** See *Live demo* above — ~2 minutes,
+   self-service.
+4. **Read [`docs/EVIDENCE.md`](docs/EVIDENCE.md)** for claim-by-claim backing — artefact,
+   table, job, or measured number behind every claim, including what's deliberately still
+   missing.
+5. **Read [`docs/TRANSCRIPTS.md`](docs/TRANSCRIPTS.md) and `docs/screenshots/`** for proof
+   that doesn't require the live endpoint to be up.
+
+[`docs/DEMO.md`](docs/DEMO.md) is the longer guided walkthrough if you want the full tour.
+
 ## What it's built on
 
 **Volume and variety, not velocity.** The corpus is **8.44M bronze rows** — 2.24M complaints,
@@ -224,7 +245,7 @@ Read `docs/STATUS.md` first if you're picking this up cold — it's the one page
 
 | Document                                                     | Job |
 | ------------------------------------------------------------ | ---------- |
-| [`docs/EVIDENCE.md`](docs/EVIDENCE.md)                       | **What backs each claim** — the artefact, table, job or measured number behind every graded line, and what is deliberately still missing. **Start here**: it is organised by the eight rubric categories |
+| [`docs/EVIDENCE.md`](docs/EVIDENCE.md)                       | **What backs each claim** — the artefact, table, job or measured number behind every claim, and what is deliberately still missing. **Start here**: it is organised by the eight capability areas |
 | [`docs/TRANSCRIPTS.md`](docs/TRANSCRIPTS.md)                 | **Five verbatim agent exchanges from Run 2**, generated from the saved JSON responses rather than retyped — deterministic exposure, retrieval with cited complaint ids, a write reaching the lakehouse, graceful degradation after the index was deleted, and what the endpoint returns right now |
 | [`docs/DEMO.md`](docs/DEMO.md)                               | **Start here to look around** — pre-flight, the ten beats, numbers with sources, what not to claim |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)               | The living spec — what the system *is*, kept true with the code |

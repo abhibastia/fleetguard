@@ -280,7 +280,7 @@ boundary** — the model has no database path at all, so it cannot resume itself
 principle. A LangGraph interrupt would keep both halves inside one process under one identity.
 
 Adopting LangGraph now would replace a working, verified mechanism with a differently-shaped one
-that satisfies the same requirement less strictly, two weeks before submission.
+that satisfies the same requirement less strictly, with limited time before a demo.
 
 *Original rationale, kept:* The reason is the **human
 approval gate**: FleetGuard's write path must halt, surface a proposed action, and resume on
@@ -349,7 +349,7 @@ correct: **Genie answers questions over governed tables; the agent does things u
 approval.** Two NL surfaces with distinct jobs is a stronger story than one chatbot
 pretending to be both — and it is why E-10 below is now *upgraded* rather than deferred.
 
-### E-12 · Hosting — Render for building, Databricks Apps for submitting — **decided 2026-09-01**
+### E-12 · Hosting — Render for building, Databricks Apps for release — **decided 2026-09-01**
 
 **Status: BUILT, superseded in direction 2026-09-08, and Render REMOVED 2026-09-10.**
 
@@ -400,7 +400,7 @@ is in abhi anyway.)
 
 **✅ Databricks Apps in `abhi` — required, but managed.** `databricks apps start` / `stop`
 both exist, and **all ~40 student apps in that workspace currently sit `STOPPED`** — clearly
-the intended pattern. Deploy once, keep stopped, start for testing and the submission window.
+the intended pattern. Deploy once, keep stopped, start for testing and the demo window.
 Not optional: §13 requires a *deployed* application and §5.1's OBO story is only genuine
 inside an App. An identity architecture never deployed is an assertion.
 
@@ -409,7 +409,7 @@ inside an App. An identity architecture never deployed is an assertion.
 > relying on the "stopped is free" assumption.
 
 **✅ Render — right for building, risky for the live demo.** Free tier **spins down on
-inactivity**; a 30–60 s cold start is fine for development and bad if a grader opens the link
+inactivity**; a 30–60 s cold start is fine for development and bad if a visitor opens the link
 cold or it happens live.
 
 **Decision:**
@@ -458,8 +458,8 @@ assigned it before we tried to make it carry the console too.
 > The obvious workaround — put `DATABRICKS_TOKEN` or an SP secret in Render's env — makes
 > **every request run as one identity**. Our Render URL is public and the API has a write
 > path, so that would let anyone who finds the URL approve service campaigns. It would also
-> contradict §5.1 and §1's "no long-lived credentials anywhere". Seen suggested in the
-> cohort chat; it is wrong for a public surface with writes.
+> contradict §5.1 and §1's "no long-lived credentials anywhere". It is wrong for a public
+> surface with writes.
 
 **The auth seam (E-13) survives intact** and is *more* justified, not less: it now spans
 `static-dev` (local) and `databricks-apps` (deployed). `SessionTokenProvider` stays in the
@@ -521,7 +521,7 @@ document-shaped output without duplicating narrative text into the model's conte
 for it twice in tokens.
 
 **Why it was not simply tried.** mlflow is not installed locally — it runs only on Databricks —
-and the agent endpoint and AI Search index are both torn down between the submission windows.
+and the agent endpoint and AI Search index are both torn down between demo windows.
 So there was no way to check, and the only place to find out would have been a live Run 2.
 
 Adding an unverified scorer to the **gating** evaluation path is the wrong trade there: if it
@@ -601,8 +601,8 @@ from the copied predicate. Either is the signal that convention has stopped hold
 
 > **Revisited 2026-09-20, on the trigger this entry named.** The closing paragraph below says
 > to reconsider *"if `21_cdf_to_gold_facts.py` needs to change for another reason anyway"*.
-> It did — the job became incremental, for the capstone rubric's *"incremental, re-runnable
-> analytics pipeline"* line. So the comparison was made properly rather than deferred again,
+> It did — the job became incremental, to satisfy the requirement for an *"incremental,
+> re-runnable analytics pipeline."* So the comparison was made properly rather than deferred again,
 > and `AUTO CDC INTO` **lost on its own stated objection**.
 >
 > Reason 2 below is that `AUTO CDC INTO`'s ranking is opaque engine internals, so the I-080
@@ -662,7 +662,7 @@ external Delta table (the CDF history tables in `bootcamp_cdc`, not a DLT-produc
 **Why deferred rather than rejected.** The win (removing ~15 lines of hand-rolled SQL) is
 real but modest, and the cost is trading working, already-debugged logic for something that
 needs its own live verification pass before it's trusted as much as the current code —
-poor value two weeks from submission.
+poor value with limited time before a release.
 
 Revisit if `21_cdf_to_gold_facts.py` needs to change for another reason anyway (e.g. a third
 synced table) — the migration and the required live verification are cheaper done together
@@ -830,7 +830,7 @@ slips, cut in this order: the agent panel (leaving a workflow-only console — s
 complete demo), then the evidence page. (U2M is no longer on the list — see E-14.)
 
 **Do not cut the approval gate or the audit trail.** They are the difference between
-FleetGuard and a dashboard, and they are what §5 and §13 are graded on.
+FleetGuard and a dashboard, and they are what §5 and §13 matter most for demonstrating.
 
 **Do not cut the auth seam either** — even though U2M is retired and MVP runs on a locally
 supplied token. The seam is a few lines on day one and a rewrite in week four, and it lands

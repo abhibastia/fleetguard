@@ -1,16 +1,16 @@
 # Evidence map
 
-**Last updated 2026-09-20.** One page pointing at the concrete artefact behind every graded
+**Last updated 2026-09-20.** One page pointing at the concrete artefact behind every
 claim — file, table, job, measured number, screenshot.
 
 It exists because the demo surfaces are **asleep between sessions on purpose**: the
 Databricks App is stopped, the agent endpoint is scaled to zero, and the AI Search index is
 deleted to cap billing (I-101, I-105). Someone reading this repo cold cannot click through
-the product, and the capstone rubric records anything it cannot verify as *unverified* —
-listing deployment URL, Spark execution logs, Lakebase schema, CDF configuration, dataset
-size, measured latency, API error-handling code, agent tool definitions, and screenshots as
-the usual gaps. Every one of those is **reachable** from here; this page says how, and says
-plainly which ones need a resource woken up first.
+the product — deployment URL, Spark execution logs, Lakebase schema, CDF configuration,
+dataset size, measured latency, API error-handling code, agent tool definitions, and
+screenshots are the usual things a cold reader cannot verify for themselves. Every one of
+those is **reachable** from here; this page says how, and says plainly which ones need a
+resource woken up first.
 
 **Nothing on this page is an estimate.** Where a number could not be measured, it says so.
 
@@ -25,10 +25,9 @@ plainly which ones need a resource woken up first.
 > .venv/bin/python scripts/capture_screenshots.py       # 20 images, both themes
 > ```
 >
-> **Do this as part of assembling the submission zip**, not earlier — the zip is the
-> artefact that carries them, and generating them at submission time means they match the
-> code being submitted. If you are reading this on a cold start and `docs/screenshots/` is
-> empty or missing, that is the expected state, not a loss.
+> **Do this as part of assembling a release**, not earlier — generating them at release time
+> means they match the code being shipped. If you are reading this on a cold start and
+> `docs/screenshots/` is empty or missing, that is the expected state, not a loss.
 >
 > The script refuses to run against snapshot mode and waits for each view's loading skeleton
 > to clear, so what it produces is real data or nothing. See *Regenerating this evidence* at
@@ -36,7 +35,7 @@ plainly which ones need a resource woken up first.
 
 ---
 
-## The eight rubric categories
+## The eight capability areas
 
 ### 1. Spark data pipeline
 
@@ -84,13 +83,13 @@ plainly which ones need a resource woken up first.
 | Safeguards                                       | Field-level bounds on every LLM-supplied value; authorization gate on both writes; unique-violation handling; audit row in the same transaction; existence checks that return a 404 naming the missing entity rather than a bare `ForeignKeyViolation` |
 | Never reaches                                    | `fleetguard_work_order` / `fleetguard_service_campaign` — dispatch stays behind `FLEETGUARD_APPROVERS`, asserted in the build |
 | Tracing / eval                                   | MLflow tracing (typed `RETRIEVER`/`TOOL` spans), inference table `fleetguard_agent_payload`, `mlflow.genai.evaluate` against **15** adversarial cases (E-05) and a 765-pair golden set built from NHTSA's own recall text. **Three scorers are HARD GATES** — the job fails if the agent claims a launch, invents a recall, or acts on an instruction embedded in retrieved text. The result is **tagged onto the UC model version** (`eval_run_id`, `eval_hard_gates`, a `score_*` per scorer), so "was the deployed artefact evaluated?" is answerable from the registry rather than by hunting runs |
-| **Agent evaluation — MEASURED 2026-09-30 on v8** | `fleetguard_agent` **v8**, run `1199cf9f6f5e4acc884909c091f058a6`, 15 cases. **All three hard gates 1.000** — `never_claims_launched`, `never_invents_a_recall`, and **`resists_injected_instructions`, the first live measurement of the I-118 defence on this workspace**. Also `safety` 1.000, `answer_not_empty` 1.000, `cites_complaint_ids` 1.000, `grounded_numbers` 0.933, `relevance_to_query` 0.933, `fleetguard_rules` 0.800. **`states_match_tier` scored 0.000 and that is a measurement artifact, not an agent failure** — one case, and the scorer's sentence splitter does not break on em-dashes, so an unrelated *"so no confirmation is needed"* clause negates an otherwise correct tier statement; resampling the same question 5× passes 4/5. Diagnosed in I-126, not fixed before submission because `_asserts` is shared with the three hard gates. `eval_hard_gates=passed` is stamped on v8, so `/api/readyz`'s release check reads a real tag |
+| **Agent evaluation — MEASURED 2026-09-30 on v8** | `fleetguard_agent` **v8**, run `1199cf9f6f5e4acc884909c091f058a6`, 15 cases. **All three hard gates 1.000** — `never_claims_launched`, `never_invents_a_recall`, and **`resists_injected_instructions`, the first live measurement of the I-118 defence on this workspace**. Also `safety` 1.000, `answer_not_empty` 1.000, `cites_complaint_ids` 1.000, `grounded_numbers` 0.933, `relevance_to_query` 0.933, `fleetguard_rules` 0.800. **`states_match_tier` scored 0.000 and that is a measurement artifact, not an agent failure** — one case, and the scorer's sentence splitter does not break on em-dashes, so an unrelated *"so no confirmation is needed"* clause negates an otherwise correct tier statement; resampling the same question 5× passes 4/5. Diagnosed in I-126, not fixed before release because `_asserts` is shared with the three hard gates. `eval_hard_gates=passed` is stamped on v8, so `/api/readyz`'s release check reads a real tag |
 | **Prompt-injection defence**                     | `search_complaints` is the only tool returning text this project did not write — **2.24M public, user-submitted ODI narratives**. Three layers (ARCHITECTURE §7.1a): untrusted-data markers + action-sentinel stripping in `_neutralise()`, system-prompt rule 9, and the console's Python-stamped item-id check. Structural half tested offline (`tests/agent/test_agent_injection.py`, mutation-checked); behavioural half is the hard gate above, **measured in Run 2**. Severity is bounded by `may_approve` and server-side fleet-relevance recomputation — stated in I-118 rather than implied |
 | **Citations**                                    | Rule 10 requires complaint ids behind narrative claims, scored by `cites_complaint_ids`. **The scorer's limit is documented in the scorer**: it sees answer text only, so it cannot distinguish a real citation from a fabricated one — "cites only ids a tool returned" remains a prompt rule, not a measurement |
 | Activity analytics                               | `gold_agent_activity_daily` — requests, write actions, success rate, latency percentiles and tokens by day/tool/actor |
 | **Verified live 2026-10-01 (Run 2), on v8**      | Both paths exercised by raw REST (the CLI truncates this endpoint's response — I-124). **Deterministic:** *"Which fleet vehicles does recall 17V629000 affect?"* → **25 vehicles across 22 depots, all EXACT**, 8.3 s warm, volunteering that there were no `MODEL_VARIANT` matches to flag. **Retrieval:** *"Search complaints about brake failures"* → five real narratives, each with its complaint id (`738214`, `729017`, `667249`, `782129`) — the 179,347-chunk index genuinely serving the agent. **Write:** an agent write through `/api/chat` created `AGENT-ac6d0e08b2d1` and reached `gold_defect_signal_current` in ~5 min via Lakebase CDF |
 | **Screenshots: captured, not deferred**          | `assistant-dark.png` / `assistant-light.png` show the panel answering with a cited table. Asked only to search, the agent **volunteered a correction** — *"every one is about the PARKING / emergency brake, not the primary hydraulic service brakes — so treat this as a parking-brake signal"* — qualifying its own retrieval rather than dumping it. Also `walkthrough-dark.webm` / `.mp4`, a 7-beat recording following `docs/DEMO.md`'s order |
-| **State right now**                              | Index **deleted** and the serving endpoint **STOPPED**, deliberately, to end billing after evidence capture. A live question therefore needs both restored: endpoint ~3 min (`update-config`, RUNBOOK 1.3 — **Stop is UI-only, restore is CLI-only**, I-126), index **~75 min** measured (~21 min of I-112 stall, then ~52 min syncing). Code, tool definitions, traces, screenshots and the video are all in this zip |
+| **State right now**                              | Index **deleted** and the serving endpoint **STOPPED**, deliberately, to end billing after evidence capture. A live question therefore needs both restored: endpoint ~3 min (`update-config`, see `docs/RUNBOOK.md`'s agent-restore steps — **Stop is UI-only, restore is CLI-only**, I-126), index **~75 min** measured (~21 min of I-112 stall, then ~52 min syncing). Code, tool definitions, traces, screenshots and the video are all in this zip |
 
 ### 5. Analytics pipeline
 
@@ -126,7 +125,7 @@ plainly which ones need a resource woken up first.
 | States                | Every view handles gated (401) → first-load error → loading skeleton → empty dataset → no-match-after-filter, in that order |
 | Consequential actions | Approval is a confirmation flow behind `FLEETGUARD_APPROVERS`, writes campaign + N work orders + audit in **one transaction**, and returns `409` naming the existing campaign on a re-approval (I-063) |
 | Tests                 | **147 frontend** (23 files) + **478 backend** |
-| Screenshots           | `scripts/capture_screenshots.py` — all 10 views, **both themes**, from live Lakebase. Output is gitignored; regenerate before submitting (see the box at the top) |
+| Screenshots           | `scripts/capture_screenshots.py` — all 10 views, **both themes**, from live Lakebase. Output is gitignored; regenerate before release (see the box at the top) |
 
 ### 7. Deployed application
 
@@ -147,8 +146,8 @@ plainly which ones need a resource woken up first.
 stays in Delta regardless of AI Search scope.
 
 **The vector-index chunk count is no longer the 1,746,601 quoted historically** — rescoped
-2026-09-23 to the fleet's own make/model pairs for schedule safety on the submission's
-two-build plan (I-111), measured at 115,499 for the exact-spelling scope, then widened the
+2026-09-23 to the fleet's own make/model pairs for schedule safety on the two-window cost
+plan (I-111), measured at 115,499 for the exact-spelling scope, then widened the
 same day to the `EXACT` + `MODEL_VARIANT` tiers the rest of the system uses (I-115).
 **Measured 2026-09-30 in Run 2 (I-126): 179,347 chunks** — 115,499 `EXACT` + 63,848
 `MODEL_VARIANT`, with the `EXACT` half reproducing the 2026-08-31 figure to the row, and the
@@ -245,9 +244,9 @@ minutes" for the round trip.
 
 ---
 
-## Where the rubric's named gaps are answered
+## Where each evidence gap is answered
 
-| Rubric "evidence gap"               | Where |
+| Evidence gap                        | Where |
 | ----------------------------------- | ---------- |
 | Deployment URL                      | §7 above; README *Live demo* |
 | Spark execution logs                | Job run pages per `resources/*.job.yml`; `ops_*` tables hold the durable record — `ops_lakebase_load`, `ops_cdf_fact_refresh`, `ops_recall_api_sweep`, `ops_cdf_latency` |

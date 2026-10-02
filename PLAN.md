@@ -21,11 +21,11 @@ verifiable work. Grounded in what was already confirmed live before build start 
   (`b15d3d6f837ba428`, 2X-Small).
 - All 6 data sources confirmed live; full corpus downloaded and measured locally
   (counts in `CLAUDE.md` — use those, don't re-estimate).
-- Architecture, identity model, and quality-control design finalized and graded
-  (100/100, see `docs/feedback-final-proposal-fleetguard.pdf`), then corrected against
-  measured data on 2026-08-31. **That PDF carries the rubric and its weights** — mapped
-  against the built system in `docs/STATUS.md`'s pre-submission plan, item 0, including the
-  two lines where the build diverged from what was graded.
+- Architecture, identity model, and quality-control design were finalized and reviewed
+  (see `docs/feedback-final-proposal-fleetguard.pdf`), then corrected against
+  measured data on 2026-08-31. **That PDF carries the original review** — mapped
+  against the built system in `docs/STATUS.md`, including the
+  two lines where the build diverged from what was reviewed.
 
 ## Pre-work — both resolved
 
@@ -90,7 +90,7 @@ does not consume shared-workspace compute before the demo window. Schedule it in
 true`** — matching `silver_complaint_chunk_indexed` exactly. ~7 h to build.*
 
 **RESCOPED 2026-09-23 (I-111).** The source table is now scoped to the fleet's own 47
-make/model pairs — 115,499 chunks, ~27 min to build — for the two-window submission
+make/model pairs — 115,499 chunks, ~27 min to build — for the two-window cost
 plan's schedule safety, at the same $6.72/day cost (I-035).
 
 > **That 115,499 is SUPERSEDED and is recorded here as history (noted 2026-09-29).** I-115

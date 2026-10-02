@@ -1,7 +1,7 @@
 # FleetGuard — demo runbook
 
-**Demo 25–30 Sept 2026.** Everything here was measured live on **2026-09-09**, not estimated.
-Numbers carry their source so nothing gets quoted from memory.
+**Everything here was measured live on 2026-09-09**, not estimated. Numbers carry their
+source so nothing gets quoted from memory.
 
 > **The demo's job is to sell rigour, not a big number.** The headline result is a **1.44×**
 > lift, which is modest and real. The argument is the *method*: a volume-matched control arm, a
@@ -19,7 +19,7 @@ Three things are asleep and **two of them do not wake on their own.**
 | --- | ------------------------------------------------------------------------------------------------------ | ---------------------------------------- | ---------- |
 | 1   | `databricks serving-endpoints get agents_bootcamp_students-fleetguard-fleetguard_agent --profile abhi` | —                                        | Read `deployment_state_message`. **Two idle states, only one is a problem** — see below |
 | 2   | **Only if it says `Stopped`:** restore it                                                              | **~3 min** (measured 184 s)              | A `Stopped` endpoint does **not** wake on request — `400 The given endpoint is stopped`. `Scaled to zero` is fine and needs nothing |
-| 3   | `databricks apps start fleetguard-console --profile abhi`                                              | **~2 min** (measured 117 s to `RUNNING`) | `apps start` returns after ~105 s but `app_status` is still `UNAVAILABLE`; poll until `RUNNING`. **Any of the three judges can run this too** — they hold `CAN_MANAGE` |
+| 3   | `databricks apps start fleetguard-console --profile abhi`                                              | **~2 min** (measured 117 s to `RUNNING`) | `apps start` returns after ~105 s but `app_status` is still `UNAVAILABLE`; poll until `RUNNING`. **Any of the three reviewers can run this too** — they hold `CAN_MANAGE` |
 | 4   | Ask the assistant one throwaway question                                                               | **20–47 s**                              | 20 s after a restore, **47 s waking from scaled-to-zero**, 13 s warm. Do this before anyone is watching |
 | 5   | `curl .../api/signals` → expect **200**                                                                | ~1 s                                     | This route has broken before (I-091) and it is the proactive half of the story |
 
@@ -38,7 +38,7 @@ config, and it reads `READY` both warm and scaled to zero. **`scale_to_zero_enab
 only field that distinguishes them, and it is the one to read.
 
 The likely progression is active → scaled to zero → stopped after longer idle, which is why
-touching it on submission day matters: it keeps the endpoint in the state that wakes.
+touching it on demo day matters: it keeps the endpoint in the state that wakes.
 
 **Restoring the agent endpoint.** There is **no `start` or `resume` subcommand** — Model Serving
 offers only scale-to-zero or delete. Re-apply the config, building the payload *from the live
@@ -236,15 +236,15 @@ predates that.
   **DECIDED 2026-09-09: leave it on scale-to-zero and let the Assistant read as offline.** A
   stopped endpoint now renders *"The assistant is offline. The queue and approval path are
   unaffected."* rather than a raw error (I-093). The trade is accepted deliberately: keeping it
-  warm through the judging window costs continuous Small-CPU serving, and the honest offline
-  state is better than a crash. **Restore it as a submission-day step** (~3 min) so it is most
+  warm through the demo window costs continuous Small-CPU serving, and the honest offline
+  state is better than a crash. **Restore it as a demo-day step** (~3 min) so it is most
   likely alive when reviewers look — how long the idle window is before it stops again has not
   been measured.
-- **Judges can approve.** All three are in `FLEETGUARD_APPROVERS` and hold `CAN_MANAGE`. An approval
+- **Reviewers can approve.** All three are in `FLEETGUARD_APPROVERS` and hold `CAN_MANAGE`. An approval
   writes up to ~200 work orders and replicates to **append-only** CDF that cannot be scrubbed.
   Fine if intended — budget the cleanup.
-- **Judges can start the app themselves** (`CAN_MANAGE`, granted 2026-09-09) — deliberate, since
-  this is a bootcamp project and they should not need you awake to look at it. Two consequences:
+- **Reviewers can start the app themselves** (`CAN_MANAGE`, granted 2026-09-09) — deliberate, so
+  they don't need the owner awake to look at it. Two consequences:
   they can bring up billing compute unattended, and `CAN_MANAGE` also covers deploy/update/delete,
   which is simply the smallest level that permits starting — there is no narrower option.
 - **Cold starts:** app ~2 min, agent restore ~3 min, first answer ~20 s.
@@ -255,8 +255,8 @@ predates that.
 
 ## 5. What NOT to claim
 
-- **Not** that a judge's sign-in is proven. Every verification ran under the owner's identity, and
-  under a **programmatic token** rather than a browser for the App routes. All three judges hold
+- **Not** that a reviewer's sign-in is proven. Every verification ran under the owner's identity, and
+  under a **programmatic token** rather than a browser for the App routes. All three reviewers hold
   Lakebase roles, so the known failure mode cannot hit them — but it is untested, not proven.
 - **Not** that `match_basis` is populated. It is NULL for every row until B3 rebuilds; the console
   correctly shows no tier badge rather than a wrong one.
@@ -268,20 +268,20 @@ predates that.
 - **Not** that determinism covers every match. **EXACT only.**
 - **Not** that a reviewer is watching Row-Level Security constrain them. RLS is real, enabled
   and `FORCE`d on `fleetguard_vehicle`, and it was proved under the owner's identity — but all
-  three judges hold **`bypassrls = True`** (via `databricks_superuser`; the owner does not), so
+  three reviewers hold **`bypassrls = True`** (via `databricks_superuser`; the owner does not), so
   **the policy does not apply to their sessions at all.** They also read through
   `databricks_superuser`'s grants rather than any of their own. Separately, nobody is enrolled in
   `fleetguard_depot_assignment`, so the scoping is fail-open for everyone by default. Demonstrate
-  RLS by showing the policy and the owner-side proof; do not invite a judge to verify it by
+  RLS by showing the policy and the owner-side proof; do not invite a reviewer to verify it by
   looking at their own session, because they will correctly see no restriction.
 - **Not** that the audit trail spans months. It is genuine — real writes by a real identity —
   but seeded on 2026-09-09, so the timestamps cluster.
 
 ---
 
-## 6. For a judge looking on their own
+## 6. For a reviewer looking on their own
 
-All three judges hold `CAN_MANAGE`, so none of them needs the owner available. Send them this:
+All three reviewers hold `CAN_MANAGE`, so none of them needs the owner available. Send them this:
 
 > **Console:** `https://fleetguard-console-1352785079224954.aws.databricksapps.com`
 >
@@ -305,17 +305,17 @@ All three judges hold `CAN_MANAGE`, so none of them needs the owner available. S
 > unaffected. Restoring takes about three minutes and needs the author; **message them.**
 >
 > **You can approve a campaign** — you are on the approver list. **Please don't, until after
-> submission.** Not a permissions matter: an approval writes a service campaign plus one work
+> your review.** Not a permissions matter: an approval writes a service campaign plus one work
 > order per exposed vehicle (up to ~200 rows) into an append-only log that cannot be scrubbed, so
-> a pre-submission approval permanently changes the state the project is graded on. **Afterwards,
+> an early approval permanently changes the state a reviewer would be looking at. **Afterwards,
 > please do** — the human approval gate is the strongest thing here and it deserves exercising.
 >
 > **Please stop the app when you're done:** `databricks apps stop fleetguard-console`.
 
-Two things this grant carries that are worth knowing: judges can bring up **billing compute**
+Two things this grant carries that are worth knowing: reviewers can bring up **billing compute**
 unattended, and `CAN_MANAGE` also permits deploy, update and **delete**. There is no permission
 level between `CAN_USE` and `CAN_MANAGE`, so this is the smallest grant that allows starting —
-accepted deliberately, since a bootcamp project that can only be seen when its author is awake is
+accepted deliberately, since a project that can only be seen when its author is awake is
 worse.
 
 ## 7. Shutdown

@@ -1,4 +1,4 @@
-# FleetGuard — agent transcripts, Run 2
+# FleetGuard — agent transcripts
 
 **Verbatim.** Every exchange below was captured live against
 `agents_bootcamp_students-fleetguard-fleetguard_agent` **v8** on **2026-09-30 / 2026-10-01**, and
@@ -6,10 +6,10 @@ this file is **generated from the saved JSON responses**, not retyped — the sa
 `scripts/export_evidence.py` and `scripts/capture_screenshots.py`. Nothing here is illustrative,
 composed, or edited for effect.
 
-**Why this file exists.** The rubric asks for *"screenshots **or demo transcripts**"*. The
-screenshots are in `docs/screenshots/` and the walkthrough in `walkthrough-dark.webm` / `.mp4` —
-but an image and a video are only evidence to a reader that can open them. These are the same
-exchanges in text.
+**Why this file exists.** Screenshots or demo transcripts are the standard way to show a system
+working without a live endpoint. The screenshots are in `docs/screenshots/` and the walkthrough
+in `walkthrough-dark.webm` / `.mp4` — but an image and a video are only evidence to a reader
+that can open them. These are the same exchanges in text.
 
 **Why the agent is not live for you to re-run these.** The AI Search index and the serving
 endpoint were torn down immediately after capture to stop billing (~$6.72/day). That is a
@@ -41,7 +41,7 @@ volunteered that there were **no `MODEL_VARIANT` matches to flag**, which is the
 I-030 exists for: NHTSA spells models differently from vPIC (`F-250 SD` vs `F-250`), variants
 outnumber exact matches ~3:1 on this fleet, and only the `EXACT` tier carries the guarantee.
 
-Latency **8.3 s** warm. Matches the expected answer recorded in `docs/RUNBOOK.md` 1.4 before the
+Latency **8.3 s** warm. Matches the expected answer recorded in `docs/RUNBOOK.md` before the
 run, so this is a reproduction, not a first observation.
 
 ---
@@ -167,14 +167,14 @@ HTTP 400
 
 **Stopped is not scale-to-zero**, and the difference matters if you try to reproduce the above: a
 *scaled-to-zero* endpoint wakes on request in ~47 s; a *stopped* one refuses outright. Restore is
-`update-config` (`docs/RUNBOOK.md` 1.3, ~3 min measured 184 s) — **Stop is UI-only, restore is
-CLI-only**, an asymmetry recorded in I-126.
+`update-config` (see `docs/RUNBOOK.md`'s agent-restore steps, ~3 min measured 184 s) — **Stop is
+UI-only, restore is CLI-only**, an asymmetry recorded in I-126.
 
 ---
 
 ## Scored, not just shown
 
-These are illustrative exchanges. The graded measurement is `src/agent/16_evaluate_agent.py`,
+These are illustrative exchanges. The scored measurement is `src/agent/16_evaluate_agent.py`,
 15 cases against v8, run `1199cf9f6f5e4acc884909c091f058a6`:
 
 | scorer                                          | score |
@@ -199,5 +199,5 @@ sets `must_state_tier`; running the real scorer on the real answer in §1 above 
 resampling that question 5x passes **4/5**. The scorer's sentence splitter breaks on `.!?` but
 **not on em-dashes**, so in the failing sample an unrelated *"— so no confirmation is needed"*
 clause dragged a negation into the tier sentence. It is published as measured, with the mechanism,
-per the rule in I-049/I-111 — and deliberately not patched before submission because `_asserts` is
-shared with the three hard gates. Full reasoning in `docs/ISSUES.md` I-126.
+per the rule in I-049/I-111 — and deliberately not patched before this result was published
+because `_asserts` is shared with the three hard gates. Full reasoning in `docs/ISSUES.md` I-126.
