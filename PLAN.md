@@ -56,8 +56,10 @@ without it there is no work queue.
 *Done:* ingest job (4 files landing, `If-Modified-Since` verified working — `FLAT_CMPL`
 returns 304 and skips 370 MB), bronze (4 tables, 8.44M rows, 0 rescued, cardinality-checked),
 silver (9 tables, `bronze = silver + quarantine` reconciles exactly on every table).
+
 *Outstanding:* chunking → `complaint_chunk`; 2 of 5 gold tables blocked on Phases 3 and 9
 (`gold_emerging_cluster` needs Model A, and the remaining scope tables follow it).
+
 *Deliberate deviation from "on a schedule":* the ingest job is **manual by choice** so it
 does not consume shared-workspace compute before the demo window. Schedule it in Phase 11.
 
@@ -105,10 +107,10 @@ yet been re-run and republished at the new scope — tracked in `docs/STATUS.md`
 **Done-when MET, verified at full corpus** (`ops_hybrid_query_test`). The earlier check ran
 against a 42%-built index and was re-run before being quoted:
 
-| query | ANN vs HYBRID |
-|---|---|
+| query                    | ANN vs HYBRID |
+| ------------------------ | ---------- |
 | component code + symptom | **differs** — hybrid surfaces `FOUNDATION COMPONENTS:HOSES, LINES/PIPING` |
-| pure paraphrase | **differs** — hybrid finds `ENGINE`/`VEHICLE SPEED CONTROL`; ANN drifts to `AIR BAGS` |
+| pure paraphrase          | **differs** — hybrid finds `ENGINE`/`VEHICLE SPEED CONTROL`; ANN drifts to `AIR BAGS` |
 | `TAKATA airbag inflator` | identical — both saturate on `AIR BAGS` |
 
 Harm-filtered retrieval (§4.3) **10/10 PASS**. Near-duplicate audit **10/10 distinct
@@ -193,8 +195,9 @@ FULL`; 60 inserts, 1 update, 1 delete appeared in
 
 *Outstanding:* the bulk `gold_fleet_exposure` load (989,042 rows) into
 `fleetguard_vehicle_exposure`. Postgres `COPY` is not the constraint; the open question is
-what ~1M change events do to a CDF pipeline **shared with ~296 other students**. Decide
-scope — full, `EXACT`-only (263,686), or a demo slice — before running. Re-measure
+what ~1M change events do to a CDF pipeline **shared with ~296 other students**.
+
+Decide scope — full, `EXACT`-only (263,686), or a demo slice — before running. Re-measure
 throughput at scale: the `PSYCOPG_IMPL=python` fix (I-045) uses the slower pure-Python
 driver, so the 40k rows/s reference figure may not hold.
 
@@ -277,7 +280,9 @@ for the agent's search tool (§4.3), not by clustering for early detection.
 **Published result — the differentiator:** **16.0% detection at median 197-day lead vs
 11.1% on a volume-matched placebo (1.44×, z ≈ 2.62, p ≈ 0.009)**, from the volume-anomaly
 detector on the full silver corpus. Modest, real, falsifiable, and defended by a control
-arm. *Do not quote the 13.3%/11.2% pair as the headline* — those are the like-for-like
+arm.
+
+*Do not quote the 13.3%/11.2% pair as the headline* — those are the like-for-like
 comparators computed on the restricted 37-month embedded set, and exist only to make the
 v2-vs-v3 comparison valid.
 
@@ -298,13 +303,17 @@ unchanged from before). `src/lakebase/15_enable_depot_rls.py`.
 notebook toggles this identity's own assignment row and measures actual row counts,
 including the join through `fleetguard_vehicle_exposure` the console actually reads (RLS on
 `fleetguard_vehicle` alone protects nothing if that join isn't also filtered — checked, and
-it is). Independently re-verified after the run: `relrowsecurity=True`,
+it is).
+
+Independently re-verified after the run: `relrowsecurity=True`,
 `relforcerowsecurity=True`, assignment table empty, unrestricted count back to 20,000.
 
 **Design detour, and why:** the original design created a purpose-made Postgres role to
 prove restriction under a genuinely different identity. This account has no `CREATEROLE` on
 the shared Lakebase instance — correctly restricted, on infrastructure shared with ~296
-other students. `FORCE ROW LEVEL SECURITY` made the proof possible under this identity's own
+other students.
+
+`FORCE ROW LEVEL SECURITY` made the proof possible under this identity's own
 connection instead, and is a strictly better result: without `FORCE`, Postgres exempts table
 owners from RLS by default, which would have made "the frontend cannot bypass it" false for
 any owner-connected caller regardless of policy content.

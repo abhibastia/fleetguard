@@ -15,28 +15,30 @@ Numbers carry their source so nothing gets quoted from memory.
 
 Three things are asleep and **two of them do not wake on their own.**
 
-| # | Action | Time | Notes |
-|---|---|---|---|
-| 1 | `databricks serving-endpoints get agents_bootcamp_students-fleetguard-fleetguard_agent --profile abhi` | — | Read `deployment_state_message`. **Two idle states, only one is a problem** — see below |
-| 2 | **Only if it says `Stopped`:** restore it | **~3 min** (measured 184 s) | A `Stopped` endpoint does **not** wake on request — `400 The given endpoint is stopped`. `Scaled to zero` is fine and needs nothing |
-| 3 | `databricks apps start fleetguard-console --profile abhi` | **~2 min** (measured 117 s to `RUNNING`) | `apps start` returns after ~105 s but `app_status` is still `UNAVAILABLE`; poll until `RUNNING`. **Any of the three judges can run this too** — they hold `CAN_MANAGE` |
-| 4 | Ask the assistant one throwaway question | **20–47 s** | 20 s after a restore, **47 s waking from scaled-to-zero**, 13 s warm. Do this before anyone is watching |
-| 5 | `curl .../api/signals` → expect **200** | ~1 s | This route has broken before (I-091) and it is the proactive half of the story |
+| #   | Action                                                                                                 | Time                                     | Notes |
+| --- | ------------------------------------------------------------------------------------------------------ | ---------------------------------------- | ---------- |
+| 1   | `databricks serving-endpoints get agents_bootcamp_students-fleetguard-fleetguard_agent --profile abhi` | —                                        | Read `deployment_state_message`. **Two idle states, only one is a problem** — see below |
+| 2   | **Only if it says `Stopped`:** restore it                                                              | **~3 min** (measured 184 s)              | A `Stopped` endpoint does **not** wake on request — `400 The given endpoint is stopped`. `Scaled to zero` is fine and needs nothing |
+| 3   | `databricks apps start fleetguard-console --profile abhi`                                              | **~2 min** (measured 117 s to `RUNNING`) | `apps start` returns after ~105 s but `app_status` is still `UNAVAILABLE`; poll until `RUNNING`. **Any of the three judges can run this too** — they hold `CAN_MANAGE` |
+| 4   | Ask the assistant one throwaway question                                                               | **20–47 s**                              | 20 s after a restore, **47 s waking from scaled-to-zero**, 13 s warm. Do this before anyone is watching |
+| 5   | `curl .../api/signals` → expect **200**                                                                | ~1 s                                     | This route has broken before (I-091) and it is the proactive half of the story |
 
 **The two idle states are not the same thing, and the difference decides whether you act.**
 Measured 2026-09-09:
 
-| `state.ready` | `deployment_state_message` | Meaning | Billing? | Action |
-|---|---|---|---|---|
-| `READY` | *(empty)* | warm, replicas up | **yes** | nothing — it idles down on its own |
-| `READY` | **`Scaled to zero`** | idle; **wakes on request in 47 s** | no | nothing; warm it once pre-demo |
-| `NOT_READY` | **`Stopped`** | **does not wake** — `400 the given endpoint is stopped` | no | restore, ~3 min |
+| `state.ready` | `deployment_state_message` | Meaning                                                 | Billing? | Action                             |
+| ------------- | -------------------------- | ------------------------------------------------------- | -------- | ---------------------------------- |
+| `READY`       | *(empty)*                  | warm, replicas up                                       | **yes**  | nothing — it idles down on its own |
+| `READY`       | **`Scaled to zero`**       | idle; **wakes on request in 47 s**                      | no       | nothing; warm it once pre-demo     |
+| `NOT_READY`   | **`Stopped`**              | **does not wake** — `400 the given endpoint is stopped` | no       | restore, ~3 min                    |
 
 **`state.ready: READY` does not mean it is running** — it means the endpoint has a working
 config, and it reads `READY` both warm and scaled to zero. **`scale_to_zero_enabled` reads
 `True` in all three**, so the flag tells you nothing either. `deployment_state_message` is the
-only field that distinguishes them, and it is the one to read. The likely progression is active → scaled to zero → stopped after longer idle,
-which is why touching it on submission day matters: it keeps the endpoint in the state that wakes.
+only field that distinguishes them, and it is the one to read.
+
+The likely progression is active → scaled to zero → stopped after longer idle, which is why
+touching it on submission day matters: it keeps the endpoint in the state that wakes.
 
 **Restoring the agent endpoint.** There is **no `start` or `resume` subcommand** — Model Serving
 offers only scale-to-zero or delete. Re-apply the config, building the payload *from the live
@@ -90,10 +92,11 @@ z 5.62, 64 complaints) behind it.
 
 **Say what the badge means, it is the honest part.** NHTSA writes `PROMASTER`; the fleet
 registry, built from vPIC, writes `PROMASTER 1500`/`2500`/`3500`. Same trucks, no exact string
-match — which is why this signal read **0 fleet vehicles** until 2026-09-11. The 2,418 includes
-315 `PROMASTER CITY`, a smaller van arguably not the same vehicle, so the tier travels with the
-count rather than being blended away: §7's determinism guarantee covers `EXACT` only, and a
-`MODEL_VARIANT` number is a prompt to confirm, not a fact to act on.
+match — which is why this signal read **0 fleet vehicles** until 2026-09-11.
+
+The 2,418 includes 315 `PROMASTER CITY`, a smaller van arguably not the same vehicle, so the
+tier travels with the count rather than being blended away: §7's determinism guarantee covers
+`EXACT` only, and a `MODEL_VARIANT` number is a prompt to confirm, not a fact to act on.
 
 Say the three-state distinction explicitly, because it is the honest core: **a signal is not an
 investigation, and an investigation is not a recall.** Nothing here has been acted on by NHTSA.
@@ -177,9 +180,11 @@ JOIN bootcamp_students.fleetguard.fleetguard_agent_payload p
 ```
 
 Run live 2026-09-09 — `action_id 7`, `authorised_by` and `called_as` **the same human**,
-`29726 ms`, `200`. That equality is the point: the model never touches the database, so the
-identity that authorised the write and the identity the request ran as must match, and here that
-is checkable rather than asserted.
+`29726 ms`, `200`.
+
+That equality is the point: the model never touches the database, so the identity that
+authorised the write and the identity the request ran as must match, and here that is checkable
+rather than asserted.
 
 **Two caveats to state.** The inference table ingests in **batches with a >30 minute lag**, so a
 write made during the demo will not appear in this join immediately — show it against an existing
@@ -190,25 +195,25 @@ existed, but nothing supplied the id until E-03 was wired (`ISSUES.md`).
 
 ## 3. Numbers, with sources
 
-| Claim | Value | Source |
-|---|---|---|
-| Detection, real arm | 124/777 = **16.0%**, median **197 d** | `gold_lead_time_summary` |
-| Detection, placebo | 67/606 = **11.1%**, median 343 d | `gold_lead_time_summary` |
-| Lift / significance | **1.44×**, z **2.62**, p **0.009** | recomputed from arm counts |
-| Complaints corpus | **2,240,289** | `bronze_complaints` |
-| Recall campaigns | 244,925 rows / **15,211** campaigns | `bronze_recalls` |
-| Investigations | 154,367 rows / **5,344** distinct | `bronze_investigations` |
-| Indexed chunks | **179,347** — measured in Run 2, 2026-09-30 (I-126): 115,499 `EXACT` + 63,848 `MODEL_VARIANT`. 115,499 was the EXACT-only scope (I-111) before the join was widened (I-115). Still read it live if the demo shows it; this cell is the expectation, not the source | `complaint_chunk_idx` |
-| Fleet | **20,000** vehicles · **60** depots · 47 models | `gold_fleet_vehicle` |
-| Exposure (EXACT) | **118,323** distinct (vin, campaign) | `fleetguard_vehicle_exposure` |
-| `17V629000` | **25** vehicles / **22** depots, EXACT | verified 2026-09-09 |
-| Ford F-250 in fleet | **2,116** | verified 2026-09-09 |
-| Signals | **48** detected / 9 live / **4** fleet-relevant | `gold_emerging_signal`, rebuilt 2026-09-11 |
-| Signals in console | **50** / 9 live / **6** fleet-relevant | Lakebase = 48 detector + 2 agent-opened |
-| Top signal (RAM PROMASTER) | **2,418** vehicles, `MODEL_VARIANT` | verified 2026-09-11 |
-| RAM 2500 signal | **1,256** vehicles, z 5.62, 64 complaints, `EXACT` | verified 2026-09-11 |
-| Model B | precision **83.7%**, recall **96.3%**, AUC 0.925 | 765-pair golden set |
-| Work orders / audit / cost | **331** / 723→**727** / **$84,409.68** | verified 2026-09-09, re-checked 2026-09-23 (I-113) — cost and work-order total unchanged, audit rows drifted +4 from activity between sessions |
+| Claim                      | Value                                                                                                                                                                                                                                                              | Source |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------- |
+| Detection, real arm        | 124/777 = **16.0%**, median **197 d**                                                                                                                                                                                                                              | `gold_lead_time_summary` |
+| Detection, placebo         | 67/606 = **11.1%**, median 343 d                                                                                                                                                                                                                                   | `gold_lead_time_summary` |
+| Lift / significance        | **1.44×**, z **2.62**, p **0.009**                                                                                                                                                                                                                                 | recomputed from arm counts |
+| Complaints corpus          | **2,240,289**                                                                                                                                                                                                                                                      | `bronze_complaints` |
+| Recall campaigns           | 244,925 rows / **15,211** campaigns                                                                                                                                                                                                                                | `bronze_recalls` |
+| Investigations             | 154,367 rows / **5,344** distinct                                                                                                                                                                                                                                  | `bronze_investigations` |
+| Indexed chunks             | **179,347** — measured in Run 2, 2026-09-30 (I-126): 115,499 `EXACT` + 63,848 `MODEL_VARIANT`. 115,499 was the EXACT-only scope (I-111) before the join was widened (I-115). Still read it live if the demo shows it; this cell is the expectation, not the source | `complaint_chunk_idx` |
+| Fleet                      | **20,000** vehicles · **60** depots · 47 models                                                                                                                                                                                                                    | `gold_fleet_vehicle` |
+| Exposure (EXACT)           | **118,323** distinct (vin, campaign)                                                                                                                                                                                                                               | `fleetguard_vehicle_exposure` |
+| `17V629000`                | **25** vehicles / **22** depots, EXACT                                                                                                                                                                                                                             | verified 2026-09-09 |
+| Ford F-250 in fleet        | **2,116**                                                                                                                                                                                                                                                          | verified 2026-09-09 |
+| Signals                    | **48** detected / 9 live / **4** fleet-relevant                                                                                                                                                                                                                    | `gold_emerging_signal`, rebuilt 2026-09-11 |
+| Signals in console         | **50** / 9 live / **6** fleet-relevant                                                                                                                                                                                                                             | Lakebase = 48 detector + 2 agent-opened |
+| Top signal (RAM PROMASTER) | **2,418** vehicles, `MODEL_VARIANT`                                                                                                                                                                                                                                | verified 2026-09-11 |
+| RAM 2500 signal            | **1,256** vehicles, z 5.62, 64 complaints, `EXACT`                                                                                                                                                                                                                 | verified 2026-09-11 |
+| Model B                    | precision **83.7%**, recall **96.3%**, AUC 0.925                                                                                                                                                                                                                   | 765-pair golden set |
+| Work orders / audit / cost | **331** / 723→**727** / **$84,409.68**                                                                                                                                                                                                                             | verified 2026-09-09, re-checked 2026-09-23 (I-113) — cost and work-order total unchanged, audit rows drifted +4 from activity between sessions |
 
 **Why the console says 6 and the warehouse says 4.** `gold_emerging_signal` holds 48 detector
 rows, **4** of them fleet-relevant. Lakebase adds the 2 agent-opened signals, giving **50 and 6**.
@@ -217,6 +222,7 @@ Both are right; they count different things.
 **Updated 2026-09-11 — the rebuild happened.** It used to read 2 and 4: B1/I-079's tiered match
 reached `main` on 2026-09-09 but the *stored* table still held the pre-fix zeros, so RAM
 PROMASTER and Chevrolet Silverado 1500 both showed **0** against 2,418 and 766 real vehicles.
+
 Rebuilt during the early B3 rehearsal (I-099). If a doc still says "2 of 48" or "4 of 50", it
 predates that.
 

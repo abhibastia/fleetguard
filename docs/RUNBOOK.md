@@ -13,29 +13,31 @@ default.
 
 **Names and values that recur, fixed once:**
 
-| name | value |
-|---|---|
-| catalog.schema | `bootcamp_students.fleetguard` |
-| AI Search endpoint | `fleetguard-vs` (`STANDARD`) |
-| AI Search index | `complaint_chunk_idx` |
-| index source table | `bootcamp_students.fleetguard.silver_complaint_chunk_indexed` (fleet make/model scope — I-111 + I-115; **179,347 rows** = 115,499 `EXACT` + 63,848 `MODEL_VARIANT`, measured Run 2 2026-09-30 and now pinned per tier in the builder — I-126) |
-| primary key | `chunk_id` |
-| embedding source column | `chunk_text` |
+| name                     | value |
+| ------------------------ | ---------- |
+| catalog.schema           | `bootcamp_students.fleetguard` |
+| AI Search endpoint       | `fleetguard-vs` (`STANDARD`) |
+| AI Search index          | `complaint_chunk_idx` |
+| index source table       | `bootcamp_students.fleetguard.silver_complaint_chunk_indexed` (fleet make/model scope — I-111 + I-115; **179,347 rows** = 115,499 `EXACT` + 63,848 `MODEL_VARIANT`, measured Run 2 2026-09-30 and now pinned per tier in the builder — I-126) |
+| primary key              | `chunk_id` |
+| embedding source column  | `chunk_text` |
 | embedding model endpoint | `databricks-gte-large-en` |
-| index subtype | `HYBRID` |
-| pipeline type | `TRIGGERED` |
-| columns_to_sync | `chunk_id, complaint_id, make, model, component, any_harm, chunk_text` — the exact list `src/agent/14_fleetguard_agent.py` and `src/search/09_hybrid_query_test.py` both query; verified I-040 |
-| agent UC model | `bootcamp_students.fleetguard.fleetguard_agent` |
-| agent serving endpoint | `agents_bootcamp_students-fleetguard-fleetguard_agent` |
-| App | `fleetguard-console` |
+| index subtype            | `HYBRID` |
+| pipeline type            | `TRIGGERED` |
+| columns_to_sync          | `chunk_id, complaint_id, make, model, component, any_harm, chunk_text` — the exact list `src/agent/14_fleetguard_agent.py` and `src/search/09_hybrid_query_test.py` both query; verified I-040 |
+| agent UC model           | `bootcamp_students.fleetguard.fleetguard_agent` |
+| agent serving endpoint   | `agents_bootcamp_students-fleetguard-fleetguard_agent` |
+| App                      | `fleetguard-console` |
 
 **One honest gap:** the *original* `create-index` call for `complaint_chunk_idx` was never
 captured verbatim — it predates this runbook. The command below is reconstructed from every
 independently-confirmed fact about that index (I-040's returned columns, I-105's
 `pipeline_type: TRIGGERED`, ARCHITECTURE.md §4.4's `HYBRID`/`databricks-gte-large-en`), not
-copied from a log. Treat step 1.1's smoke index as the check that this reconstruction is
-right, not a formality — if the smoke index's `get-index` output doesn't show all seven
-`columns_to_sync` columns and `HYBRID`, stop and fix the command before running it at scale.
+copied from a log.
+
+Treat step 1.1's smoke index as the check that this reconstruction is right, not a formality —
+if the smoke index's `get-index` output doesn't show all seven `columns_to_sync` columns and
+`HYBRID`, stop and fix the command before running it at scale.
 
 ---
 
@@ -168,7 +170,6 @@ databricks vector-search-indexes create-index \
 > **179,347 / 4,336 ≈ 41 min**, not 27. The command block below is unchanged; only the expected
 > duration is.
 
-
 ```bash
 databricks vector-search-indexes get-index bootcamp_students.fleetguard.complaint_chunk_idx --profile abhi
 ```
@@ -250,8 +251,9 @@ databricks serving-endpoints update-config agents_bootcamp_students-fleetguard-f
 **This step may be redundant with 1.4 below** — 1.4 deploys a *new* model version (the one
 carrying the I-109/I-110 fixes) to this same endpoint regardless of its current state. If
 going straight to 1.4, it is reasonable to skip 1.3 entirely; it exists as its own step
-because past sessions needed to unstick a *stopped* endpoint without a version bump. Check
-`deployment_state_message`, never `scale_to_zero_enabled` (I-092 — it reads `True` in both
+because past sessions needed to unstick a *stopped* endpoint without a version bump.
+
+Check `deployment_state_message`, never `scale_to_zero_enabled` (I-092 — it reads `True` in both
 "scaled to zero" and "stopped", and only the former wakes on a request).
 
 ### 1.4 — Re-register and deploy the agent
@@ -314,7 +316,9 @@ query` truncates this endpoint's response to `{"id": ..., "object": "response"}`
 `output` field (same class of Go-SDK unmarshalling gap as I-040's vector-search finding),
 and the Python SDK's `w.serving_endpoints.query()` sends the wrong body shape for this
 endpoint's `agent/v1/responses` task (`inputs` instead of the top-level `input` key it
-actually expects, `400 Bad Request`). What works:
+actually expects, `400 Bad Request`).
+
+What works:
 
 ```bash
 HOST=$(databricks auth env --profile abhi | grep -o '"DATABRICKS_HOST": *"[^"]*"' | grep -o '"[^"]*"$' | tr -d '"')
@@ -457,8 +461,10 @@ databricks bundle run build_chunk_index_source -t prod --profile abhi
 **Measured 2026-09-30 (I-126) and now pinned per tier:** `EXACT` **115,499** +
 `MODEL_VARIANT` **63,848** = **179,347**. The job asserts each tier exactly, not a bounded
 range — a regression that moved rows *between* tiers while preserving the sum would otherwise
-pass, and that is precisely the I-115 failure. A `MODEL_VARIANT` count of zero means the
-exact-only scope is still in force and the fleet's 2,116 F-250s are absent from retrieval.
+pass, and that is precisely the I-115 failure.
+
+A `MODEL_VARIANT` count of zero means the exact-only scope is still in force and the fleet's
+2,116 F-250s are absent from retrieval.
 
 The four documents that said "measured in Run 2" (`STATUS.md`, `ARCHITECTURE.md`,
 `EVIDENCE.md`, `DEMO.md`) now carry the figure. Then refresh what the console shows:
@@ -576,9 +582,11 @@ databricks bundle run evaluate_agent -t prod --profile abhi
 
 **This step did not exist, in Run 1 or Run 2.** The agent was rebuilt, redeployed and
 demonstrated without ever being scored — so `16_evaluate_agent.py`'s **hard gates were inert
-through the whole submission**. They fail the job on a safety regression (claiming a campaign
-was launched, inventing a recall, and as of I-118 **acting on an instruction embedded in a
-retrieved complaint narrative**), which is worth nothing if nothing runs them.
+through the whole submission**.
+
+They fail the job on a safety regression (claiming a campaign was launched, inventing a
+recall, and as of I-118 **acting on an instruction embedded in a retrieved complaint
+narrative**), which is worth nothing if nothing runs them.
 
 It is also what **stamps the model version** with its evaluation result (`eval_run_id`,
 `eval_hard_gates`, a `score_*` tag per scorer). Skip this and the deployed version carries no

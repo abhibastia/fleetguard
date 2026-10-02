@@ -72,15 +72,17 @@ does *not* claim.
 
 **Honest status of this path:** verified end to end, but under the owner's identity, and for the
 API routes under a programmatic token rather than a browser. No second person has signed in yet.
+
 The failure that would matter — authenticating successfully and then having every data route fail
 for want of a Lakebase role — **cannot happen to the reviewers**, who were checked and all hold
 one. It is unproven rather than known-broken (`docs/STATUS.md`, I-084).
 
 **The other way to run it** is locally, against the same live Lakebase — see *Run it locally*
-below. Those are the two supported surfaces. A third, a public Render deployment with its own
-OAuth login, was removed on 2026-09-10 and is preserved on the `deploy/render` branch; the
-`render-u2m` browser login it carried was never confirmed working, having stalled on an
-account-admin scope grant.
+below. Those are the two supported surfaces.
+
+A third, a public Render deployment with its own OAuth login, was removed on 2026-09-10 and is
+preserved on the `deploy/render` branch; the `render-u2m` browser login it carried was never
+confirmed working, having stalled on an account-admin scope grant.
 
 The **Evidence** tab needs no identity on either surface — it's the published backtest result
 above, sourced from the same measurement.
@@ -90,11 +92,13 @@ above, sourced from the same measurement.
 **Volume and variety, not velocity.** The corpus is **8.44M bronze rows** — 2.24M complaints,
 5.8M technical service bulletins, 244,925 recall rows, 154,367 investigation rows — across four
 structurally different NHTSA datasets, joined to a 20,000-vehicle fleet registry. That is a
-genuine big-data claim and it is measured. **Velocity is deliberately not claimed:** the
-Postgres→Unity Catalog capture is 7.1–15.6 s, but the end-to-end business-event→analytics path
-measures **2.5–4.5 minutes**, because a `table_update` trigger has a hard 60-second platform
-floor on both its intervals (I-081). The frozen proposal claims sub-minute there; its
-contradictions table records that as unreachable rather than quietly leaving it.
+genuine big-data claim and it is measured.
+
+**Velocity is deliberately not claimed:** the Postgres→Unity Catalog capture is 7.1–15.6 s, but
+the end-to-end business-event→analytics path measures **2.5–4.5 minutes**, because a
+`table_update` trigger has a hard 60-second platform floor on both its intervals (I-081). The
+frozen proposal claims sub-minute there; its contradictions table records that as unreachable
+rather than quietly leaving it.
 
 - **Ingestion → medallion pipeline** (Lakeflow Declarative Pipelines): NHTSA's complaint,
   recall, investigation, and TSB flat files → bronze → silver → gold, with a quarantine
@@ -199,15 +203,15 @@ the next deploy.
 
 ## Repository layout
 
-| Path | What's there |
-|---|---|
-| `src/` | Ingestion, medallion pipelines, fleet registry, search, agent, backtest, Lakebase migrations |
-| `app/` | The FastAPI backend + React console that make up the live product |
-| `docs/` | Living architecture spec, build status, evidence map, issue log, and the frozen original proposal. `docs/screenshots/` is gitignored build output — regenerate with `scripts/capture_screenshots.py` |
-| `scripts/` | Runnable setup/build scripts — local dev server, console build, evidence/snapshot export, demo-state seeding |
-| `tests/` | Unit tests (run everywhere) and integration tests (opt-in, hit the live workspace) |
+| Path          | What's there |
+| ------------- | ---------- |
+| `src/`        | Ingestion, medallion pipelines, fleet registry, search, agent, backtest, Lakebase migrations |
+| `app/`        | The FastAPI backend + React console that make up the live product |
+| `docs/`       | Living architecture spec, build status, evidence map, issue log, and the frozen original proposal. `docs/screenshots/` is gitignored build output — regenerate with `scripts/capture_screenshots.py` |
+| `scripts/`    | Runnable setup/build scripts — local dev server, console build, evidence/snapshot export, demo-state seeding |
+| `tests/`      | Unit tests (run everywhere) and integration tests (opt-in, hit the live workspace) |
 | `dashboards/` | AI/BI dashboard definitions |
-| `resources/` | Bundle resource files — the App, the pipeline, the dashboard and every job, as code (`ls resources/*.job.yml | wc -l`) |
+| `resources/`  | Bundle resource files — the App, the pipeline, the dashboard and every job, as code (`ls resources/*.job.yml | wc -l`) |
 
 ## Documentation map
 
@@ -218,15 +222,15 @@ other one had already drifted.
 Read `docs/STATUS.md` first if you're picking this up cold — it's the one page answering
 "where are we," with next steps in priority order.
 
-| Document | Job |
-|---|---|
-| [`docs/EVIDENCE.md`](docs/EVIDENCE.md) | **What backs each claim** — the artefact, table, job or measured number behind every graded line, and what is deliberately still missing. **Start here**: it is organised by the eight rubric categories |
-| [`docs/TRANSCRIPTS.md`](docs/TRANSCRIPTS.md) | **Five verbatim agent exchanges from Run 2**, generated from the saved JSON responses rather than retyped — deterministic exposure, retrieval with cited complaint ids, a write reaching the lakehouse, graceful degradation after the index was deleted, and what the endpoint returns right now |
-| [`docs/DEMO.md`](docs/DEMO.md) | **Start here to look around** — pre-flight, the ten beats, numbers with sources, what not to claim |
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | The living spec — what the system *is*, kept true with the code |
-| [`docs/API.md`](docs/API.md) | Every console REST endpoint and every external API this project consumes, one page |
-| [`docs/STATUS.md`](docs/STATUS.md) | Where the build has got to, updated every session |
-| [`docs/ISSUES.md`](docs/ISSUES.md) | Every problem hit during the build, root cause, resolution — append-only |
-| [`docs/ENHANCEMENTS.md`](docs/ENHANCEMENTS.md) | Evaluated backlog: adopted, deferred, or rejected, with reasons |
+| Document                                                     | Job |
+| ------------------------------------------------------------ | ---------- |
+| [`docs/EVIDENCE.md`](docs/EVIDENCE.md)                       | **What backs each claim** — the artefact, table, job or measured number behind every graded line, and what is deliberately still missing. **Start here**: it is organised by the eight rubric categories |
+| [`docs/TRANSCRIPTS.md`](docs/TRANSCRIPTS.md)                 | **Five verbatim agent exchanges from Run 2**, generated from the saved JSON responses rather than retyped — deterministic exposure, retrieval with cited complaint ids, a write reaching the lakehouse, graceful degradation after the index was deleted, and what the endpoint returns right now |
+| [`docs/DEMO.md`](docs/DEMO.md)                               | **Start here to look around** — pre-flight, the ten beats, numbers with sources, what not to claim |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)               | The living spec — what the system *is*, kept true with the code |
+| [`docs/API.md`](docs/API.md)                                 | Every console REST endpoint and every external API this project consumes, one page |
+| [`docs/STATUS.md`](docs/STATUS.md)                           | Where the build has got to, updated every session |
+| [`docs/ISSUES.md`](docs/ISSUES.md)                           | Every problem hit during the build, root cause, resolution — append-only |
+| [`docs/ENHANCEMENTS.md`](docs/ENHANCEMENTS.md)               | Evaluated backlog: adopted, deferred, or rejected, with reasons |
 | [`docs/FleetGuard_Proposal.md`](docs/FleetGuard_Proposal.md) | What was proposed, before the build — **frozen**, not updated as facts changed |
-| [`PLAN.md`](PLAN.md) | Phase sequencing and definitions of done |
+| [`PLAN.md`](PLAN.md)                                         | Phase sequencing and definitions of done |

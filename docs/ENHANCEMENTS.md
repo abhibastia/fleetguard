@@ -98,10 +98,11 @@ the streaming question stops being load-bearing for the PII claim.
 
 ### E-02 · `ResponsesAgent` + models-from-code + `agents.deploy()`
 **Status: BUILT.** Agent registered and serving (**v7** as of 2026-09-23, `agents.deploy()`,
-`ResponsesAgent`, models-from-code). Not an enhancement so much as the correct shape for Phase 7. Our proposal
-names "Mosaic AI Agent Framework" generically; this is the concrete interface — structured
-tool calling, token usage, multi-turn, OpenAI compatibility, and a serving path that is one
-call. Logging as a `.py` file rather than a pickle also means the agent is reviewable in
+`ResponsesAgent`, models-from-code). Not an enhancement so much as the correct shape for Phase 7.
+
+Our proposal names "Mosaic AI Agent Framework" generically; this is the concrete interface —
+structured tool calling, token usage, multi-turn, OpenAI compatibility, and a serving path that
+is one call. Logging as a `.py` file rather than a pickle also means the agent is reviewable in
 git, which matters for a project whose whole argument is auditability.
 
 ### E-03 · MLflow tracing with domain spans
@@ -127,16 +128,19 @@ per-request cost.
 `$.databricks_output.trace.info.trace_metadata['mlflow.trace.tokenUsage']`. Measured: the
 **parent object resolves** (`get_json_object(... '$.databricks_output.trace.info.trace_metadata')`
 is non-null), but the leaf **cannot be addressed** — the key name contains dots
-(`mlflow.trace.tokenUsage`), which Spark's `get_json_object` JSONPath treats as nesting. The
-value is also a **JSON string inside** the metadata object, so it needs a second parse. Both
+(`mlflow.trace.tokenUsage`), which Spark's `get_json_object` JSONPath treats as nesting.
+
+The value is also a **JSON string inside** the metadata object, so it needs a second parse. Both
 facts have to be discovered by looking at the payload; neither is in the note.
 
 **Second trap: the value is not unique.** A single response carries **3–7** `total_tokens`
 occurrences — one per LLM call in the agent's tool loop — plus the one trace-level aggregate.
-An unanchored `regexp_extract` returns whichever appears first. Checked across every 200-row:
-the aggregate happens to come first and the two agree, **but nothing guarantees that ordering**,
-so the shipped query anchors on `INSTR(response, 'mlflow.trace.tokenUsage')` and reads within
-that block — correct by construction rather than by luck.
+An unanchored `regexp_extract` returns whichever appears first.
+
+Checked across every 200-row: the aggregate happens to come first and the two agree, **but
+nothing guarantees that ordering**, so the shipped query anchors on
+`INSTR(response, 'mlflow.trace.tokenUsage')` and reads within that block — correct by
+construction rather than by luck.
 
 **Where it landed:** the dashboard's Operations page joins `gold_agent_action` to
 `fleetguard_agent_payload` on E-03's `trace_id` and shows, in one row, **who authorised a write,
@@ -238,13 +242,14 @@ half and it held.
 
 **The adoption is not built, and should not be.** `generate_evals_df` was adopted to seed an
 agent Q&A set "quickly, which matters at 24 days" — a schedule argument, and the schedule
-pressure it answered no longer exists. What exists instead is **better than what it would have
-produced**: `src/agent/16_evaluate_agent.py` carries **10 hand-written adversarial cases**,
-each targeting one specific way the agent could mislead an operator about to pull trucks off
-the road — grounding (the numbers must be right *and* the tier stated), the
-signal/investigation/recall three-state distinction, the human approval gate, retrieval and
-privacy, refusing to invent, and one **regression case encoding a real multi-turn 400 found live
-on 2026-09-04**.
+pressure it answered no longer exists.
+
+What exists instead is **better than what it would have produced**:
+`src/agent/16_evaluate_agent.py` carries **10 hand-written adversarial cases**, each targeting
+one specific way the agent could mislead an operator about to pull trucks off the road —
+grounding (the numbers must be right *and* the tier stated), the signal/investigation/recall
+three-state distinction, the human approval gate, retrieval and privacy, refusing to invent, and
+one **regression case encoding a real multi-turn 400 found live on 2026-09-04**.
 
 Generated Q&A cannot produce that set. It samples what the documents *say*; these cases encode
 what this project has *watched go wrong* — I-050's confident "no vehicles affected", I-075's
@@ -265,8 +270,9 @@ Keep the two datasets separate and say why.
 schedule: **the requirement it was adopted for is met.**
 
 E-09 was adopted for exactly one reason — the write path must halt, surface a proposed action,
-and resume on approval — and explicitly *not* because the course uses LangGraph. That
-suspend-and-resume now exists as the **action-envelope pattern** (`agent_actions.py`,
+and resume on approval — and explicitly *not* because the course uses LangGraph.
+
+That suspend-and-resume now exists as the **action-envelope pattern** (`agent_actions.py`,
 ARCHITECTURE §7.1): the model emits an envelope and stops; the FastAPI app validates it and
 performs the write under the *caller's own* OBO token. That is a stronger form of the same
 control than a graph interrupt, because the suspension crosses a **process and identity
@@ -296,10 +302,12 @@ consumers reaching it through a supervisor agent?
 campaign lands → 2,116 exposed F-250s ranked by depot and severity → approve → work orders.
 That is a queue and a form. Conversing through a ranked exposure list is strictly worse, and
 §7's deterministic guarantee is far harder to demonstrate in prose than in a list that either
-contains the right VINs or does not. But §13 requires an action-taking agent, and one exists
-in §4.5 with four read and four write tools. So: **agent chat panel alongside the queue**,
-proposing actions that the existing approval gate executes. This also keeps the demo's
-strongest moment — the deterministic recall→work-order path — free of LLM variance.
+contains the right VINs or does not.
+
+But §13 requires an action-taking agent, and one exists in §4.5 with four read and four write
+tools. So: **agent chat panel alongside the queue**, proposing actions that the existing
+approval gate executes. This also keeps the demo's strongest moment — the deterministic
+recall→work-order path — free of LLM variance.
 
 **Persona routing via a supervisor agent: rejected, on security grounds.** This supersedes
 the weaker "nothing to supervise" reasoning in the rejection table below.
@@ -312,8 +320,9 @@ problem**, and §5.1 already solves it:
 
 A supervisor routing by persona would re-implement that in prompt space. **An LLM deciding
 what a user may see is not a security boundary.** It converts a claim we can *prove* — UC
-evaluates ABAC under the user's own token — into one we would have to hope holds. The
-correct mechanism is already designed in §5.3: tools are UC Functions with per-principal
+evaluates ABAC under the user's own token — into one we would have to hope holds.
+
+The correct mechanism is already designed in §5.3: tools are UC Functions with per-principal
 `EXECUTE` grants, so *"a tool the agent has not been granted cannot be invoked, regardless of
 what the model attempts."* Same agent, different identity, different capability, enforced
 **below** the model.
@@ -327,13 +336,13 @@ hallucination is publicly visible with no operator to catch it. **Static page.**
 
 **Resulting surface map:**
 
-| Persona | Surface | NL access |
-|---|---|---|
+| Persona                  | Surface                                 | NL access |
+| ------------------------ | --------------------------------------- | ---------- |
 | Safety manager (primary) | Queue + approval + **agent chat panel** | Full agent; write tools gated by approval |
-| Depot manager | Work-order queue | Agent, read tools only |
-| Reliability analyst | Pattern explorer | Agent, VINs masked by ABAC |
-| VP Ops | Dashboard + **Genie** | Genie only (analytics NL, read-only) |
-| Public | Static evidence page | **None** |
+| Depot manager            | Work-order queue                        | Agent, read tools only |
+| Reliability analyst      | Pattern explorer                        | Agent, VINs masked by ABAC |
+| VP Ops                   | Dashboard + **Genie**                   | Genie only (analytics NL, read-only) |
+| Public                   | Static evidence page                    | **None** |
 
 Note §2 already assigns VP Ops a *Genie Agent* rather than a chatbot, and that split is
 correct: **Genie answers questions over governed tables; the agent does things under
@@ -359,9 +368,10 @@ archive, never merged.
 working in a browser: it stalled on an account admin granting the `all-apis` scope, and a
 custom OAuth app integration can be assigned no narrower scope that covers what this app needs
 (see E-14's update). So the second of the two Render auth paths was carried on `main` for a
-week in a state that could not be demonstrated. What did survive is the thing that mattered —
-the auth seam (E-13), which made removing two of its four providers a config-and-delete change
-rather than a rewrite of every handler.
+week in a state that could not be demonstrated.
+
+What did survive is the thing that mattered — the auth seam (E-13), which made removing two of
+its four providers a config-and-delete change rather than a rewrite of every handler.
 
 *Everything below is the decision as made on 2026-09-01, left intact as the record.*
 
@@ -370,10 +380,10 @@ Three options were considered.
 **❌ Free-edition Databricks App — rejected.** Free edition *does* support Apps (three exist
 there), but it is a **different workspace and a different account**:
 
-| | free-edition | abhi |
-|---|---|---|
-| Workspace | `dbc-6b3a5534-db75` | `dbc-7b106152-caf3` |
-| User | `abhibastia90@gmail.com` | `abhisek.bastia17@gmail.com` |
+|           | free-edition             | abhi                         |
+| --------- | ------------------------ | ---------------------------- |
+| Workspace | `dbc-6b3a5534-db75`      | `dbc-7b106152-caf3`          |
+| User      | `abhibastia90@gmail.com` | `abhisek.bastia17@gmail.com` |
 
 App **resource bindings are workspace-local**, so a free-edition app cannot bind abhi's
 Lakebase, SQL warehouse, or model-serving endpoint. The only route would be M2M OAuth with a
@@ -383,8 +393,10 @@ That **destroys §5.1 Path A**. The claim is *"identity determines both rows and
 the frontend cannot bypass it"* — which requires the signed-in user to **be** an abhi
 identity so Unity Catalog evaluates ABAC under their own token. A free-edition user is not
 one, so every query would execute as a single service principal and the row filters and
-column masks become decorative. Rejected: it converts the project's strongest architectural
-claim into a fiction. (All the data is in abhi anyway.)
+column masks become decorative.
+
+Rejected: it converts the project's strongest architectural claim into a fiction. (All the data
+is in abhi anyway.)
 
 **✅ Databricks Apps in `abhi` — required, but managed.** `databricks apps start` / `stop`
 both exist, and **all ~40 student apps in that workspace currently sit `STOPPED`** — clearly
@@ -402,11 +414,11 @@ cold or it happens live.
 
 **Decision:**
 
-| Window | Surface | Why |
-|---|---|---|
-| Now → 7 Sept (MVP) | **Render** | Free, fast iteration while code changes hourly |
-| ~20 Sept | Deploy to **Databricks Apps**, keep **stopped** | Proves the deployment without burning compute |
-| 25–30 Sept demo | **Databricks App** (started for the window) | The only place OBO is genuine; Render stays as fallback link |
+| Window             | Surface                                         | Why |
+| ------------------ | ----------------------------------------------- | ---------- |
+| Now → 7 Sept (MVP) | **Render**                                      | Free, fast iteration while code changes hourly |
+| ~20 Sept           | Deploy to **Databricks Apps**, keep **stopped** | Proves the deployment without burning compute |
+| 25–30 Sept demo    | **Databricks App** (started for the window)     | The only place OBO is genuine; Render stays as fallback link |
 
 *(The last row's fallback never applied: Render was removed 2026-09-10 — see this entry's
 status block above.)*
@@ -432,11 +444,11 @@ redirect, PKCE and code exchange ourselves, hold a client secret, and register a
 
 **Consequence — the two surfaces we actually need both work without it:**
 
-| Surface | Auth | Needs OAuth app? |
-|---|---|---|
-| **Render** — public evidence page | **none** | No — live today |
-| **Databricks Apps** — operator console | **OBO** | No — platform-injected |
-| ~~Render operator console~~ | ~~U2M~~ | yes — blocked, and now unnecessary |
+| Surface                                | Auth     | Needs OAuth app?                   |
+| -------------------------------------- | -------- | ---------------------------------- |
+| **Render** — public evidence page      | **none** | No — live today                    |
+| **Databricks Apps** — operator console | **OBO**  | No — platform-injected             |
+| ~~Render operator console~~            | ~~U2M~~  | yes — blocked, and now unnecessary |
 
 Render's role narrows to what §5.2 always described: an **unauthenticated, pre-aggregated,
 read-only evidence surface**. That is not a downgrade — it is the role the architecture
@@ -461,11 +473,11 @@ configuration plus one line rather than a rewrite (`app/backend/fleetguard_api/a
 
 The two hosting environments differ in **exactly one** way:
 
-| Environment | How the user token arrives |
-|---|---|
-| **Local dev** | `static-dev` — the developer's own token from `databricks auth token` |
+| Environment         | How the user token arrives |
+| ------------------- | ---------- |
+| **Local dev**       | `static-dev` — the developer's own token from `databricks auth token` |
 | **Databricks Apps** | `X-Forwarded-Access-Token` header — the platform hands it over (OBO) |
-| ~~Render console~~ | ~~U2M redirect (Path D)~~ — **retired, E-14.** Render serves the public evidence page with no auth. `SessionTokenProvider` remains implemented and tested against the day an account admin registers a client. |
+| ~~Render console~~  | ~~U2M redirect (Path D)~~ — **retired, E-14.** Render serves the public evidence page with no auth. `SessionTokenProvider` remains implemented and tested against the day an account admin registers a client. |
 
 Everything downstream is identical: the SQL, the Lakebase calls, the agent invocation, ABAC
 evaluation. So the backend must resolve the caller's token through **one swappable
@@ -501,8 +513,9 @@ carrying a `page_content` field.
 **What is NOT confirmed, and is the whole blocker:** what these judges do with a retriever span
 whose output is a list of **plain dicts** — which is exactly what `search_complaints` returns
 (`chunk_id`, `complaint_id`, `make`, `model`, `component`, `any_harm`, `chunk_text`). The docs
-do not say whether such a span is coerced, silently skipped, or an error. Nor is it confirmed
-that span outputs can be overridden in-function via
+do not say whether such a span is coerced, silently skipped, or an error.
+
+Nor is it confirmed that span outputs can be overridden in-function via
 `mlflow.get_current_active_span().set_outputs(...)`, which is the clean way to give MLflow
 document-shaped output without duplicating narrative text into the model's context and paying
 for it twice in tokens.
@@ -510,6 +523,7 @@ for it twice in tokens.
 **Why it was not simply tried.** mlflow is not installed locally — it runs only on Databricks —
 and the agent endpoint and AI Search index are both torn down between the submission windows.
 So there was no way to check, and the only place to find out would have been a live Run 2.
+
 Adding an unverified scorer to the **gating** evaluation path is the wrong trade there: if it
 raises, it takes the hard gates down with it, and the hard gates are what stop a regressed agent
 shipping. An evaluation that fails for a reason unrelated to the agent is worse than one metric
@@ -543,16 +557,19 @@ reviews made, and the only reason it is not built is that there are ten days lef
 
 **The problem it solves is real and this project has paid for it four times.** NHTSA writes
 `F-250 SD`; vPIC, and therefore `gold_fleet_vehicle`, writes `F-250`. Same trucks, no exact
-match — and **all 2,116 of the fleet's F-250s** are affected. That single comparison has been
-got wrong in four separate places on four separate occasions: the gold exposure layer (I-030),
-the agent write path (I-075), the emerging detector (I-079), and the AI Search index source
-(I-115, which excluded the fleet's most numerous vehicle from retrieval outright).
+match — and **all 2,116 of the fleet's F-250s** are affected.
+
+That single comparison has been got wrong in four separate places on four separate occasions:
+the gold exposure layer (I-030), the agent write path (I-075), the emerging detector (I-079),
+and the AI Search index source (I-115, which excluded the fleet's most numerous vehicle from
+retrieval outright).
 
 **What is built today, and why it is not enough.** All five paths now agree — including the
 RAG evaluation's relevance rule (I-117) — because the predicate is **copied verbatim** from
-`src/backtest/10_emerging_signals.py` rather than re-derived. That is agreement by *convention*:
-it holds because everyone who touched it knew to copy, and it has to keep holding for every
-future path. A table would make it agreement by *construction*:
+`src/backtest/10_emerging_signals.py` rather than re-derived.
+
+That is agreement by *convention*: it holds because everyone who touched it knew to copy, and
+it has to keep holding for every future path. A table would make it agreement by *construction*:
 
 ```
 nhtsa_make · nhtsa_model · canonical_make · canonical_series · match_basis · source
@@ -645,9 +662,11 @@ external Delta table (the CDF history tables in `bootcamp_cdc`, not a DLT-produc
 **Why deferred rather than rejected.** The win (removing ~15 lines of hand-rolled SQL) is
 real but modest, and the cost is trading working, already-debugged logic for something that
 needs its own live verification pass before it's trusted as much as the current code —
-poor value two weeks from submission. Revisit if `21_cdf_to_gold_facts.py` needs to change
-for another reason anyway (e.g. a third synced table) — the migration and the required live
-verification are cheaper done together than in isolation.
+poor value two weeks from submission.
+
+Revisit if `21_cdf_to_gold_facts.py` needs to change for another reason anyway (e.g. a third
+synced table) — the migration and the required live verification are cheaper done together
+than in isolation.
 
 ---
 
@@ -669,21 +688,23 @@ documenting a defect, not more complaints. No new source, no embeddings, no new 
 **Measured on the full 777 REAL / 606 PLACEBO population** (`gold_backtest_scope`, which spans
 2010–2026 and is *not* the restricted 37-month embedded set):
 
-| measurement | REAL | PLACEBO | reading |
-|---|---:|---:|---|
-| % with ≥1 prior-year TSB on the component | **48.5%** | **55.9%** | **opposite direction**, z −2.74, p 0.006 |
-| all-time TSBs for that vehicle (median) | 669 | **1,737** | arms **not matched on TSB exposure** — 2.4× |
-| share of prior-year TSBs on the component (median) | 3.19% | 3.14% | **no difference** |
-| the same share (mean) | 12.25% | 9.0% | tail-driven, not a shift |
-| % with <10 prior-year TSBs | **25.3%** | 19.7% | explains the mean gap — smaller denominators |
+| measurement                                        |      REAL |   PLACEBO | reading |
+| -------------------------------------------------- | --------: | --------: | ---------- |
+| % with ≥1 prior-year TSB on the component          | **48.5%** | **55.9%** | **opposite direction**, z −2.74, p 0.006 |
+| all-time TSBs for that vehicle (median)            |       669 | **1,737** | arms **not matched on TSB exposure** — 2.4× |
+| share of prior-year TSBs on the component (median) |     3.19% |     3.14% | **no difference** |
+| the same share (mean)                              |    12.25% |      9.0% | tail-driven, not a shift |
+| % with <10 prior-year TSBs                         | **25.3%** |     19.7% | explains the mean gap — smaller denominators |
 
 **The finding, in order.** The raw test came out *backwards*, and significantly so:
 never-investigated series carry **more** prior-year TSBs. That is a confound, not a discovery —
 the placebo arm was volume-matched on **complaints**, never on bulletins, and its vehicles carry
-2.4× the TSB volume overall. Controlling for that by using each vehicle's own TSB share moved the
-**mean** into the hypothesised direction, but the **medians are identical**, and the mean gap is
-explained by REAL series having smaller denominators (a vehicle with 3 bulletins scores 33% on a
-single match). Every apparent effect, in both directions, is TSB-volume mismatch.
+2.4× the TSB volume overall.
+
+Controlling for that by using each vehicle's own TSB share moved the **mean** into the
+hypothesised direction, but the **medians are identical**, and the mean gap is explained by REAL
+series having smaller denominators (a vehicle with 3 bulletins scores 33% on a single match).
+Every apparent effect, in both directions, is TSB-volume mismatch.
 
 **Consequence — and this is why the backtest came first.** The plan had been to ship a descriptive
 "bulletins on this component in the window" column on `gold_emerging_signal`. **It is not shipped.**
@@ -721,11 +742,13 @@ announced Genie Ontology at DAIS 2026 (docs.databricks.com/aws/en/genie/genie-on
 unified semantic layer that grounds Genie One/Agents/Code in both modeled UC semantics (metric
 views, domains, glossary) and auto-inferred context from tables/dashboards/queries. It is
 **Public Preview, not GA**, so it doesn't clear this project's bar for committing to a feature
-name (see CLAUDE.md). The one thing worth carrying forward: `evidence_metrics` already being a
-governed UC metric view means that if a Genie space is ever built here, it has real modeled
-semantics to anchor an ontology to on day one, rather than starting from inferred-only context.
-Confirmed 2026-09-17: `evidence_metrics` is still the only UC metric view in the project, and
-`genie` is still unused anywhere in code (scope name only, in CLAUDE.md's vocabulary list).
+name (see CLAUDE.md).
+
+The one thing worth carrying forward: `evidence_metrics` already being a governed UC metric view
+means that if a Genie space is ever built here, it has real modeled semantics to anchor an
+ontology to on day one, rather than starting from inferred-only context. Confirmed 2026-09-17:
+`evidence_metrics` is still the only UC metric view in the project, and `genie` is still unused
+anywhere in code (scope name only, in CLAUDE.md's vocabulary list).
 
 *Original rationale, kept:* E-11 gives Genie a defined job —
 the VP Ops analytics surface — rather than leaving it a loose platform feature, which is why
@@ -745,13 +768,13 @@ catch in the *proposal* and had started doing itself.
 
 ## Rejected — recorded so they are not silently revisited
 
-| Item | Why not |
-|---|---|
-| **Agent Bricks / supervisor agent** | Two reasons, the second decisive. (1) Different product from the Agent Framework (`CLAUDE.md`); a supervisor needs specialised sub-agents, and we have one agent with eight governed tools. (2) **Routing personas through an agent puts access control in prompt space** — see E-11. UC ABAC and per-principal `EXECUTE` grants enforce it below the model, provably; an LLM router would downgrade that to a hope. |
-| **DSPy** | Prompt optimisation against a metric. Our agent's quality bar is tool-grounding and approval-gating, not prompt search. New dependency, no path to a FleetGuard objective. |
-| **Omnigent** | Beta. Not 24 days before a demo. |
+| Item                                      | Why not |
+| ----------------------------------------- | ---------- |
+| **Agent Bricks / supervisor agent**       | Two reasons, the second decisive. (1) Different product from the Agent Framework (`CLAUDE.md`); a supervisor needs specialised sub-agents, and we have one agent with eight governed tools. (2) **Routing personas through an agent puts access control in prompt space** — see E-11. UC ABAC and per-principal `EXECUTE` grants enforce it below the model, provably; an LLM router would downgrade that to a hope. |
+| **DSPy**                                  | Prompt optimisation against a metric. Our agent's quality bar is tool-grounding and approval-gating, not prompt search. New dependency, no path to a FleetGuard objective. |
+| **Omnigent**                              | Beta. Not 24 days before a demo. |
 | **The Day 4 chat-app template wholesale** | Node/TypeScript AppKit. §8.7 commits to React + FastAPI on Render first, Databricks Apps second, for stated reasons. Worth reading for the Apps phase; adopting it would discard a deliberate decision. |
-| **Multi-agent orchestration** | No second agent exists. Complexity with no user-visible benefit. |
+| **Multi-agent orchestration**             | No second agent exists. Complexity with no user-visible benefit. |
 
 ---
 
@@ -772,14 +795,14 @@ evidence.
 
 ### In scope
 
-| # | Item | Why it is load-bearing |
-|---|---|---|
-| 1 | **Exposure load into Lakebase** (scope decision first) | Without it there is no work queue. The one hard blocker. |
-| 2 | **Agent — minimal**: `ResponsesAgent`, ~3 tools (2 read, 1 gated write), tracing on (E-02/E-03) | §13's action-taking agent requirement |
-| 3 | **Approval gate** writing to `fleetguard_service_campaign` / `_work_order` / `_audit_log` | The human-in-the-loop claim, and the audit trail |
-| 4 | **Frontend**: React + FastAPI on Render (§8.7 phase 1) — queue, exposure detail, approve, agent panel | The only surface a viewer actually sees |
-| 5 | ~~U2M OAuth (Path D)~~ **RETIRED (E-14)** — the auth seam (E-13) stays | U2M needs an account-admin OAuth registration we do not have, and OBO is better anyway. Render serves the public evidence page with **no auth**; the operator console authenticates via OBO on Databricks Apps. |
-| 6 | **Evidence page** — static, showing the 16.0% / 11.1% / 1.44× result | Already measured; costs almost nothing to display |
+| #   | Item                                                                                                  | Why it is load-bearing |
+| --- | ----------------------------------------------------------------------------------------------------- | ---------- |
+| 1   | **Exposure load into Lakebase** (scope decision first)                                                | Without it there is no work queue. The one hard blocker. |
+| 2   | **Agent — minimal**: `ResponsesAgent`, ~3 tools (2 read, 1 gated write), tracing on (E-02/E-03)       | §13's action-taking agent requirement |
+| 3   | **Approval gate** writing to `fleetguard_service_campaign` / `_work_order` / `_audit_log`             | The human-in-the-loop claim, and the audit trail |
+| 4   | **Frontend**: React + FastAPI on Render (§8.7 phase 1) — queue, exposure detail, approve, agent panel | The only surface a viewer actually sees |
+| 5   | ~~U2M OAuth (Path D)~~ **RETIRED (E-14)** — the auth seam (E-13) stays                                | U2M needs an account-admin OAuth registration we do not have, and OBO is better anyway. Render serves the public evidence page with **no auth**; the operator console authenticates via OBO on Databricks Apps. |
+| 6   | **Evidence page** — static, showing the 16.0% / 11.1% / 1.44× result                                  | Already measured; costs almost nothing to display |
 
 **Hosting for MVP is Render** (E-12). Databricks Apps deployment is ~20 Sept, kept stopped
 until the demo window. The App is *not* MVP scope, but the **auth seam that makes it cheap
