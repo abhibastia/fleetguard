@@ -14,6 +14,7 @@ no error and passed the obvious check.
 
 | ID | Area | Issue | Status |
 |---|---|---|---|
+| I-129 | Platform / Serving | **Deleting the AI Search index makes the agent UNDEPLOYABLE, not merely degraded.** Model Serving validates logged resource dependencies at *start* as well as at config-update — the UI Start button is refused identically — so a model that would run fine is refused because a tool's backing resource is absent. The agent genuinely works without the index (TRANSCRIPTS §4 answers correctly post-deletion); it just cannot be *started*. Fixes the restore order permanently — **index first, always** — and makes RUNBOOK 1.3's "~3 min" conditional on dependencies existing. | ✅ resolved |
 | I-128 | Evidence | **`signals-*.png` was a screenshot of the Home page**, captioned "Emerging signals — the proactive half", in every run and in the submission zip. `#/signals` is not a route — the hash router falls through to Home — so DEMO.md beat 2 had no screenshot evidence while appearing to. Nothing errored: Home renders cleanly, so every existing check passed. Fixed to `#/emerging`, plus a rendered-content fingerprint guard that catches *any* silent route fallback, mutation-checked. | ✅ resolved |
 | I-127 | Platform / AI Search | **The AI Search endpoint vanished one minute after its index began syncing** — ONLINE with `num_indexes: 1` at 22:13, absent from `list-endpoints` at 22:15 (3 confirming reads). No delete was issued; `provision_search.sh` contains no teardown. Left a torn state: the UC table entry and a `RUNNING` sync pipeline both outlived the endpoint, and `/api/readyz` would have called it merely SHORT. `delete-index` cleans all three up silently without needing the endpoint. Distinct from I-112 (stall) and I-105 (sync restart); the only signal is polling `get-endpoint` by name. | **watch** — cause unknown |
 | I-126 | Run 2 / Provenance | **`/api/readyz` reported `console built at unset` on the submission deployment** — the release check's whole purpose, answered with a shrug. Fixed with a two-commit release (real changes, then a one-line stamp naming them); the DABs `config:` block cannot supply it (cli#4901), so it must be re-stamped by hand on any future release. Also: the `vector-search` scope gap was **not** free-edition-specific, and its sticky-consent half needs a consent DELETE + incognito. Step 3.0's count pre-verified independently at **179,347** (`EXACT` reproducing I-035's 115,499 exactly). | **in progress** |
@@ -36,6 +37,57 @@ no error and passed the obvious check.
 ---
 
 ## Tooling / process
+### I-129 — deleting the index makes the agent UNDEPLOYABLE, not merely degraded
+
+*Date:* 2026-10-02 · *Status:* ✅ understood, documented. **Changes the teardown/restore order
+permanently.**
+
+Trying to bring the agent back after Run 2's teardown:
+
+```
+Error: User cannot serve registered model
+'bootcamp_students.fleetguard.fleetguard_agent' version '8'.
+Dependencies do not exist: table 'bootcamp_students.fleetguard.complaint_chunk_idx'
+```
+
+**Both surfaces, same refusal.** `serving-endpoints update-config` fails, and so does the Serving
+UI's **Start** button. The first could be explained away as config validation on a *new* config;
+the second cannot — resuming an existing stopped deployment is refused too. So this is not a
+quirk of one code path.
+
+#### Why this was a surprise
+
+The agent **runs fine** without the index. `docs/TRANSCRIPTS.md` §4 is the proof: asked for recall
+`17V629000`'s fleet impact *after* the index was deleted, v8 answered 25 vehicles / 22 depots /
+`EXACT`, correctly. Only `search_complaints` is dead at runtime.
+
+So the intuition — *"the index is one tool out of seven, losing it degrades the agent"* — is right
+about **execution** and wrong about **deployment**. The model declares the index as a logged
+resource dependency, and Model Serving validates declared resources at deploy *and start* time,
+not lazily at tool-call time. A model that would work is refused because something it might use
+is absent.
+
+#### The consequences, both load-bearing
+
+1. **Restore order is fixed: index first, always.** There is no sequence in which the agent comes
+   back before the index. A teardown that deletes the index has, implicitly, also taken the agent
+   offline for the index's full rebuild time — **~75 min measured** (I-126/I-127), not the ~3 min
+   the runbook advertises.
+2. **`docs/RUNBOOK.md` 1.3's "~3 min" is conditional and was not marked as such.** That figure was
+   measured 2026-09-23, when the index happened to still exist. It is accurate only when restoring
+   an endpoint whose dependencies are all present — which is *not* the state the two-window cost
+   plan leaves behind. Corrected in place.
+
+#### What it means for a reviewer
+
+A reviewer can start the **App** in ~2 min and use every Lakebase-backed view. They cannot get the
+Assistant back without the index, so the agent's evidence has to stand on
+`docs/TRANSCRIPTS.md`, the Assistant screenshots, the walkthrough video and the scored evaluation
+— which is why I-125 stopped deferring that screenshot capture, and why the transcripts were
+written. Restoring the full stack for a scheduled demo window remains available and is offered.
+
+---
+
 ### I-128 — every screenshot run shipped Home labelled "Emerging signals", and reported success
 
 *Date:* 2026-09-30 · *Status:* ✅ fixed, guarded, mutation-checked. **SILENT** — nothing errored,
