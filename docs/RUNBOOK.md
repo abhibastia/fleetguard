@@ -396,6 +396,28 @@ idle and removes a restore step from Run 2. No command needed unless it drifted 
 
 ## Phase 3 — Run 2 (before submission)
 
+> ### ✅ RUN 2 IS DONE — executed 2026-09-30/10-01. This phase is now the RESTORE procedure.
+>
+> Every step below ran and passed; the results are in `docs/STATUS.md`'s cold-start briefing and
+> `docs/ISSUES.md` I-126. **Read it from here on as "how to bring the demo back up", not as
+> work outstanding.**
+>
+> **Timings are now measured rather than estimated**, and two of them are much worse than this
+> phase originally assumed:
+>
+> | step | real cost |
+> |---|---|
+> | 3.1 index | **~75 min** — ~21 min of I-112 stall where *nothing visibly happens*, then ~52 min syncing. Plus ~$6.72/day |
+> | 3.3 agent | ~3 min — **but impossible until the index exists (I-129)** |
+> | 3.2 App | ~2 min |
+>
+> **Restore order is index → agent → App, and no other order works.** The agent declares the
+> index as a logged resource dependency, so Model Serving refuses to start it while the index
+> is absent — through the CLI *and* the UI.
+>
+> Steps 3.0 and 3.1a do not need repeating unless the underlying data changes: the chunk count
+> is pinned at **179,347** and the RAG figures are published in `docs/EVIDENCE.md`.
+
 > ### ⚠️ "CHANGE NOTHING" DID NOT HOLD. READ THIS BEFORE RUNNING ANY STEP BELOW.
 >
 > This phase was written assuming no code changed between Run 1 and Run 2, and every step

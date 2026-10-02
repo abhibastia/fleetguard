@@ -5,6 +5,40 @@
 > staged but not yet live, and the traps in the order they bite. The session log below is
 > newest-first history; you do not need to read it to resume.
 
+## SESSION 2026-10-01/02 — Run 2 executed, submitted, then a review found the headline numbers wrong
+
+**Everything is built, verified, submitted once, and switched off. Nothing is billing.**
+Jump to [Picking this up tomorrow](#picking-this-up-tomorrow) for the resumable state; this
+entry is the narrative.
+
+**Run 2 ran end to end on `abhi`** (I-126): index **179,347** chunks, RAG known-item
+**HYBRID 50/50 R@10 1.000**, agent **v8** with **all three safety hard gates at 1.000** —
+including the first live `resists_injected_instructions` on this workspace — `/api/readyz`
+**200 on all five checks**, and an agent write reaching the Delta gold layer in ~5 min. 22
+screenshots, a 7-beat walkthrough video, and `docs/TRANSCRIPTS.md`. Then torn down, with the
+24 h billing rule re-verified the next day.
+
+**Four things went wrong during it, and each is worth more than the fix:**
+
+- **I-127** — the AI Search **endpoint vanished** a minute after its index began syncing,
+  leaving the UC entry and a `RUNNING` pipeline orphaned. Not us; verified rather than assumed.
+- **I-128** — `signals-*.png` had been a screenshot of the **Home page** in every run.
+  `#/signals` is not a route. Nothing errored, so the manifest recorded it as captured, and
+  DEMO.md beat 2 had no evidence while appearing to.
+- **I-129** — deleting the index makes the agent **undeployable**, not merely degraded. It
+  *runs* fine without it; it cannot *start*. Found by trying.
+- **I-130** — the console's two most-seen screens reported **the fetch limit** as a campaign
+  count (50 vs 393) and a **double count** of vehicles (51,615 vs 11,323). The AI/BI dashboard
+  had been right the whole time, so the two surfaces disagreed by 4.6×.
+
+**The pattern across all four:** none of them failed. Every one produced output that looked
+entirely reasonable — a plausible count, a clean screenshot, a healthy endpoint — which is why
+they survived a green build, a full evaluation and a submission. Three were found only by
+checking the system against *itself* (dashboard vs console, router vs screenshot, docs vs live
+UC) rather than against its own documentation.
+
+---
+
 ## SESSION 2026-09-29 (later) — fifth external review triaged; 2 fixes, 2 found while fixing
 
 **Branch `fix/repo-review-round-5`.** Full write-up in `docs/ISSUES.md` **I-120**. Two reviews
@@ -1352,25 +1386,118 @@ than discovering it mid-demo.
 
 ## Picking this up tomorrow
 
-### COLD START — state as of 2026-09-30
+### COLD START — state as of 2026-10-02
 
-**Read this section, then `docs/RUNBOOK.md` Phase 3. Nothing else is required to resume.**
+**Read this section. Then, only if you are bringing the demo back up, `docs/RUNBOOK.md`.
+Nothing else is required to resume.**
 
 | | |
 |---|---|
-| **Today** | 2026-09-30 · **submission 4 October** · **RUN 2 IS EXECUTING NOW** (brought forward from 2–3 October) |
-| **`main`** | `833cc69` (PRs #22–#27), pushed, **CI green**. PRs #22 citation scorer · #23 chunk-count expectation · #24 Assistant screenshot · #25 + #27 provenance stamp · #26 the measured 179,347 |
-| **Unmerged** | none |
-| ⚠️ **Release provenance is a HAND-MAINTAINED literal** | `FLEETGUARD_GIT_SHA` in `app/backend/app.yaml` names **`b44339c`**, which is `HEAD~1`. A file cannot hold its own commit's SHA, so a release is two commits: content, then the stamp. **Re-stamp whenever anything the console SERVES changes** — `fleetguard_api/`, the built bundle, or `corpus.json`. Docs-only commits do **not** invalidate it. The DABs `config:` block cannot supply it (cli#4901). See I-126 |
-| **Branches** | **2 local / 2 remote** — `main` plus **`free-edition-deploy`, retained deliberately** (2026-09-30) though its work is now all on `main`. 14 others were deleted 2026-09-29 (**I-121**, SHAs recorded there). `feature/role-based-views` survives as tag `archive/role-based-views`; docs naming `deploy/render` as a live location name commit `2b5727a` |
-| ⚠️ **`free-edition-deploy` is a FROZEN PRE-FOLD SNAPSHOT** | Tip `e7ff1b6`, **4 commits behind `main`**. It is kept as a fallback, **not as a live branch — do not deploy free edition from it.** It predates I-120, so its `agent_actions.py` and `readyz.py` lack the `NaN`/422 fix and the `/readyz` eval gate, and it still carries the stale `series_key IS NULL` comment two reviews mis-filed. Free-edition work lives on `main`: `./scripts/deploy.sh <profile> free_edition` |
-| **Bundle targets** | **2** — `prod` (default, abhi, the submission deliverable) and `free_edition` (separate account). `./scripts/deploy.sh <profile> <target>`, target defaults to `prod`. All 9 variable defaults are the abhi values, so `prod` is unchanged by the fold |
-| **Free-edition e2e** | ✅ **run 2026-09-30 from `main`** (I-123). `/api/readyz` **200**, 14 routes live, the 422 fix confirmed, both evals re-run. Found and fixed: the App's OBO scopes lacked `vector-search`, so `/api/readyz` **could never return 200 on either target**. Still open: the eval-gate check needs scope `mlflow`, which is **not assignable** — it degrades to "unverified" forever |
-| **Working tree** | clean |
-| **Billable resources running** | **none — re-verified 2026-10-02.** The 24 h rule **PASSED**: `list-endpoints` returns five endpoints, all other students', `fleetguard-vs` absent a full day after deletion. That is the only available confirmation (`system.billing` is ungranted), and it is now checked rather than assumed. The agent endpoint is **STOPPED** (UI, 2026-10-01 00:28 UTC) rather than scale-to-zero — a harder guarantee, but **it will not wake on request** (`400 The given endpoint is stopped`, verified); restore is RUNBOOK 1.3's `update-config`, ~3 min. Previously: `fleetguard-vs` + index deleted 2026-10-01 00:20 UTC after evidence capture; **billing ends 24 h later — re-verify with `list-endpoints` on 2026-10-02**, the only check available (`system.billing` is ungranted). App STOPPED. Agent endpoint left at scale-to-zero deliberately: free at rest, one less restore step |
-| **RUN 2: ✅ COMPLETE 2026-10-01** | Index **179,347** · RAG eval **known-item HYBRID 50/50, R@10 1.000** · agent **v8**, all 3 hard gates **1.000** incl. the first live `resists_injected_instructions` · `/api/readyz` **200, all five ok** · write→gold in ~5 min · **22 stills + a 7-beat walkthrough**. Full record: `docs/ISSUES.md` **I-126**; new issues **I-127** (endpoint vanished) and **I-128** (a screenshot of the wrong page) |
-| **Tests** | **694 passed / 24 skipped** (backend), **153** vitest, ruff + typecheck clean — *measured by CI on PR #27, not derived. Includes the 53 `tests/pipelines/` Spark tests, which cannot run on this laptop (`Bad CPU type in executable`, x86-only `java`) — CI is the only place they execute* |
-| **Bound job resources** | **31** (`ls resources/*.job.yml \| wc -l` — count it, do not trust this number) |
+| **Where the project is** | **BUILT, VERIFIED, SUBMITTED ONCE, AND SWITCHED OFF.** Run 2 completed 2026-10-01; a zip was submitted and is with the TAs. **Nothing is billing.** |
+| **Submission** | Zip uploaded; flagged **Manual Review** — TAs review by hand, and **the AI grader's report goes to them, not to you**. So there is no feedback loop to iterate against. A **resubmission is planned for Sunday** with the post-submission fixes below |
+| **`main`** | `b483f3f`, pushed, CI green. Since the submitted zip: **#28** Run 2 record · **#29** Stop-is-UI-only · **#30** transcripts + billing check · **#31** I-129 · **#32** the stat-card fix · **#33** re-stamp |
+| **Working tree** | clean · **branches: `main` + `free-edition-deploy`** (frozen pre-fold snapshot, 2026-09-30, do not deploy from it) |
+| **Tests** | **646 backend passed / 24 skipped**, **156** vitest, ruff + typecheck clean. *The 53 `tests/pipelines/` Spark tests cannot run on this laptop (`Bad CPU type in executable`, x86-only `java`) — CI is the only place they execute* |
+| **Bound job resources** | **31** (`ls resources/*.job.yml \| wc -l` — count it, never trust this number; it has drifted four times) |
+
+#### Everything is off, and that was deliberate
+
+| Resource | State | Cost to restore |
+|---|---|---|
+| AI Search index + endpoint | **deleted** 2026-10-01 00:20 UTC. **24 h billing rule re-verified 2026-10-02: PASSED** (`list-endpoints` shows no `fleetguard-vs`) — the only confirmation available, since `system.billing` is ungranted | **~75 min** measured (~21 min of I-112 stall, then ~52 min syncing) + ~$6.72/day |
+| Agent serving endpoint | **`DEPLOYMENT_STOPPED`**, v8 — stopped from the UI, a harder guarantee than scale-to-zero | ~3 min — **but only after the index exists, see I-129** |
+| App `fleetguard-console` | **STOPPED** | ~2 min; all four reviewers hold `CAN_MANAGE` and can start it themselves |
+| Lakebase | persists, free, **not ours to stop** (owned by `zach@zachwilson.tech`) | — |
+
+#### Run 2's measured results — the numbers the submission rests on
+
+| | |
+|---|---|
+| Index | **179,347** chunks = 115,499 `EXACT` + 63,848 `MODEL_VARIANT`, cross-checked against an independent pre-count |
+| RAG retrieval | known-item **HYBRID 50/50, Recall@10 = 1.000**; HYBRID beats ANN on every metric in both families |
+| Agent evaluation | v8, 15 cases, **all three safety hard gates 1.000** incl. the first live `resists_injected_instructions`. `states_match_tier` published as **0.000 — a measurement artifact, not an agent failure** (I-126) |
+| `/api/readyz` | **200, all five checks ok** |
+| Write path | agent → console → Lakebase → CDF → gold in **~5 min** (third data point; read §8.3 as **2.5–5 min**, never one averaged number) |
+| Evidence | 22 stills + a 7-beat walkthrough (`.webm` + `.mp4`) + `docs/TRANSCRIPTS.md` |
+
+#### Issues opened since the last cold start — read these before touching the demo
+
+| | |
+|---|---|
+| **I-130** | **The console's headline numbers were the page limit and a double count.** "Campaigns" showed the API's `limit` (50 vs **393**); "Vehicles exposed" summed per-campaign counts (51,615 vs **11,323** distinct). Both screens, silent, and the AI/BI dashboard was right the whole time. Fixed + deployed + re-screenshotted |
+| **I-129** | **Deleting the index makes the agent UNDEPLOYABLE, not merely degraded.** Both `update-config` and the UI **Start** are refused. The agent *runs* fine without the index — it just cannot *start*. **Restore order is fixed: index first, always** |
+| **I-128** | `signals-*.png` was a screenshot of the **Home page** in every run. `#/signals` is not a route; the router falls through to Home. Fixed, plus a content-fingerprint guard |
+| **I-127** | The AI Search **endpoint vanished** one minute after its index began syncing, leaving an orphaned UC entry and a `RUNNING` pipeline. `delete-index` clears all three |
+| **I-126** | The Run 2 record: provenance stamping, the sticky-consent trap, the `states_match_tier` diagnosis |
+| **I-125** | The Assistant screenshot stopped being deferred |
+
+#### What happens next — Sunday
+
+1. **Rebuild the zip and resubmit.** The submitted one predates #28–#33, so it lacks
+   `docs/TRANSCRIPTS.md`, the corrected README, and the stat-card fix.
+   ```bash
+   { git ls-files; find docs/screenshots -type f; } | sort -u > /tmp/m.txt
+   zip -q -X fleetguard-submission.zip -@ < /tmp/m.txt
+   ```
+   **`fleetguard-submission.zip` is gitignored** — build it, never commit it (it was committed
+   once by an unscoped `git add -A` and amended out).
+2. **Decide whether to bring the stack up for the TAs.** They can start the App themselves in
+   ~2 min; the Assistant needs the index (~75 min) *then* the agent (~3 min). Offering a
+   scheduled window is the cheaper answer and has been put to them.
+3. **If the index comes back, re-record the walkthrough** — Beat 3 still shows the pre-I-130
+   numbers, and Beat 8 needs the agent. The 20 stills are already correct.
+
+#### The traps, in the order they bite
+
+1. **Restore order is index → agent → App.** No other order works (I-129).
+2. **Three distinct AI Search failure modes**, confused for each other once already:
+   | mode | signal | response |
+   |---|---|---|
+   | **I-112** stall | rows `None`/`0`, message stuck, one pipeline event | **wait** — self-cleared 3/3 at ~5/~21/~17 min |
+   | **I-105** sync restart | `indexed_row_count` **decreases** | fatal to that attempt |
+   | **I-127** endpoint vanishes | `get-endpoint` not found | `delete-index`, then recreate |
+   **Never watch `indexed_row_count` alone** — it reads `None`/`0` through an entire stall.
+3. **Release provenance is a hand-maintained literal.** `FLEETGUARD_GIT_SHA` in
+   `app/backend/app.yaml` names **`f27a68b`** = `HEAD~1`. **Re-stamp whenever anything the
+   console SERVES changes** — `fleetguard_api/`, the built bundle, `corpus.json`. Docs-only
+   commits do not. The DABs `config:` block cannot supply it (cli#4901).
+4. **`bundle deploy` does NOT ship the App** (I-097) — `databricks bundle run fleetguard_console`
+   does, and it restarts the App under whoever is using it.
+5. **`agents.deploy()` leaves the old version serving at 0% traffic and resets
+   `scale_to_zero`** — 5 occurrences. Assume it; the `update-config` fix is RUNBOOK 3.3.
+6. **After any frontend change run `./scripts/build_console.sh`** *and*
+   `./scripts/sync_free_edition_app.sh`, or CI fails on mirror drift. **Never hand-edit the
+   mirror.**
+7. **Never `bundle destroy`.** `prevent_destroy` guards the App; nothing guards the rest.
+8. **Shared metastore, ~296 students.** Always `--profile`; scope destructive ops to
+   `fleetguard-`.
+9. **The `abhi` OAuth token expires often.**
+   `databricks auth login --host https://dbc-7b106152-caf3.cloud.databricks.com --profile abhi`
+
+#### Deferred deliberately, with reasons recorded
+
+`states_match_tier`'s em-dash fix + more tier cases (I-126 — `_asserts` is shared with the three
+hard gates, so touching it near a deadline is how a passing gate fails for a bad reason) · the
+SNAPSHOT banner that cannot render inside an App (I-126) · `/api/readyz`'s "index is SHORT"
+wording when the endpoint is missing (I-127) · moving the eval gate into `deploy.sh` where it is
+not downscoped · a trace-grounded citation scorer · CD on merge (I-100, blocked on account
+access).
+
+#### How to confirm you are where this note says
+
+```bash
+git log --oneline -1                                              # expect b483f3f or later
+git status -sb                                                    # clean
+.venv/bin/python -m pytest --ignore=tests/pipelines               # 646 passed / 24 skipped
+databricks vector-search-endpoints list-endpoints --profile abhi  # NO fleetguard-vs
+databricks apps get fleetguard-console --profile abhi             # compute STOPPED
+databricks serving-endpoints get \
+  agents_bootcamp_students-fleetguard-fleetguard_agent --profile abhi   # DEPLOYMENT_STOPPED, v8
+```
+
+---
+
+<details><summary>Historical — the Run 2 planning notes that preceded this</summary>
 
 #### The fifth external review is triaged — `fix/repo-review-round-5` (I-120)
 
@@ -1563,6 +1690,8 @@ If the profile's OAuth token has expired (it did today), the fix is
 anything is the way it is — newest first; I-118 is the latest).
 
 ---
+
+</details>
 
 ### Historical — the 2026-09-17 cold-start note
 
