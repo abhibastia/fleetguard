@@ -190,6 +190,24 @@ literally means reading a correct count as a failed sync.*
 
 ### 1.3 — Restore the agent endpoint
 
+> ### ⚠️ THE INDEX MUST EXIST FIRST. THERE IS NO WAY AROUND THIS (I-129).
+>
+> Both `update-config` **and** the Serving UI's **Start** button are refused while
+> `complaint_chunk_idx` is absent:
+>
+> ```
+> User cannot serve registered model '…fleetguard_agent' version '8'.
+> Dependencies do not exist: table 'bootcamp_students.fleetguard.complaint_chunk_idx'
+> ```
+>
+> Model Serving validates the model's **logged resource dependencies at start**, not lazily at
+> tool-call time. The agent would run perfectly — it answers deterministic questions with the
+> index gone (`docs/TRANSCRIPTS.md` §4) — but it cannot be *started*.
+>
+> **So the "~3 min" below is conditional**, and was measured on 2026-09-23 when the index
+> happened to exist. After a Phase 2 teardown the real cost of getting the agent back is
+> **step 3.1 first (~75 min) and then this step** — do not quote 3 minutes to anyone waiting.
+
 Current live state (checked 2026-09-23): `DEPLOYMENT_STOPPED`. There is no `start`
 subcommand — only `update-config`, rebuilt from the *live* served-entity config so nothing
 (especially `environment_vars`, which silently misfiles MLflow tracing if dropped) is lost:

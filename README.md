@@ -40,15 +40,31 @@ answer a cold URL. **Start it yourself — about two minutes:**
 databricks apps start fleetguard-console
 ```
 
-You'll then see an **OAuth consent screen** listing `postgres`, `sql` and `model-serving`.
-Accept it; declining returns `403 Invalid scope` on every data page, which looks like a broken
-app rather than an unauthorised one. Please **stop it again** when you're done.
+You'll then see an **OAuth consent screen** listing `postgres`, `sql`, `model-serving` and
+`vector-search`. Accept it; declining returns `403 Invalid scope` on every data page, which looks
+like a broken app rather than an unauthorised one. Please **stop it again** when you're done.
 
-**The Assistant's first answer takes up to a minute.** The agent runs on a serving endpoint kept
-scaled to zero, so the first question wakes it — measured 47 s. Please wait rather than assuming
-it hung. If it says *"the assistant is offline"* instead, the endpoint has gone fully stopped and
-cannot wake itself; every other tab is unaffected, and it can be restored on request in about
-three minutes.
+> ### The Assistant is currently OFFLINE, deliberately — everything else is live
+>
+> The agent's AI Search index (**179,347 chunks**) was deleted after the final verification run:
+> it bills ~$6.72/day and this project ran a two-window cost plan. **Every other tab is
+> unaffected** and reads live Lakebase.
+>
+> **There is no quick way to bring just the Assistant back**, and that is a platform constraint
+> rather than a choice. Model Serving validates the model's logged resource dependencies at
+> start, so with the index gone both `update-config` and the UI's Start button refuse outright
+> (*"Dependencies do not exist: table … complaint_chunk_idx"* — I-129). The index must be rebuilt
+> first: **~75 min measured**, then ~3 min for the endpoint.
+>
+> **The agent itself is fine** — it answers deterministic questions correctly with the index
+> absent; only complaint *search* depends on it. See `docs/TRANSCRIPTS.md` §4 for exactly that,
+> run live after deletion.
+>
+> **What stands in for it:** [`docs/TRANSCRIPTS.md`](docs/TRANSCRIPTS.md) (five verbatim
+> exchanges, generated from the saved responses), `docs/screenshots/` (22 stills including the
+> Assistant answering with cited complaint ids, plus a 7-beat walkthrough video), and the scored
+> evaluation — 15 cases, **all three safety hard gates 1.000**. **The full stack can be restored
+> for a scheduled window on request.**
 
 **[`docs/DEMO.md`](docs/DEMO.md) is the guided tour** — pre-flight with measured timings, the
 ten beats worth seeing, every number with its source, and an explicit list of what this project
