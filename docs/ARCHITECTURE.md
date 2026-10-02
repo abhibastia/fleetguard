@@ -251,7 +251,7 @@ the key and `update_preimage` is useless). Full column-level reference: §4.6.
 > `REPLICA IDENTITY FULL` and without the read-back assertion its sibling creation scripts
 > carry, so it never replicated: there were **13** history tables, not 14. Repaired, and the
 > invariant is now checked across the whole schema by `24_add_foreign_keys.py` rather than
-> once per creation script. **Re-verified live 2026-09-20: 14/14 tables `FULL`, 14/14 history
+> once per creation script. **Re-verified live 2026-09-20: 14/16 tables (re-counted live 2026-10-02 — **this figure has now drifted twice**, 11→14→16; count it rather than trusting the line: `SHOW TABLES IN bootcamp_students.bootcamp_cdc LIKE 'lb_fleetguard_%'`) `FULL`, 14/14 history
 > tables present**, and the repaired table's first replicated `delete` carries its non-key
 > columns — which is the property FULL exists to provide. The claim above is true again, and
 > is worth re-measuring rather than re-reading the next time a table is added.
@@ -274,7 +274,7 @@ CDF replicates to `bootcamp_students.bootcamp_cdc` as `lb_fleetguard_<entity>_hi
 
 ### 4.6 Data model reference
 
-Column-level detail for the 14 tables introduced in §4.5, grouped by role. Gold-layer row
+Column-level detail for the 16 tables (re-counted live 2026-10-02 — **this figure has now drifted twice**, 11→14→16; count it rather than trusting the line: `SHOW TABLES IN bootcamp_students.bootcamp_cdc LIKE 'lb_fleetguard_%'`) introduced in §4.5, grouped by role. Gold-layer row
 counts stay owned by §4.3 — linked here, not restated. Postgres schema fragments in §8a
 (RLS policy, `fleetguard_vehicle`/`fleetguard_depot_assignment`) are summarized here too.
 
@@ -1356,10 +1356,11 @@ recurring charge. Everything else is manual-trigger. Billing stops 24 h after th
 is deleted. Embedding was ~$5 one-off.
 
 **Rebuild.** `src/setup/00_create_all_objects.py` creates the foundations nothing else
-creates, prints a 19-step rebuild order naming each producer, and verifies present-vs-expected
-across 39 objects (both counts verified 2026-09-29, I-119 — this paragraph had drifted from the
-actual `REBUILD`/`EXPECTED` lists in the file before that; count from the file itself if it
-matters, not from this sentence). It is deliberately **not** pure DDL: most tables here are derived, and
+creates, prints a **20-step** rebuild order naming each producer, and verifies
+present-vs-expected across **41 objects** (both re-counted 2026-10-02 — step 20 and the two
+metric views were added by I-130, which found the dashboard depending on objects no documented
+path recreated. This paragraph had already drifted once, at I-119; count from the file itself if
+it matters, not from this sentence). It is deliberately **not** pure DDL: most tables here are derived, and
 `CREATE TABLE` for `silver_complaint` would yield an empty table with the right name — a
 rebuild that looks successful and isn't.
 

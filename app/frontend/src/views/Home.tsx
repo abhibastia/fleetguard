@@ -5,6 +5,7 @@ import {
   type DepotRisk,
   type Evidence,
   type QueueItem,
+  type QueueSummary,
   type SignalSummary,
 } from "../lib/api";
 import { FlowDiagram } from "./HomeFlow";
@@ -26,6 +27,7 @@ export function Home({ onNavigate }: { onNavigate: (view: string) => void }) {
   const [evidence, setEvidence] = useState<Evidence | null>(null);
   const [corpus, setCorpus] = useState<Corpus | null>(null);
   const [queue, setQueue] = useState<QueueItem[] | null>(null);
+  const [totals, setTotals] = useState<QueueSummary | null>(null);
   const [signals, setSignals] = useState<SignalSummary | null>(null);
   const [depots, setDepots] = useState<DepotRisk[] | null>(null);
   // Populated from /api/me rather than hardcoded: the dashboard's host, workspace and id
@@ -55,6 +57,9 @@ export function Home({ onNavigate }: { onNavigate: (view: string) => void }) {
       // strip", never to an error page.
       api.corpus().then((c) => live && setCorpus(c)).catch(() => null),
       api.queue(50).then((q) => live && setQueue(q)).catch(() => null),
+      // Stat-card totals, separate from the 50-row page above. Deriving them from that page
+      // was wrong in both directions (I-130) — see the `urgent`/`exposed` note below.
+      api.queueSummary().then((t) => live && setTotals(t)).catch(() => null),
       api.signals().then((s) => live && setSignals(s)).catch(() => null),
       api.depotRisk().then((d) => live && setDepots(d)).catch(() => null),
       // Not /healthz: the bare app URL's /healthz is intercepted by the Databricks Apps
@@ -68,8 +73,15 @@ export function Home({ onNavigate }: { onNavigate: (view: string) => void }) {
     };
   }, []);
 
-  const urgent = queue?.filter((q) => q.park_it || q.do_not_drive).length ?? null;
-  const exposed = queue?.reduce((n, q) => n + q.vehicles_exposed, 0) ?? null;
+  // Server-side totals, NOT derived from `queue` (I-130). That array is one capped page, so
+  // counting it reported the fetch limit as a total, and summing `vehicles_exposed` over it
+  // counted a VIN once per campaign — 51,615 displayed against 11,323 distinct VINs live.
+  // `??` so a real zero survives; the `queue`-derived fallbacks exist only for the window
+  // before the summary lands.
+  const urgent =
+    totals?.urgent_campaigns ?? queue?.filter((q) => q.park_it || q.do_not_drive).length ?? null;
+  const exposed =
+    totals?.vehicles_exposed ?? queue?.reduce((n, q) => n + q.vehicles_exposed, 0) ?? null;
   const overdue = depots?.reduce((n, d) => n + d.overdue_work_orders, 0) ?? null;
   const outstanding = depots?.reduce((n, d) => n + d.outstanding_work_orders, 0) ?? null;
   // Every fleet read failed, and every fetch has actually had a chance to. Both surfaces

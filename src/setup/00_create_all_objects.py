@@ -243,6 +243,18 @@ REBUILD = [
         "gold_agent_action, gold_defect_signal_current, ops_cdf_fact_refresh",
         "Needs steps 9-10 done and at least one live Lakebase write (an approval or an agent action) to have anything to derive. table_update-triggered in production, not scheduled.",
     ),
+    (
+        20,
+        "(no job -- run the SQL by hand)",
+        "dashboards/metric_views/*.sql",
+        "evidence_metrics, fleet_exposure_metrics",
+        "THE AI/BI DASHBOARD DEPENDS ON BOTH AND NOTHING CREATED THEM (I-130). The SQL is "
+        "committed, but it was absent from this list and from EXPECTED, and no job runs it -- "
+        "so a rebuild from empty produced a dashboard with two broken datasets and this "
+        "verifier stayed silent. Same failure as I-119's gold_fleet_exposure, one layer out. "
+        "DABs has no metric_views resource type (confirmed via bundle summary's resource "
+        "keys), so this stays a manual step until it does -- but a NAMED one.",
+    ),
 ]
 
 # gold_backtest_cluster (src/backtest/06_hdbscan_clusters.py) is deliberately NOT in EXPECTED
@@ -267,6 +279,11 @@ for n, producer, path, creates, note in REBUILD:
 # COMMAND ----------
 
 EXPECTED = {
+    # Metric views. Not tables, but UC objects the dashboard reads, and `information_schema`
+    # lists them as METRIC_VIEW -- so the verifier can see them and should. Their absence is
+    # what I-130 found: present live, created by nothing, expected by no one.
+    "evidence_metrics": 20,
+    "fleet_exposure_metrics": 20,
     "bronze_complaints": 1,
     "bronze_recalls": 1,
     "bronze_investigations": 1,

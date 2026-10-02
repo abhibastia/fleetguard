@@ -54,6 +54,13 @@ export interface QueueItem {
   service_campaign_id: string | null;
 }
 
+/** Totals over the whole scoped exposure set — not over the fetched page. See I-130. */
+export interface QueueSummary {
+  campaigns: number;
+  vehicles_exposed: number;
+  urgent_campaigns: number;
+}
+
 export interface ExposedVehicle {
   vin: string | null;
   depot_id: string;
@@ -384,6 +391,10 @@ export const api = {
   health: () =>
     fetch("/healthz", { credentials: "include" }).then((r) => r.json() as Promise<Health>),
   queue: (limit = 50) => request<QueueItem[]>(`/queue?limit=${limit}`),
+  // Totals for the stat cards. A separate call because `/queue` returns a bare array, and
+  // because the cards must NOT be derived from it: that page is capped at `limit`, so counting
+  // it reports the fetch limit as a total (I-130).
+  queueSummary: () => request<QueueSummary>(`/queue/summary`),
   campaign: (id: string) => request<CampaignDetail>(`/campaigns/${encodeURIComponent(id)}`),
   approve: (id: string, body: { title: string; rationale: string; due_in_days: number }) =>
     request<ApprovalResult>(`/campaigns/${encodeURIComponent(id)}/service-campaign`, {

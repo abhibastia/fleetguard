@@ -26,6 +26,12 @@ type SortKey = "vehicles_exposed" | "depots_affected";
  */
 export function Queue({ onOpen }: { onOpen: (id: string) => void }) {
   const { data: items, error, gated } = useFetch(() => api.queue(), []);
+  // Totals come from the server, NOT from `items` (I-130). `items` is one page — capped at the
+  // API's default limit of 50 — so `items.length` was reporting the fetch limit as the campaign
+  // count (50 against 393 live), and summing `vehicles_exposed` across it counted a VIN once
+  // per campaign it appears in (51,615 against 11,323 distinct). Allowed to fail on its own:
+  // the table is still worth showing if only the cards are unavailable.
+  const { data: totals } = useFetch(() => api.queueSummary(), []);
   const [severityFilter, setSeverityFilter] = useState<string>(SEVERITY_FILTER_ALL);
   const [launchFilter, setLaunchFilter] = useState<string>(LAUNCH_FILTER_ALL);
 
@@ -110,8 +116,12 @@ const { sorted, sortKey, sortDir, toggleSort } = useSort<QueueItem, SortKey>(
   if (items.length === 0)
     return <div className="panel">No campaigns currently match any vehicle in the fleet.</div>;
 
-  const urgent = items.filter((i) => i.park_it || i.do_not_drive).length;
-  const vehicles = items.reduce((n, i) => n + i.vehicles_exposed, 0);
+  // `??` not `||`: a genuine zero is a real answer and must not fall back to the page-derived
+  // figure. The fallbacks are the old, wrong derivations, kept only so the cards render while
+  // the summary is in flight or unavailable — never as the steady state.
+  const urgent = totals?.urgent_campaigns ?? items.filter((i) => i.park_it || i.do_not_drive).length;
+  const campaigns = totals?.campaigns ?? items.length;
+  const vehicles = totals?.vehicles_exposed ?? items.reduce((n, i) => n + i.vehicles_exposed, 0);
 
   return (
     <>
@@ -121,22 +131,24 @@ const { sorted, sortKey, sortDir, toggleSort } = useSort<QueueItem, SortKey>(
         <div className={urgent > 0 ? "stat is-danger" : "stat"}>
           <div className="v">{urgent}</div>
           <div className="k">Immediate action</div>
-          {items.length > 0 && (
+          {campaigns > 0 && (
+            /* Denominator is the TOTAL, not the page. Leaving `items.length` here would have
+               kept the bar at "urgent out of 50" while the number beside it said 393. */
             <div
               className="stat-bar"
               role="img"
-              aria-label={`${urgent} of ${items.length} campaigns need immediate action`}
-              title={`${urgent} of ${items.length} campaigns`}
+              aria-label={`${urgent} of ${campaigns} campaigns need immediate action`}
+              title={`${urgent} of ${campaigns} campaigns`}
             >
               <div
                 className="stat-bar-fill"
-                style={{ width: `${(urgent / items.length) * 100}%` }}
+                style={{ width: `${(urgent / campaigns) * 100}%` }}
               />
             </div>
           )}
         </div>
         <div className="stat">
-          <div className="v">{items.length}</div>
+          <div className="v">{campaigns.toLocaleString()}</div>
           <div className="k">Campaigns</div>
         </div>
         <div className="stat">

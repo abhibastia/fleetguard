@@ -14,6 +14,7 @@ no error and passed the obvious check.
 
 | ID | Area | Issue | Status |
 |---|---|---|---|
+| I-130 | Console / Evidence | **The Queue and Home stat cards reported the fetch limit and a double count.** "Campaigns" was `items.length` — the API's default `limit` of 50, against **393** live. "Vehicles exposed" summed per-campaign counts, counting a VIN once per campaign: **51,615 against 11,323** distinct. Wrong in both directions on the two most-seen screens, and silent — every figure was individually plausible. The AI/BI dashboard was correct throughout, so the two surfaces disagreed 4.6x. Fixed with an additive `/api/queue/summary` copying the metric view's measures verbatim; mutation-checked at both ends. Same pass: metric views had no rebuild producer (I-119's shape), and two doc drifts. | ✅ resolved |
 | I-129 | Platform / Serving | **Deleting the AI Search index makes the agent UNDEPLOYABLE, not merely degraded.** Model Serving validates logged resource dependencies at *start* as well as at config-update — the UI Start button is refused identically — so a model that would run fine is refused because a tool's backing resource is absent. The agent genuinely works without the index (TRANSCRIPTS §4 answers correctly post-deletion); it just cannot be *started*. Fixes the restore order permanently — **index first, always** — and makes RUNBOOK 1.3's "~3 min" conditional on dependencies existing. | ✅ resolved |
 | I-128 | Evidence | **`signals-*.png` was a screenshot of the Home page**, captioned "Emerging signals — the proactive half", in every run and in the submission zip. `#/signals` is not a route — the hash router falls through to Home — so DEMO.md beat 2 had no screenshot evidence while appearing to. Nothing errored: Home renders cleanly, so every existing check passed. Fixed to `#/emerging`, plus a rendered-content fingerprint guard that catches *any* silent route fallback, mutation-checked. | ✅ resolved |
 | I-127 | Platform / AI Search | **The AI Search endpoint vanished one minute after its index began syncing** — ONLINE with `num_indexes: 1` at 22:13, absent from `list-endpoints` at 22:15 (3 confirming reads). No delete was issued; `provision_search.sh` contains no teardown. Left a torn state: the UC table entry and a `RUNNING` sync pipeline both outlived the endpoint, and `/api/readyz` would have called it merely SHORT. `delete-index` cleans all three up silently without needing the endpoint. Distinct from I-112 (stall) and I-105 (sync restart); the only signal is polling `get-endpoint` by name. | **watch** — cause unknown |
@@ -37,6 +38,97 @@ no error and passed the obvious check.
 ---
 
 ## Tooling / process
+### I-130 — the console's headline numbers were the page limit and a double count
+
+*Date:* 2026-10-02 · *Status:* ✅ fixed, mutation-checked both ends. **SILENT** — nothing errored
+and both numbers looked entirely plausible.
+
+Found by an end-to-end review that checked the repo against the **live workspace** rather than
+against its own docs.
+
+#### The two numbers
+
+Measured against the Lakebase store the queue actually reads, via its CDF mirror using I-080's
+corrected latest-per-key pattern:
+
+| `fleetguard_vehicle_exposure` | |
+|---|---|
+| live rows | **118,323** — matches `queue.py`'s docstring exactly |
+| distinct campaigns | **393** |
+| distinct VINs | **11,323** |
+
+| Card | Showed | Truth | Mechanism |
+|---|---|---|---|
+| **Campaigns** | **50** | **393** | `items.length` — the API's default `limit`. **The card was displaying the fetch limit.** |
+| **Vehicles exposed** | **51,615** | **11,323** | `reduce((n,i) => n + i.vehicles_exposed, 0)` — a VIN counted once per campaign it matches, over 50 of 393 campaigns |
+
+Wrong in **both directions**: campaigns understated ~7.9x, vehicles overstated ~4.6x. On
+`Queue.tsx` **and** `Home.tsx` — the landing page — so both of the product's most-seen screens,
+and both are in the submitted screenshots and the walkthrough video.
+
+#### Why nothing caught it
+
+Every number was individually well-formed. 50 is a plausible campaign count; 51,615 is a
+plausible exposure figure against a 20,000-vehicle fleet *if* you do not notice it exceeds the
+fleet. No request failed, no test asserted a total, and the figures moved realistically when the
+data changed. This is the same class as I-128's screenshot-of-the-wrong-page: **output that is
+confidently wrong and structurally incapable of looking wrong.**
+
+**The dashboard was right the whole time.** `fleet_exposure_metrics` defines
+`Vehicles Exposed` as `COUNT(DISTINCT vin)`, and the dashboard's campaign dataset does the same.
+So the two surfaces disagreed by 4.6x, and the governed metric view was the one telling the
+truth — which is a decent argument for the metric-view layer existing at all.
+
+#### The fix, and why it is a new endpoint
+
+`GET /api/queue/summary`, additive. `/api/queue` returns a bare `list[QueueItem]`; wrapping it in
+an envelope would have broken the snapshot path, the frontend and `test_queue_routes.py` at once,
+two days before a resubmission.
+
+**The measures are copied from the metric view verbatim**, so console and dashboard now agree
+*by construction* rather than by coincidence. Same three joins as `get_queue` and the same
+`resolve_scope`, so the totals cannot describe a different population from the rows beneath them
+and depot containment applies identically. No `LIMIT`.
+
+The counts still differ in magnitude between the two surfaces, and that is correct, not a
+residual bug: the metric view reads Delta `gold_fleet_exposure` (~989k match rows) while this
+reads the Lakebase operational subset (118,323). **Same semantics, different populations.**
+
+**Snapshot mode would have reproduced the bug.** `snapshot.queue()` is `load()["queue"][:limit]`
+over an export already capped at `LIMIT 60`, so deriving totals there would have hard-coded the
+export cap as a count. `export_demo_snapshot.py` now runs an unlimited aggregate and stores it;
+`snapshot.queue_summary()` returns it, with an explicit capped fallback for older snapshots that
+is commented as still-wrong rather than left to look like a real count.
+
+#### Mutation-checked at both ends
+
+- Frontend: reverting the cards to page-derived values fails the two new tests; restoring passes
+  156/156.
+- Backend: swapping `COUNT(DISTINCT e.vin)` for `SUM(1)` fails
+  `test_it_counts_distinct_vins_not_a_sum_over_campaigns`.
+
+A third test pins the **fallback** — the old arithmetic, kept only so the cards render while the
+summary is in flight — so nobody later "simplifies" it into a blank card or a crash.
+
+#### Two smaller findings from the same pass
+
+- **The metric views had no producer** — SQL committed at `dashboards/metric_views/*.sql`, but
+  absent from `00_create_all_objects.py`'s `REBUILD` *and* `EXPECTED`, and from every job. A
+  rebuild from empty yielded a dashboard with two broken datasets and the verifier stayed silent:
+  **I-119's failure one layer out.** Now step 20, and in `EXPECTED` (19→20 steps, 39→41 objects).
+- **Doc drift:** `CLAUDE.md` said 30 job resources (31); `ARCHITECTURE.md` said 14 Lakebase
+  tables in two places (**16**) — its *third* recurrence, 11→14→16. Both now point at the command
+  that counts rather than carrying another hand-maintained number.
+
+#### What was healthy
+
+Worth recording so the next review need not re-derive it: both metric views resolve, **all 20
+dashboard datasets across 5 pages reference tables that exist**, the 16 CDF history tables carry
+no collision suffixes (no rename orphans), and `REBUILD`/`EXPECTED` matched their documented
+counts before this change.
+
+---
+
 ### I-129 — deleting the index makes the agent UNDEPLOYABLE, not merely degraded
 
 *Date:* 2026-10-02 · *Status:* ✅ understood, documented. **Changes the teardown/restore order
