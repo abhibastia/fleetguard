@@ -106,6 +106,19 @@ plainly which ones need a resource woken up first.
 
 ### 6. Frontend and core workflow
 
+> **"Vehicles exposed" means distinct VINs, everywhere — fixed 2026-10-02 (I-130).** It did not
+> used to. The console derived its stat cards from the fetched page, so *Campaigns* showed the
+> API's `limit` (50, against 393 live) and *Vehicles exposed* summed per-campaign counts,
+> counting a VIN once per campaign (51,615, against 11,323 distinct). The AI/BI dashboard was
+> correct throughout — `fleet_exposure_metrics` has always defined the measure as
+> `COUNT(DISTINCT vin)` — so the two surfaces disagreed by 4.6x. `/api/queue/summary` now copies
+> the metric view's measures verbatim, so they agree by construction.
+>
+> **The two still differ in magnitude, and should.** The dashboard reads Delta
+> `gold_fleet_exposure` (~989k match rows); the console reads the Lakebase operational subset
+> (118,323 rows / 393 campaigns / 11,323 VINs). Same semantics over different populations — if
+> they ever printed the *same* number, one of them would be reading the wrong store.
+
 | | |
 |---|---|
 | Stack | FastAPI + React/TypeScript, one service, no CORS, SPA deep-link fallback |

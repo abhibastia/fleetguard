@@ -59,6 +59,24 @@ QUEUE_SQL = f"""
     LIMIT 60
 """
 
+# Totals for the queue's stat cards. **Separate query, and deliberately no LIMIT** — QUEUE_SQL
+# above stops at 60 rows, so deriving the cards from `queue` would hard-code the export cap as
+# if it were a count. That is precisely the bug this fixes (I-130): the live console was showing
+# its own fetch limit of 50 as the campaign total, against 393 actual.
+#
+# Measures copied from the `fleet_exposure_metrics` metric view so snapshot mode, live mode and
+# the AI/BI dashboard all define "vehicles exposed" the same way: distinct VINs, not a sum over
+# campaigns.
+QUEUE_SUMMARY_SQL = f"""
+    SELECT COUNT(DISTINCT e.campaign_id) AS campaigns,
+           COUNT(DISTINCT e.vin)         AS vehicles_exposed,
+           COUNT(DISTINCT CASE WHEN c.park_it OR c.do_not_drive
+                               THEN e.campaign_id END) AS urgent_campaigns
+    FROM {PG_SCHEMA}.fleetguard_vehicle_exposure e
+    JOIN {PG_SCHEMA}.fleetguard_vehicle v ON v.vin = e.vin
+    JOIN {PG_SCHEMA}.fleetguard_recall_campaign c ON c.campaign_id = e.campaign_id
+"""
+
 SIGNALS_SQL = f"""
     SELECT signal_id, series_key, make, model, component,
            run_start, run_end, run_len, max_z, complaint_count,
@@ -136,6 +154,9 @@ def main() -> None:
         cur.execute(QUEUE_SQL)
         queue = rows(cur)
 
+        cur.execute(QUEUE_SUMMARY_SQL)
+        queue_summary = rows(cur)[0]
+
         details = {}
         for item in queue[:DETAIL_LIMIT]:
             d = campaign_detail(cur, item["campaign_id"])
@@ -149,6 +170,7 @@ def main() -> None:
 
     snapshot = {
         "queue": queue,
+        "queue_summary": queue_summary,
         "campaigns": details,
         "signals": {**counts, "signals": signals},
         "captured_at": datetime.now(UTC).isoformat(timespec="seconds"),

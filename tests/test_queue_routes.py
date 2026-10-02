@@ -14,7 +14,7 @@ from fakes import FakeCursor, install
 from fastapi import HTTPException
 from fleetguard_api.auth.tokens import Principal
 from fleetguard_api.routers import queue
-from fleetguard_api.routers.queue import get_campaign, get_queue
+from fleetguard_api.routers.queue import get_campaign, get_queue, get_queue_summary
 
 USER = Principal(token="tok", user_name="ops@example.com", source="databricks-apps")
 
@@ -260,3 +260,90 @@ class TestGetCampaign:
         get_campaign(USER, "17V629000", depot_id=None, sample=5)
 
         assert cur.params_for("e.vin, v.depot_id, v.make")["sample"] == 5
+
+
+class TestQueueSummary:
+    """I-130. The stat cards were derived from the fetched page, so they reported the API's
+    own `limit` as a campaign count and summed `vehicles_exposed` across campaigns — counting
+    a VIN once per campaign it matched. Measured live: 393 campaigns / 11,323 distinct VINs,
+    displayed as 50 / 51,615. These pin the properties that made that impossible to notice."""
+
+    def test_it_counts_distinct_vins_not_a_sum_over_campaigns(self, monkeypatch):
+        """The whole defect in one assertion. `COUNT(DISTINCT e.vin)` is also how
+        `fleet_exposure_metrics` defines `Vehicles Exposed`, so the console and the AI/BI
+        dashboard agree by construction rather than by coincidence."""
+        cur = FakeCursor(
+            {
+                "fleetguard_vehicle_exposure": [
+                    {"campaigns": 393, "vehicles_exposed": 11323, "urgent_campaigns": 6}
+                ]
+            }
+        )
+        install(monkeypatch, queue, cur)
+
+        out = get_queue_summary(USER, depot_id=None)
+
+        assert out.vehicles_exposed == 11323
+        assert out.campaigns == 393
+        sql = cur.sql_for("fleetguard_vehicle_exposure")
+        assert "COUNT(DISTINCT e.vin)" in sql
+        assert "SUM(" not in sql
+
+    def test_it_has_no_limit(self, monkeypatch):
+        """A totals query that paginates is not a totals query. This is the bug itself: the
+        cards were counting a 50-row page."""
+        cur = FakeCursor({"fleetguard_vehicle_exposure": [
+            {"campaigns": 1, "vehicles_exposed": 1, "urgent_campaigns": 0}
+        ]})
+        install(monkeypatch, queue, cur)
+
+        get_queue_summary(USER, depot_id=None)
+
+        sql = cur.sql_for("fleetguard_vehicle_exposure")
+        assert "LIMIT" not in sql.upper()
+        assert "limit" not in cur.params_for("fleetguard_vehicle_exposure")
+
+    def test_depot_scope_still_applies_and_binds_as_a_parameter(self, monkeypatch):
+        """Totals must respect depot containment exactly as the list does, or a scoped
+        operator reads a fleet-wide number off a scoped page."""
+        cur = FakeCursor({"fleetguard_vehicle_exposure": [
+            {"campaigns": 2, "vehicles_exposed": 9, "urgent_campaigns": 1}
+        ]})
+        install(monkeypatch, queue, cur)
+
+        get_queue_summary(USER, depot_id="DEP-053")
+
+        sql = cur.sql_for("fleetguard_vehicle_exposure")
+        assert "v.depot_id = %(depot_id)s" in sql
+        assert "DEP-053" not in sql
+        assert cur.params_for("fleetguard_vehicle_exposure")["depot_id"] == "DEP-053"
+
+    def test_it_joins_the_same_three_tables_as_the_list(self, monkeypatch):
+        """Totals describing a different population from the rows beneath them would be a
+        subtler version of the same bug."""
+        cur = FakeCursor({"fleetguard_vehicle_exposure": [
+            {"campaigns": 1, "vehicles_exposed": 1, "urgent_campaigns": 0}
+        ]})
+        install(monkeypatch, queue, cur)
+
+        get_queue_summary(USER, depot_id=None)
+
+        sql = cur.sql_for("fleetguard_vehicle_exposure")
+        for table in ("fleetguard_vehicle_exposure", "fleetguard_vehicle", "fleetguard_recall_campaign"):
+            assert table in sql
+
+    def test_snapshot_mode_never_touches_the_database(self, monkeypatch):
+        monkeypatch.setattr(queue.snapshot, "is_snapshot", lambda: True)
+        monkeypatch.setattr(
+            queue.snapshot,
+            "queue_summary",
+            lambda: {"campaigns": 393, "vehicles_exposed": 11323, "urgent_campaigns": 6},
+        )
+
+        def explode(*a, **k):
+            raise AssertionError("connect() must not be called in snapshot mode")
+
+        monkeypatch.setattr(queue, "connect", explode)
+
+        assert get_queue_summary(USER, depot_id=None).campaigns == 393
+

@@ -445,8 +445,8 @@ gates down with it.
 to rebuild from empty. `databricks.yml`'s `include:` is the unscoped `resources/*.yml`, so a
 job is bound the moment its `.job.yml` file exists there; **count it by running
 `ls resources/*.job.yml | wc -l` rather than trusting a number written here** — it was **17**
-at 2026-09-11, **25** as of 2026-09-17, **29** as of 2026-09-23, and is **30** as of
-2026-09-24 (`rag_eval`, I-116). The bundle
+at 2026-09-11, **25** as of 2026-09-17, **29** as of 2026-09-23, and is **31** as of
+2026-10-02 — it has drifted four times now (17 → 25 → 29 → 30 → 31), which is the argument for the `ls` above rather than for another hand-maintained number. The bundle
 deliberately excludes **7** dead experiments, which have no `resources/*.job.yml` file at all
 and so cannot run: `lead-time-backtest-v2`, `semantic-subdivision`, `embed-backtest-complaints`
 (the arm I-049 rejected), `hybrid-query-test`, `measure-cdf-latency`, `inspect-eval`,

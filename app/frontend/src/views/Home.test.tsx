@@ -3,17 +3,21 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Home } from "./Home";
 
-const { evidence, queue, signals, depotRisk, corpus, me } = vi.hoisted(() => ({
+const { evidence, queue, signals, depotRisk, corpus, me, queueSummary } = vi.hoisted(() => ({
   evidence: vi.fn(),
   queue: vi.fn(),
   signals: vi.fn(),
   depotRisk: vi.fn(),
   corpus: vi.fn(),
   me: vi.fn(),
+  queueSummary: vi.fn(),
 }));
 vi.mock("../lib/api", async () => {
   const actual = await vi.importActual<typeof import("../lib/api")>("../lib/api");
-  return { ...actual, api: { evidence, queue, signals, depotRisk, corpus, me } };
+  return {
+    ...actual,
+    api: { evidence, queue, signals, depotRisk, corpus, me, queueSummary },
+  };
 });
 
 const sampleCorpus = {
@@ -59,6 +63,10 @@ describe("Home", () => {
     depotRisk.mockReset();
     corpus.mockReset();
     me.mockReset();
+    // Rejects by default: Home's cards must still render from the queue page when the summary
+    // is unavailable, and these tests assert the fallback path as much as the happy one.
+    queueSummary.mockReset();
+    queueSummary.mockRejectedValue(new Error("no summary"));
     // Default for the existing cases, which are about evidence and fleet state. The scale
     // strip has its own tests below.
     corpus.mockResolvedValue(sampleCorpus);

@@ -58,6 +58,31 @@ def queue(limit: int = 50) -> list[dict]:
     return load()["queue"][:limit]
 
 
+def queue_summary() -> dict:
+    """Totals as captured at export time, never re-derived from `queue`.
+
+    `queue` is capped (`LIMIT 60` in the exporter, then `[:limit]` here), so counting it would
+    report the cap as a total — the exact bug this endpoint exists to fix (I-130). The exporter
+    runs an unlimited aggregate instead and stores the result.
+
+    **Older snapshots predate the key**, so this falls back rather than raising: a public
+    deployment serving a stale snapshot should show a conservative number, not a 500. The
+    fallback is still capped and therefore still wrong, which is why it is explicit here instead
+    of silently looking the same as a real count.
+    """
+    snap = load()
+    if "queue_summary" in snap:
+        return snap["queue_summary"]
+    q = snap["queue"]
+    return {
+        "campaigns": len(q),
+        "vehicles_exposed": len({r["vin"] for r in q if r.get("vin")}) or sum(
+            r.get("vehicles_exposed", 0) for r in q
+        ),
+        "urgent_campaigns": sum(1 for r in q if r.get("park_it") or r.get("do_not_drive")),
+    }
+
+
 def campaign(campaign_id: str) -> dict | None:
     """Detail exists only for the campaigns the exporter captured.
 

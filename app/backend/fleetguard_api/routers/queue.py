@@ -33,6 +33,21 @@ class QueueItem(BaseModel):
     service_campaign_id: str | None = None
 
 
+class QueueSummary(BaseModel):
+    """Totals for the queue's stat cards — **not** derivable from the page the cards sit above.
+
+    This exists because deriving them client-side was wrong in both directions (I-130).
+    `Campaigns` was `items.length`, which is the *fetch limit* (50) rather than a count, and
+    `Vehicles exposed` summed each campaign's `vehicles_exposed`, counting a VIN once per
+    campaign it appears in. Measured against live Lakebase: 393 campaigns and 11,323 distinct
+    VINs, displayed as 50 and 51,615.
+    """
+
+    campaigns: int
+    vehicles_exposed: int
+    urgent_campaigns: int
+
+
 class ExposedVehicle(BaseModel):
     vin: str | None
     depot_id: str
@@ -102,6 +117,49 @@ def get_queue(
     with connect(principal) as conn, conn.cursor() as cur:
         cur.execute(sql, {**scope.params, "limit": limit})
         return [QueueItem(**r) for r in rows_to_dicts(cur)]
+
+
+@router.get("/queue/summary", response_model=QueueSummary)
+def get_queue_summary(
+    principal: CurrentPrincipal,
+    depot_id: str | None = Query(None, description="narrow to one depot"),
+) -> QueueSummary:
+    """Totals over the whole scoped exposure set, with no `LIMIT`.
+
+    **Why an endpoint and not a field on `/queue`.** That route returns a bare
+    `list[QueueItem]`; wrapping it in an envelope would break the snapshot path, the frontend
+    and `tests/test_queue_routes.py` at once. Additive is the cheap, reversible shape.
+
+    **The measures are copied from the `fleet_exposure_metrics` metric view, deliberately.**
+    `Vehicles Exposed` is `COUNT(DISTINCT vin)` there and `COUNT(DISTINCT vin)` here, so the
+    console and the AI/BI dashboard now agree *by construction* rather than by coincidence —
+    which is the actual defect in I-130, where the two surfaces disagreed by 4.6x and the
+    dashboard was the one telling the truth.
+
+    The counts will still differ in magnitude between the two, and that is correct: the metric
+    view reads Delta `gold_fleet_exposure` (~989k rows, the full match set) while this reads the
+    Lakebase operational subset (118,323 rows). Same semantics over different populations.
+
+    Joins are identical to `get_queue`'s, so the totals cannot describe a different population
+    from the rows beneath them, and `resolve_scope` applies the same depot containment.
+    """
+    if snapshot.is_snapshot():
+        return QueueSummary(**snapshot.queue_summary())
+
+    scope = resolve_scope(principal, depot_id)
+    sql = f"""
+        SELECT COUNT(DISTINCT e.campaign_id) AS campaigns,
+               COUNT(DISTINCT e.vin)         AS vehicles_exposed,
+               COUNT(DISTINCT CASE WHEN c.park_it OR c.do_not_drive
+                                   THEN e.campaign_id END) AS urgent_campaigns
+        FROM {PG_SCHEMA}.fleetguard_vehicle_exposure e
+        JOIN {PG_SCHEMA}.fleetguard_vehicle v          ON v.vin = e.vin
+        JOIN {PG_SCHEMA}.fleetguard_recall_campaign c  ON c.campaign_id = e.campaign_id
+        {scope.where()}
+    """
+    with connect(principal) as conn, conn.cursor() as cur:
+        cur.execute(sql, scope.params)
+        return QueueSummary(**rows_to_dicts(cur)[0])
 
 
 @router.get("/campaigns/{campaign_id}", response_model=CampaignDetail)
