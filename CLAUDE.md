@@ -8,7 +8,24 @@ one-screen COLD START briefing at the bottom of the file.** It carries current s
 next action, what is costing money, what is committed-but-not-yet-live, and the known traps in
 the order they bite. Everything above it in that file is newest-first session history and is not
 required to resume. Keep the briefing current at the end of a working session — it is the thing
-a cold session actually resumes from, and it went a week stale once (rewritten 2026-09-24).
+a cold session actually resumes from, and it went a week stale once (rewritten 2026-09-24,
+again 2026-10-02).
+
+**State as of 2026-10-02, in one line:** built, verified on `abhi`, submitted once, and
+**everything switched off — nothing is billing.** The briefing has the restore costs and the
+order they must happen in.
+
+**Three facts a new session will otherwise rediscover the hard way:**
+- **Restore order is index → agent → App.** Deleting the AI Search index makes the agent
+  *undeployable*, not merely degraded — both `update-config` and the UI **Start** are refused
+  (I-129). The agent runs fine without the index; it just cannot start.
+- **Release provenance is a hand-maintained literal.** `FLEETGUARD_GIT_SHA` in
+  `app/backend/app.yaml` names `HEAD~1`, so a release is two commits — content, then the stamp.
+  Re-stamp whenever anything the console *serves* changes; docs-only commits do not (I-126).
+- **Check the system against itself, not against its own docs.** Four of this project's
+  sharpest bugs produced output that looked entirely reasonable and were found only by
+  comparing two surfaces that should have agreed — dashboard vs console (I-130), router vs
+  screenshot (I-128), committed SQL vs the rebuild list (I-130), docs vs live UC.
 
 **`docs/ARCHITECTURE.md` is the living spec — what the system actually is.** Keep it true;
 update it in the same commit as the code that changes it.
