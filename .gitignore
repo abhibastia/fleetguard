@@ -72,3 +72,8 @@ app/frontend/dist/
 # they are build output, they go stale the moment the UI changes, and the submission
 # artefact is a zip, so they can be generated fresh at submission time instead.
 /docs/screenshots/
+
+# Build output, never source. `scripts/` regenerates it from `git ls-files` + docs/screenshots,
+# so committing it would version a 12 MB artifact derivable from the tree it lives in — and an
+# unscoped `git add -A` did exactly that once (caught before it reached main).
+fleetguard-submission.zip

@@ -88,7 +88,9 @@ plainly which ones need a resource woken up first.
 | **Prompt-injection defence** | `search_complaints` is the only tool returning text this project did not write — **2.24M public, user-submitted ODI narratives**. Three layers (ARCHITECTURE §7.1a): untrusted-data markers + action-sentinel stripping in `_neutralise()`, system-prompt rule 9, and the console's Python-stamped item-id check. Structural half tested offline (`tests/agent/test_agent_injection.py`, mutation-checked); behavioural half is the hard gate above, **measured in Run 2**. Severity is bounded by `may_approve` and server-side fleet-relevance recomputation — stated in I-118 rather than implied |
 | **Citations** | Rule 10 requires complaint ids behind narrative claims, scored by `cites_complaint_ids`. **The scorer's limit is documented in the scorer**: it sees answer text only, so it cannot distinguish a real citation from a fabricated one — "cites only ids a tool returned" remains a prompt rule, not a measurement |
 | Activity analytics | `gold_agent_activity_daily` — requests, write actions, success rate, latency percentiles and tokens by day/tool/actor |
-| **Not verifiable right now** | **Verified live 2026-09-23 (Run 1)** — the agent was redeployed to **v7** (carrying every I-109/I-110 write-path fix) and answered correctly on a raw REST call (25 vehicles / 22 depots / EXACT for recall 17V629000). Both the endpoint and the AI Search index were then deliberately torn down again per the two-window plan, so a fresh live question needs both restored: the serving endpoint (~3 min if fully `Stopped`, ~47 s if only scaled to zero) and the AI Search index (~27-39 min at the fleet make/model scope, down from ~7 h at the old 1.75M-chunk scope, I-111). The code, tool definitions and past traces are all in the repo; the Assistant screenshot is **deferred** — see below |
+| **Verified live 2026-10-01 (Run 2), on v8** | Both paths exercised by raw REST (the CLI truncates this endpoint's response — I-124). **Deterministic:** *"Which fleet vehicles does recall 17V629000 affect?"* → **25 vehicles across 22 depots, all EXACT**, 8.3 s warm, volunteering that there were no `MODEL_VARIANT` matches to flag. **Retrieval:** *"Search complaints about brake failures"* → five real narratives, each with its complaint id (`738214`, `729017`, `667249`, `782129`) — the 179,347-chunk index genuinely serving the agent. **Write:** an agent write through `/api/chat` created `AGENT-ac6d0e08b2d1` and reached `gold_defect_signal_current` in ~5 min via Lakebase CDF |
+| **Screenshots: captured, not deferred** | `assistant-dark.png` / `assistant-light.png` show the panel answering with a cited table. Asked only to search, the agent **volunteered a correction** — *"every one is about the PARKING / emergency brake, not the primary hydraulic service brakes — so treat this as a parking-brake signal"* — qualifying its own retrieval rather than dumping it. Also `walkthrough-dark.webm` / `.mp4`, a 7-beat recording following `docs/DEMO.md`'s order |
+| **State right now** | Index **deleted** and the serving endpoint **STOPPED**, deliberately, to end billing after evidence capture. A live question therefore needs both restored: endpoint ~3 min (`update-config`, RUNBOOK 1.3 — **Stop is UI-only, restore is CLI-only**, I-126), index **~75 min** measured (~21 min of I-112 stall, then ~52 min syncing). Code, tool definitions, traces, screenshots and the video are all in this zip |
 
 ### 5. Analytics pipeline
 
@@ -122,7 +124,8 @@ plainly which ones need a resource woken up first.
 | Setup documented | README *Deploying*; ARCHITECTURE §9.1 lists the **five** things the bundle does not cover |
 | Secrets / config | No secrets in the repo. The App holds **no privileges of its own**: `db.py` mints the Lakebase credential from the caller's forwarded token, so every read runs as the signed-in human |
 | Auth | Databricks Apps OBO; scopes declared as code in `resources/fleetguard_console.app.yml` |
-| **State right now** | **STOPPED** to avoid idle billing, per the two-window plan's Phase 2 teardown (`docs/STATUS.md`). **Redeployed and dry-run verified live 2026-09-23** (Run 1) — all 10 `docs/DEMO.md` beats checked against the running App, 9/10 exact match (I-113) — then stopped deliberately once verified, not from neglect. `databricks apps start fleetguard-console`, ~2 min to bring back; all three reviewers hold `CAN_MANAGE` and can start it themselves |
+| **Verified live 2026-10-01 (Run 2)** | Current code shipped (`bundle run fleetguard_console`, deployment `01f1bd1a56dc1412b17a1725772b2781`, SUCCEEDED) and exercised: **all 12 `/api/*` routes returned 200 against live Lakebase**, `/api/readyz` returned **200 with all five checks `ok`**, and the malformed-input guard returned **422 naming the field** (`NaN` and `Infinity`) rather than 500. Release provenance is served by the App itself: `console built at b44339c7e6…` |
+| **State right now** | **STOPPED**, deliberately, once that verification was captured — the same Phase 2 teardown as the index. **It is ~2 min to bring back** (`databricks apps start fleetguard-console`) and **all three reviewers hold `CAN_MANAGE`**, so it is self-service rather than blocked. A stopped App is a cost decision recorded in `docs/STATUS.md`, not neglect — but it does mean a reviewer who does not start it sees nothing, so the 22 screenshots and the walkthrough video in this zip are the standing evidence |
 
 ### 8. Big Data — two of the three Vs
 
@@ -232,7 +235,7 @@ minutes" for the round trip.
 | Measured processing latency | §8 above, with the two-number caveat |
 | API request and error-handling code | `src/fleetguard/http_retry.py`, `src/ingest/05_poll_recalls_api.py`, `src/fleet/04_build_fleet_registry.py` |
 | Agent tool definitions | `src/agent/14_fleetguard_agent.py`; reference table in ARCHITECTURE §7.2 |
-| Screenshots / demo transcripts | `scripts/capture_screenshots.py` produces 20 images + a `manifest.json` into the gitignored `docs/screenshots/`; `docs/DEMO.md` is the guided walkthrough. **Generate these into the submission zip** — they are not in the repo |
+| Screenshots / demo transcripts | **Both, and in the zip.** `docs/TRANSCRIPTS.md` — five verbatim agent exchanges, *generated from the saved JSON responses rather than retyped*. `docs/screenshots/` — 22 stills (both themes, incl. the Assistant answering with citations), `walkthrough-dark.webm` + `.mp4` (7 beats, following `docs/DEMO.md`'s order), and `manifest.json` with per-beat timings. `docs/DEMO.md` is the guided walkthrough. The transcripts exist because an image and a video are only evidence to a reader that can open them |
 
 ## Deliberately still missing
 
@@ -240,9 +243,10 @@ Named so the gap is bounded rather than discovered.
 
 | Gap | Why | Cost to close |
 |---|---|---|
-| **Assistant screenshot / agent transcript** | Needs the serving endpoint restored *and* the AI Search index rebuilt — `search_complaints` is the agent's primary retrieval tool and fails first without it | ~3 min + **~39 min** (this cell said ~7 h until 2026-09-24 — that was the superseded 1.75M-chunk scope), with a demonstrated risk of a mid-sync restart |
-| **Live App running** | Stopped to avoid idle billing | ~2 min, self-service for all three reviewers |
-| **App serving current code** | Shipping restarts the App under whoever is using it, so it is deliberately manual (I-097) | one command, after the agent work |
+| ~~**Assistant screenshot / agent transcript**~~ | **CLOSED 2026-10-01** — captured in both themes plus a 7-beat walkthrough video (I-125). It had been deferred since the script was written, because the two things it needs are the two the cost plan tears down between runs | — |
+| ~~**App serving current code**~~ | **CLOSED 2026-10-01** — `bundle run fleetguard_console` shipped deployment `01f1bd1a…` and 12 routes were exercised against it | — |
+| **Live App running** | Stopped after verification to end billing. **This is the one gap a reviewer meets directly:** the URL answers nothing until started | ~2 min, self-service — all three reviewers hold `CAN_MANAGE` |
+| **Live agent / retrieval** | Endpoint stopped and index deleted after evidence capture, same reason | ~3 min + ~75 min, both documented in `docs/RUNBOOK.md` |
 | **CD on merge** | Needs an account-level OIDC federation policy this identity cannot create (I-100). The rejected alternative — a PAT in GitHub secrets, reaching a ~296-student metastore — is recorded rather than quietly adopted | blocked on account access, not effort |
 
 ## Regenerating this evidence
@@ -252,7 +256,7 @@ re-run.
 
 | Artefact | Command | Needs |
 |---|---|---|
-| **Screenshots** (gitignored) | `scripts/run_local_static_dev.sh 8811` then `.venv/bin/python scripts/capture_screenshots.py` | a local server on live Lakebase; ~1 min |
+| **Screenshots + walkthrough video** (gitignored) | `scripts/run_local_static_dev.sh 8811` then `.venv/bin/python scripts/capture_screenshots.py` | a local server on live Lakebase; ~1 min for 22 stills, plus the agent for the Assistant shots and the video's final beat |
 | **Backtest numbers** (`evidence.json`, committed) | `.venv/bin/python scripts/export_evidence.py --profile abhi` | SQL warehouse |
 | **Counts in this page** | see *Checking the numbers on this page* below | Lakebase + CLI |
 
