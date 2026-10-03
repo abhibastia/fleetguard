@@ -5,6 +5,68 @@
 > staged but not yet live, and the traps in the order they bite. The session log below is
 > newest-first history; you do not need to read it to resume.
 
+## SESSION 2026-10-03 — repo de-academicized; RUNBOOK rewritten; frozen proposal removed
+
+**No live resource touched — purely a documentation and repo-hygiene pass, pushed as four
+commits (`b5d87fb`, `4de1241`, `0203120`, `6741fc2`).** Triggered by the plan to let this repo
+stand on its own as a generic technical project rather than reading as capstone coursework.
+
+**What changed:**
+
+- **Formatting pass** (`b5d87fb`): aligned every markdown table across the 9 core docs and
+  split dense multi-sentence paragraphs — whitespace only, verified with a
+  whitespace-stripped diff against the pre-edit version on every file so no fact moved.
+- **De-academicization** (`4de1241`): reworded "rubric"/"judge"/"grader"/"submission window"
+  language to generic equivalents across README, PLAN, ARCHITECTURE, DEMO, EVIDENCE,
+  ENHANCEMENTS, TRANSCRIPTS — real operational facts (shared-metastore warnings, permission
+  gaps, costs, every I-### reference) preserved verbatim throughout. `docs/STATUS.md` and
+  `docs/ISSUES.md` were deliberately left alone — this session's position is that dated
+  history belongs there, not scattered through the living docs.
+- **`docs/RUNBOOK.md` fully restructured** in the same commit: it used to be a dated
+  "Run 1 / Run 2" incident narrative with zero setup/test instructions. It is now a timeless
+  §1 Local development → §2 Deploying → §3 Operating the live Databricks resources (10
+  numbered subsections, index/agent/app restore all still there, same commands and cost
+  figures) → §4 Cost control/teardown. `tests/test_provision_search.py` (the hard gate
+  checking RUNBOOK still carries the exact index/endpoint/table/column names) passes
+  unmodified. **Any note elsewhere citing an old "RUNBOOK 1.x/2.x/3.x" number should be
+  treated as needing a re-check** — the numbering changed; §3.3 happens to still mean "restore
+  the agent serving endpoint" but that is not guaranteed for every old reference.
+- **`docs/FleetGuard_Proposal.md` removed entirely** (`0203120`) — 595 lines. The capstone
+  rubric (read in full this session, see below) grades only current demonstrated
+  functionality and never references an original proposal, so the frozen doc added nothing to
+  scoring while being the largest remaining piece of capstone framing in the repo. Fixed its
+  five live dependents (README, PLAN, CLAUDE.md, the `doc-fact-checker` agent, ARCHITECTURE).
+- **Verified EVIDENCE.md and both architecture diagrams against live state instead of
+  trusting what was written**, in the same commit: Lakebase foreign keys were stale at 14,
+  live is **23**; indexes stale at 23, live is **24**; backend tests stale at 478, live is
+  **646**; frontend tests stale at 147, live is **156**; bound jobs stale at 29, live is
+  **31**; both diagrams said "13 tables," live is **16**. A diagram box for a connector that
+  was never built (CPSC SaferProducts/USDA FSIS, already marked "Cut") was removed outright
+  rather than kept struck through.
+- **I-084's "open risk" was stale everywhere it appeared** (`6741fc2`) — README and
+  ARCHITECTURE still said no second identity had signed in, contradicting the 2026-09-11
+  verification (a second identity browsed every page). Reworded in both files plus both
+  diagrams to state what is actually still open: whether Lakebase auto-provisions a role for
+  an identity that has **never** used the app before (narrower, off the critical path).
+- **Dropped both diagram `.html` sources**, keeping only the corrected `.png` files — no
+  generation pipeline existed between the two formats, which is exactly how the `.png` fell
+  out of sync with real content in the first place (the `.html` had been hand-updated for the
+  September rescope; the `.png` never was). One file per diagram removes that failure mode.
+
+**The capstone rubric was read in full this session** (`capstone-submission-requirement.pdf`
+via DataExpert.io, 100 points across 8 categories) and cross-checked category-by-category
+against the live build rather than against `docs/EVIDENCE.md`'s own self-description.
+`EVIDENCE.md` already mirrors the rubric's exact 8 categories, order, and point weights.
+Every category's substance holds up; the one real risk flagged is category 7 (Deployed
+Application, "reliable access") — the live App/agent/index are all still stopped (see below),
+so a reviewer who does not start them sees nothing live. That is a resourcing decision, not a
+doc gap, and is unchanged by this session.
+
+**Unchanged by this session:** submission status, live resource state (nothing started or
+stopped — all checks this session were read-only), test counts beyond what's listed above.
+The zip gap `docs/STATUS.md` already flagged (predates PRs #28–#33) has only grown — it now
+also predates this entire session's work.
+
 ## SESSION 2026-10-01/02 — Run 2 executed, submitted, then a review found the headline numbers wrong
 
 **Everything is built, verified, submitted once, and switched off. Nothing is billing.**
@@ -1386,27 +1448,28 @@ than discovering it mid-demo.
 
 ## Picking this up tomorrow
 
-### COLD START — state as of 2026-10-02
+### COLD START — state as of 2026-10-03
 
-**Read this section. Then, only if you are bringing the demo back up, `docs/RUNBOOK.md`.
-Nothing else is required to resume.**
+**Read this section. Then, only if you are bringing the demo back up, `docs/RUNBOOK.md`
+(restructured 2026-10-03 — it is now a generic how-to-run/operate guide, not the old
+Run-1/Run-2 narrative; section numbers changed). Nothing else is required to resume.**
 
 | | |
 |---|---|
-| **Where the project is** | **BUILT, VERIFIED, SUBMITTED ONCE, AND SWITCHED OFF.** Run 2 completed 2026-10-01; a zip was submitted and is with the TAs. **Nothing is billing.** |
-| **Submission** | Zip uploaded; flagged **Manual Review** — TAs review by hand, and **the AI grader's report goes to them, not to you**. So there is no feedback loop to iterate against. A **resubmission is planned for Sunday** with the post-submission fixes below |
-| **`main`** | `b483f3f`, pushed, CI green. Since the submitted zip: **#28** Run 2 record · **#29** Stop-is-UI-only · **#30** transcripts + billing check · **#31** I-129 · **#32** the stat-card fix · **#33** re-stamp |
+| **Where the project is** | **BUILT, VERIFIED, SUBMITTED ONCE, AND SWITCHED OFF.** Run 2 completed 2026-10-01; a zip was submitted and is with the TAs. **Nothing is billing.** 2026-10-03 added a full documentation/repo-hygiene pass (de-academicization, `docs/RUNBOOK.md` rewrite, `docs/FleetGuard_Proposal.md` removed) — see the session entry directly above this one. No live resource was touched |
+| **Submission** | Zip uploaded; flagged **Manual Review** — TAs review by hand, and **the AI grader's report goes to them, not to you**. So there is no feedback loop to iterate against. A **resubmission is planned for Sunday (2026-10-04)** — the gap between the submitted zip and `main` has grown again, now also missing all of 2026-10-03's doc work |
+| **`main`** | `6741fc2`, pushed, CI green. Since the submitted zip: **#28** Run 2 record · **#29** Stop-is-UI-only · **#30** transcripts + billing check · **#31** I-129 · **#32** the stat-card fix · **#33** re-stamp · then 2026-10-03's four doc commits (`b5d87fb`, `4de1241`, `0203120`, `6741fc2`) |
 | **Working tree** | clean · **branches: `main` + `free-edition-deploy`** (frozen pre-fold snapshot, 2026-09-30, do not deploy from it) |
-| **Tests** | **646 backend passed / 24 skipped**, **156** vitest, ruff + typecheck clean. *The 53 `tests/pipelines/` Spark tests cannot run on this laptop (`Bad CPU type in executable`, x86-only `java`) — CI is the only place they execute* |
-| **Bound job resources** | **31** (`ls resources/*.job.yml \| wc -l` — count it, never trust this number; it has drifted four times) |
+| **Tests** | **646 backend passed / 24 skipped**, **156** vitest, ruff + typecheck clean — all re-confirmed live 2026-10-03. *The 53 `tests/pipelines/` Spark tests cannot run on this laptop (`Bad CPU type in executable`, x86-only `java`) — CI is the only place they execute* |
+| **Bound job resources** | **31** (`ls resources/*.job.yml \| wc -l` — count it, never trust this number; it has drifted four times; re-confirmed 31 live 2026-10-03) |
 
 #### Everything is off, and that was deliberate
 
 | Resource | State | Cost to restore |
 |---|---|---|
-| AI Search index + endpoint | **deleted** 2026-10-01 00:20 UTC. **24 h billing rule re-verified 2026-10-02: PASSED** (`list-endpoints` shows no `fleetguard-vs`) — the only confirmation available, since `system.billing` is ungranted | **~75 min** measured (~21 min of I-112 stall, then ~52 min syncing) + ~$6.72/day |
-| Agent serving endpoint | **`DEPLOYMENT_STOPPED`**, v8 — stopped from the UI, a harder guarantee than scale-to-zero | ~3 min — **but only after the index exists, see I-129** |
-| App `fleetguard-console` | **STOPPED** | ~2 min; all four reviewers hold `CAN_MANAGE` and can start it themselves |
+| AI Search index + endpoint | **deleted** 2026-10-01 00:20 UTC. **24 h billing rule re-verified 2026-10-02 and again 2026-10-03: PASSED** (`list-endpoints` shows no `fleetguard-vs`) — the only confirmation available, since `system.billing` is ungranted | **~75 min** measured (~21 min of I-112 stall, then ~52 min syncing) + ~$6.72/day |
+| Agent serving endpoint | **`DEPLOYMENT_STOPPED`**, v8 — stopped from the UI, a harder guarantee than scale-to-zero. Re-confirmed 2026-10-03 | ~3 min — **but only after the index exists, see I-129** |
+| App `fleetguard-console` | **STOPPED**. Re-confirmed 2026-10-03 | ~2 min; all four reviewers hold `CAN_MANAGE` and can start it themselves |
 | Lakebase | persists, free, **not ours to stop** (owned by `zach@zachwilson.tech`) | — |
 
 #### Run 2's measured results — the numbers the submission rests on
@@ -1433,8 +1496,10 @@ Nothing else is required to resume.**
 
 #### What happens next — Sunday
 
-1. **Rebuild the zip and resubmit.** The submitted one predates #28–#33, so it lacks
-   `docs/TRANSCRIPTS.md`, the corrected README, and the stat-card fix.
+1. **Rebuild the zip and resubmit.** The submitted one predates #28–#33 and all of 2026-10-03's
+   doc work, so it lacks `docs/TRANSCRIPTS.md`, the corrected README, the stat-card fix, the
+   de-academicized docs, the rewritten `docs/RUNBOOK.md`, and no longer has
+   `docs/FleetGuard_Proposal.md` to include (removed — see the session entry above).
    ```bash
    { git ls-files; find docs/screenshots -type f; } | sort -u > /tmp/m.txt
    zip -q -X fleetguard-submission.zip -@ < /tmp/m.txt
@@ -1464,7 +1529,9 @@ Nothing else is required to resume.**
 4. **`bundle deploy` does NOT ship the App** (I-097) — `databricks bundle run fleetguard_console`
    does, and it restarts the App under whoever is using it.
 5. **`agents.deploy()` leaves the old version serving at 0% traffic and resets
-   `scale_to_zero`** — 5 occurrences. Assume it; the `update-config` fix is RUNBOOK 3.3.
+   `scale_to_zero`** — 5 occurrences. Assume it; the `update-config` fix is in RUNBOOK's
+   agent-restore steps (§3.3 as of the 2026-10-03 rewrite — check the current heading rather
+   than trusting the number, it has already changed once).
 6. **After any frontend change run `./scripts/build_console.sh`** *and*
    `./scripts/sync_free_edition_app.sh`, or CI fails on mirror drift. **Never hand-edit the
    mirror.**
@@ -1473,6 +1540,9 @@ Nothing else is required to resume.**
    `fleetguard-`.
 9. **The `abhi` OAuth token expires often.**
    `databricks auth login --host https://dbc-7b106152-caf3.cloud.databricks.com --profile abhi`
+10. **`docs/FleetGuard_Proposal.md` no longer exists** (removed 2026-10-03). If any note,
+    branch, or search result still points at it, that reference is stale — the file is gone,
+    not moved.
 
 #### Deferred deliberately, with reasons recorded
 
@@ -1486,9 +1556,10 @@ access).
 #### How to confirm you are where this note says
 
 ```bash
-git log --oneline -1                                              # expect b483f3f or later
+git log --oneline -1                                              # expect 6741fc2 or later
 git status -sb                                                    # clean
 .venv/bin/python -m pytest --ignore=tests/pipelines               # 646 passed / 24 skipped
+ls resources/*.job.yml | wc -l                                    # 31 — count it, don't trust this line
 databricks vector-search-endpoints list-endpoints --profile abhi  # NO fleetguard-vs
 databricks apps get fleetguard-console --profile abhi             # compute STOPPED
 databricks serving-endpoints get \
