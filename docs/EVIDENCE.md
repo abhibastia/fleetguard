@@ -89,7 +89,7 @@ resource woken up first.
 | Activity analytics                               | `gold_agent_activity_daily` — requests, write actions, success rate, latency percentiles and tokens by day/tool/actor |
 | **Verified live 2026-10-01 (Run 2), on v8**      | Both paths exercised by raw REST (the CLI truncates this endpoint's response — I-124). **Deterministic:** *"Which fleet vehicles does recall 17V629000 affect?"* → **25 vehicles across 22 depots, all EXACT**, 8.3 s warm, volunteering that there were no `MODEL_VARIANT` matches to flag. **Retrieval:** *"Search complaints about brake failures"* → five real narratives, each with its complaint id (`738214`, `729017`, `667249`, `782129`) — the 179,347-chunk index genuinely serving the agent. **Write:** an agent write through `/api/chat` created `AGENT-ac6d0e08b2d1` and reached `gold_defect_signal_current` in ~5 min via Lakebase CDF |
 | **Screenshots: captured, not deferred**          | `assistant-dark.png` / `assistant-light.png` show the panel answering with a cited table. Asked only to search, the agent **volunteered a correction** — *"every one is about the PARKING / emergency brake, not the primary hydraulic service brakes — so treat this as a parking-brake signal"* — qualifying its own retrieval rather than dumping it. Also `walkthrough-dark.webm` / `.mp4`, a 7-beat recording following `docs/DEMO.md`'s order |
-| **State right now**                              | Index **deleted** and the serving endpoint **STOPPED**, deliberately, to end billing after evidence capture. A live question therefore needs both restored: endpoint ~3 min (`update-config`, see `docs/RUNBOOK.md`'s agent-restore steps — **Stop is UI-only, restore is CLI-only**, I-126), index **~75 min** measured (~21 min of I-112 stall, then ~52 min syncing). Code, tool definitions, traces, screenshots and the video are all in this zip |
+| **State right now**                              | Index **deleted** and the serving endpoint **STOPPED**, deliberately, to end billing after evidence capture. A live question needs both restored — endpoint ~3 min (`update-config`, see `docs/RUNBOOK.md`'s agent-restore steps — **Stop is UI-only, restore is CLI-only**, I-126), index ~75 min (breakdown in §8 below). Code, tool definitions, traces, screenshots and the video are all in this zip |
 
 ### 5. Analytics pipeline
 
@@ -145,13 +145,11 @@ resource woken up first.
 989,042 exposure rows; 118,323 in Lakebase — the full corpus (2.2M complaints, 5.8M TSBs)
 stays in Delta regardless of AI Search scope.
 
-**The vector-index chunk count is no longer the 1,746,601 quoted historically** — rescoped
-2026-09-23 to the fleet's own make/model pairs for schedule safety on the two-window cost
-plan (I-111), measured at 115,499 for the exact-spelling scope, then widened the
-same day to the `EXACT` + `MODEL_VARIANT` tiers the rest of the system uses (I-115).
-**Measured 2026-09-30 in Run 2 (I-126): 179,347 chunks** — 115,499 `EXACT` + 63,848
-`MODEL_VARIANT`, with the `EXACT` half reproducing the 2026-08-31 figure to the row, and the
-total agreeing exactly with an independent ad-hoc count run before the job.
+**The vector-index chunk count is no longer the 1,746,601 quoted historically.** Why it
+dropped — the two same-day rescopes, I-111 then I-115 — is `docs/ARCHITECTURE.md` §4.4's
+story, not restated here. **Measured 2026-09-30 in Run 2 (I-126): 179,347 chunks** — 115,499
+`EXACT` + 63,848 `MODEL_VARIANT`, with the `EXACT` half reproducing the 2026-08-31 figure to
+the row, and the total agreeing exactly with an independent ad-hoc count run before the job.
 
 The lakehouse-scale claim survives on the pipeline/corpus side; it is specifically the
 *indexed* figure that dropped below the 1M mark, and that reflects a deliberate retrieval-scope
@@ -237,8 +235,8 @@ judging whether the narrative answers the question.
 | Full chain to a gold fact              | **2.5–4.5 min** (155 s and 269 s, n=2) |
 
 The `table_update` trigger has a **hard 60-second platform floor** on both of its intervals
-(I-081), so a sub-minute Postgres→gold path is not achievable at all — the proposal's 15 s/5 s
-settings are rejected by `jobs create`. Capture alone has been sub-minute on three of four
+(I-081), so a sub-minute Postgres→gold path is not achievable at all — 15 s/5 s
+settings are rejected by `jobs create` outright. Capture alone has been sub-minute on three of four
 samples; **neither figure is a bound**, and the end-to-end number is minutes. Say "a few
 minutes" for the round trip.
 

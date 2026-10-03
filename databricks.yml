@@ -1,36 +1,13 @@
 # FleetGuard — Declarative Automation Bundle root.
 #
-# WHY THIS EXISTS. Until this file, every workspace object in the project was created by hand:
-# `jobs create` / `jobs reset` / `jobs update --json` for 24 jobs, the UI for the pipeline,
-# `databricks sync` + `apps deploy` for the App, a raw `POST /api/2.0/sql/statements` for the
-# metric view. §8.5 and §9 of the proposal both claimed a bundle was the deployment path; it
-# had never existed on any branch. Three things that cost real time were direct consequences:
+# Full history (why this exists, what it replaced, the drift it fixed) is
+# docs/ARCHITECTURE.md §9.1. What it does NOT cover — Lakebase CDF, the AI Search
+# endpoint/index, the agent serving endpoint, both metric views — is the same section,
+# "five exceptions", so a green `bundle deploy` is never read as "environment complete".
 #
-#   1. The workspace notebooks the jobs run were kept in sync by hand, and drifted. Measured
-#      2026-09-10: `src/agent/14_fleetguard_agent.py` was 8 lines behind `main` *inside the
-#      agent's own system prompt*, and `src/ingest/01_download_flat_files.py` 4 lines behind.
-#      Nothing detected it. With the jobs pointing at bundle-uploaded source, that class of
-#      drift is structurally impossible for every job the bundle owns. It is NOT eliminated
-#      globally: the seven excluded jobs still run hand-synced workspace copies, and
-#      `create-remaining-tables` was found 16 lines behind `main` for exactly that reason
-#      and pulled into the bundle on 2026-09-11 (I-098). If a job matters, bundle it.
-#   2. The App's OBO scopes existed only as a CLI invocation quoted in a comment (I-083).
-#      A rebuild from source produced an app that 403'd on every Lakebase route. They are now
-#      declared in `resources/fleetguard_console.app.yml`.
-#   3. `fleetguard-cdf-to-gold`'s `table_update` trigger and `fleetguard-load-signals`'
-#      serverless `environments` block lived only in the live workspace (I-081, I-045).
-#
-# WHAT THE BUNDLE DOES NOT COVER — four documented exceptions, so nobody reads a green
-# `bundle deploy` as "the environment is complete":
-#   - **Lakebase CDF** is UI-only and is not a bundle resource (I-017). Manual runbook step.
-#   - **The AI Search endpoint and index** are built by `src/setup/00_create_all_objects.py`.
-#   - **The agent serving endpoint** is built by `agents.deploy()` in `src/agent/15_deploy_agent.py`.
-#   - **The `evidence_metrics` metric view** went in via the SQL Statement REST API (I-065).
-#
-# SAFETY RULE FOR THIS BUNDLE. Never run `databricks bundle generate` with its default
-# `--source-dir`: it downloads the *workspace* copy of every notebook alongside the YAML and
-# would overwrite `src/` with exactly the stale content this bundle exists to eliminate.
-# Always redirect `--source-dir` to a scratch path and keep only the generated YAML.
+# SAFETY RULE: never run `bundle generate` with its default `--source-dir` — it downloads
+# the *workspace* copy of every notebook and would overwrite `src/` with the stale content
+# this bundle exists to eliminate. Redirect `--source-dir` to a scratch path.
 
 bundle:
   name: fleetguard
@@ -38,12 +15,8 @@ bundle:
 include:
   - resources/*.yml
 
-# `bundle deploy` uploads the whole bundle root (minus .gitignore) to the target's
-# `root_path`. Only three trees are actually needed there: `src/` (the job notebooks and the
-# pipeline's SQL), `app/backend/` (the App's `source_code_path`) and `dashboards/` (the
-# dashboard's `file_path`). Everything below is repo furniture that would otherwise be copied
-# into the workspace on every deploy for no reason — `app/frontend/` in particular, whose only
-# deployable output is the already-committed bundle under `app/backend/fleetguard_api/console/`.
+# Only src/, app/backend/ and dashboards/ are needed in the workspace; everything else here
+# is repo furniture that would otherwise be uploaded on every deploy for no reason.
 sync:
   exclude:
     - docs/
@@ -90,42 +63,25 @@ variables:
       measured 2026-09-25); abhi's default (false) is prod's existing, unchanged behavior.
     default: "false"
 
-# NO `lookup:` VARIABLES, AND `run_as` IS PINNED RATHER THAN DERIVED FROM
-# ${workspace.current_user}. Both are still worth keeping — fewer moving parts, one obvious
-# owner — but the reason first written here was wrong and is corrected rather than deleted:
-# it claimed they would let `bundle validate` run without contacting the workspace. **They do
-# not.** Measured with an empty config file, validate fails on `default auth: cannot configure
-# default credentials` before checking anything. CI therefore keeps no credentials and the
-# offline assertions live in `tests/test_bundle_resources.py` instead.
+# No `lookup:` variables and `run_as` is pinned rather than ${workspace.current_user} — fewer
+# moving parts, one obvious owner. Neither makes `bundle validate` run without credentials
+# (measured: it still needs them); the offline checks live in tests/test_bundle_resources.py.
 
 targets:
-  # ONE TARGET, AND IT IS `production`. There is deliberately no `dev` target.
-  #
-  # `mode: development` prefixes every resource name with `[dev <user>]`. This is a SHARED
-  # bootcamp metastore: `jobs list` returns ~300 jobs belonging to ~296 other students, and
-  # several of theirs already read like ours (`Lakebase-CDF`, `AgentTraceOps_Pipeline`).
-  # Adding a parallel set of `[dev abhisek] fleetguard-*` jobs to that namespace would make
-  # the one thing that keeps this safe — "scope every destructive operation to the
-  # `fleetguard-` prefix" — ambiguous about which of two jobs it means.
-  #
-  # `mode: production` also leaves schedules and triggers exactly as declared.
-  # `mode: development` PAUSES them, which would silently stop `fleetguard-cdf-to-gold`'s
-  # `table_update` trigger — the thing the sub-5-minute Postgres→gold path depends on.
+  # One target, deliberately: `mode: development` name-prefixes every resource into a
+  # namespace shared with ~296 other students (jobs list already has name collisions), and
+  # it pauses schedules/triggers — which would silently stop fleetguard-cdf-to-gold.
   prod:
     default: true
     mode: production
     workspace:
       host: https://dbc-7b106152-caf3.cloud.databricks.com
-      # Written out literally rather than as ${workspace.current_user.userName}. Production
-      # mode requires an explicit root_path so two people cannot deploy competing copies, and
-      # a literal removes one more reason for `bundle validate` to have to call the workspace.
       root_path: /Workspace/Users/abhisek.bastia17@gmail.com/.bundle/${bundle.name}/${bundle.target}
     run_as:
       user_name: abhisek.bastia17@gmail.com
-    # The App's ACL lives here, per-target, rather than as a base list in
-    # resources/fleetguard_console.app.yml — see that file's comment for why (a target-level
-    # override on a list field appends rather than replaces; leaving the base list empty and
-    # letting each target supply its own via append-to-empty acts as a full replace).
+    # Per-target, not a base list in fleetguard_console.app.yml: a target-level override on a
+    # list field appends rather than replaces, so an empty base list is what makes this a
+    # clean per-target ACL instead of an accumulating one.
     resources:
       apps:
         fleetguard_console:
@@ -150,8 +106,8 @@ targets:
             - level: CAN_RUN
               user_name: zach@zachwilson.tech
       jobs:
-        # The real CDF->gold trigger, prod-only. See cdf_to_gold.job.yml's header comment and
-        # resources/cdf_to_gold.job.yml itself, which carries the job's non-trigger fields.
+        # The real CDF->gold trigger, prod-only — resources/cdf_to_gold.job.yml carries the
+        # job's non-trigger fields.
         cdf_to_gold:
           trigger:
             pause_status: UNPAUSED
@@ -163,16 +119,10 @@ targets:
                 - bootcamp_students.bootcamp_cdc.lb_fleetguard_defect_signal_history
               wait_after_last_change_seconds: 61
 
-  # SECOND TARGET — Databricks Free Edition, `abhibastia90@gmail.com`. A wholly separate
-  # account/workspace/metastore from `prod` above, used only for isolated agent/app testing
-  # (never the submission deliverable — that stays `prod`/`abhi`). `mode: production`'s
-  # shared-namespace objection above doesn't apply here (this account isn't shared with ~296
-  # other students), but plain `production` is kept anyway for parity with `prod`'s shape and
-  # because this target's schedules/triggers should also run as declared, not paused.
-  # Deliberately excludes anything CDF-related: `fleetguard-cdf-to-gold` still exists as a job
-  # here (DABs cannot exclude a resource per-target — see resources/cdf_to_gold.job.yml's
-  # header comment) but gets no `trigger:` override, so it sits inert, manual-run-only, and
-  # references no free-edition table at all.
+  # Second target — Databricks Free Edition (abhibastia90@gmail.com), a wholly separate
+  # account/workspace/metastore used only for isolated agent/app testing, never the submission
+  # deliverable (that stays prod/abhi). fleetguard-cdf-to-gold exists here too — DABs cannot
+  # exclude a resource per-target — but gets no trigger override, so it sits inert.
   free_edition:
     mode: production
     workspace:
@@ -183,20 +133,13 @@ targets:
     variables:
       catalog: fleetguard
       schema: capstone
-      # "Serverless Starter Warehouse" already present in this workspace (measured 2026-09-25).
       warehouse_id: 6797e114217fa513
-      # `databricks-claude-opus-4-8` (prod's model) does not exist on this account -- measured
-      # 2026-09-25, `serving-endpoints get` 404s. Free Edition's available foundation models are
-      # a different, smaller set (`serving-endpoints list`): gpt-oss-120b/20b, qwen3-next-80b,
-      # qwen35-122b, llama-4-maverick, gemma-3-12b, llama-3-1-8b/3-3-70b. gpt-oss-120b is the
-      # largest reasoning-capable one available.
+      # databricks-claude-opus-4-8 (prod's model) 404s on this account; gpt-oss-120b is the
+      # largest reasoning-capable model Free Edition offers (measured 2026-09-25).
       llm_endpoint: databricks-gpt-oss-120b
       lakebase_project: projects/fleetguard-free-edition
-      # `public` -- unlike abhi's bootcamp_students, this is a brand-new, project-of-our-own
-      # Lakebase project. A `fleetguard` schema doesn't pre-exist here the way bootcamp_students
-      # does on the shared abhi project (measured 2026-09-25: `create_remaining_tables` failed
-      # outright, `InvalidSchemaName: schema "fleetguard" does not exist`). Postgres's own
-      # default schema needs no extra creation step and this project holds nothing else.
+      # `public`, not bootcamp_students' pattern: this project has no pre-existing `fleetguard`
+      # schema, and Postgres's default schema needs no extra creation step.
       pg_schema: public
       pg_database: databricks_postgres
       agent_endpoint: agents_fleetguard-capstone-fleetguard_agent
@@ -207,35 +150,19 @@ targets:
           permissions:
             - level: CAN_MANAGE
               user_name: abhibastia90@gmail.com
-          # CONFIRMED BROKEN 2026-09-25, do not re-add: a `config:` block here (command/env,
-          # ${var.x}-substituted) validated and deployed clean but silently failed to write
-          # app.yaml into the workspace (github.com/databricks/cli#4901, this CLI is v1.12.1) —
-          # the uploaded file was byte-for-byte prod's, none of the free-edition values took
-          # effect. `source_code_path` below points at a separate directory with its own real
-          # app.yaml instead (see app/backend_free_edition/app.yaml and
-          # scripts/sync_free_edition_app.sh for why and how it's kept in sync).
+          # Do not replace with a `config:` block: it validates and deploys clean but
+          # silently fails to write app.yaml into the workspace (databricks/cli#4901,
+          # confirmed on v1.12.1). source_code_path below is a separate directory carrying
+          # its own real app.yaml (scripts/sync_free_edition_app.sh keeps it in sync).
           source_code_path: ./app/backend_free_edition
       dashboards:
         fleetguard_overview:
           parent_path: /Users/abhibastia90@gmail.com/dashboards
-          # `dataset_catalog`/`dataset_schema` above already retarget every plain queryLines
-          # dataset to fleetguard.capstone — that's a Lakeview API-level override the dashboard
-          # resource itself understands. It does NOT reach a dataset's `asset_name` field,
-          # which is a literal fully-qualified UC object reference baked into the JSON at
-          # export time (`bootcamp_students.fleetguard.{fleet_exposure,evidence}_metrics`, both
-          # on abhi's metastore, unreachable from this separate account). Confirmed live
-          # 2026-09-27: those two widgets 404'd, which is why the console's dashboard link
-          # looked broken. `fleetguard_overview_free_edition.lvdash.json` is a byte-identical
-          # copy of the base file with only those two `asset_name` strings repointed at
-          # fleetguard.capstone — see dashboards/metric_views/fleet_exposure_metrics_free_edition.sql
-          # for the metric view itself (created and verified live). `evidence_metrics`'
-          # equivalent could NOT be created here: `CREATE VIEW ... WITH METRICS` validates its
-          # `source:` table eagerly, and gold_lead_time_summary (the full-corpus backtest
-          # result) only exists because it predates I-114's exclusion of the backtest job from
-          # this bundle — reproducing it isn't in scope for agent/app testing. Left pointed at
-          # the correctly-qualified name anyway so that widget fails cleanly and alone (same
-          # degradation this file already accepts for the CDF-dependent widgets above) rather
-          # than blocking the rest of the page, and self-heals if the backtest is ever rerun.
+          # fleetguard_overview_free_edition.lvdash.json repoints the two metric-view widgets
+          # at fleetguard.capstone (the catalog/schema vars above don't reach a dataset's
+          # literal `asset_name`). evidence_metrics' equivalent isn't reproduced here — its
+          # source table predates this bundle's scope — so that one widget degrades alone
+          # rather than blocking the page.
           file_path: ./dashboards/fleetguard_overview_free_edition.lvdash.json
           permissions:
             - level: CAN_MANAGE

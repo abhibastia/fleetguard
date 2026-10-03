@@ -1,67 +1,31 @@
-# AI/BI (Lakeview) dashboard — the read-only evidence surface, 5 pages / 20 datasets.
-# (Counts drift: this header said 12 while the file held 17. Read the number out of the
-#  JSON rather than trusting a comment — `jq '.datasets | length' dashboards/*.lvdash.json`.)
-#
-# `file_path` points at `dashboards/fleetguard_overview.lvdash.json`, which was **replaced
-# with a fresh export of the live dashboard** when this resource was created (2026-09-10) and
-# renamed from `.json` to `.lvdash.json` so the CLI recognises it. The previous committed copy
-# and the live dashboard were semantically identical — 5 pages, 12 datasets at the time, 15 widgets on the
-# operations page, same positions, same SQL. The only differences were serialisation: the live
-# form splits long text into per-line arrays and carries `catalog`/`schema` on each dataset.
-# Using the exported form means a round-trip through `bundle generate dashboard` is a no-op
-# instead of a spurious diff.
+# AI/BI (Lakeview) dashboard — the read-only evidence surface. Dataset/widget count drifts;
+# read it from the JSON (`jq '.datasets | length' dashboards/*.lvdash.json`), not a comment.
 #
 # TO EDIT: change it in the UI, then re-export with
 #   databricks bundle generate dashboard --resource fleetguard_overview --force --profile abhi
-# (add `--watch` to keep the local file in sync while editing). Editing the JSON by hand works
-# but the UI is the tool this file is generated from.
-#
-# `dataset_catalog` / `dataset_schema` are set from the bundle variables rather than left to
-# the values baked into each dataset, so the catalog/schema is stated in exactly one
-# place. Both parameters need CLI 0.281.0+; this bundle was built on 1.12.1.
+# (add `--watch` to keep the local file in sync). `dataset_catalog`/`dataset_schema` are set
+# from bundle variables (needs CLI 0.281.0+) so the catalog/schema is stated in one place.
 
 resources:
   dashboards:
     fleetguard_overview:
       display_name: "FleetGuard — Fleet & Recall Overview"
-      # `parent_path` IS LOAD-BEARING — do not delete it as redundant. Without it the bundle
-      # places the dashboard under its own root_path, and moving a dashboard is a **recreate**,
-      # not an update: a new `dashboard_id` and a new permanent URL, with the old one dead.
-      # The first `bundle deploy` refused to proceed for exactly this reason. The published URL
-      # (`/dashboardsv3/01f1a7257e801a2ebb71bdc18fc2113a/published`) appears in STATUS and is
-      # part of the evidence surface, so the dashboard stays where it already lives.
-      # `free_edition` overrides this scalar field per-target (databricks.yml) — measured
-      # 2026-09-25 that the literal abhi path is invalid there ("Folder Users is protected",
-      # DIRECTORY_PROTECTED), since /Users/abhisek.bastia17@gmail.com doesn't exist as a
-      # workspace user directory in that separate account. NOTE: this dashboard's underlying
-      # queries read bootcamp_students.bootcamp_cdc.lb_fleetguard_*_history (Lakebase CDF
-      # output), which free_edition deliberately does not build — the dashboard deploys and
-      # opens there, but its widgets will error/return empty rather than show real data. Left
-      # in rather than excluded (DABs has no per-target resource exclusion, see cdf_to_gold.job.yml's
-      # comment) since it's harmless and out of scope for the agent/app testing this build is for.
+      # LOAD-BEARING, do not delete as redundant: without it the bundle places the dashboard
+      # under its own root_path, and moving a dashboard is a recreate (new dashboard_id, new
+      # permanent URL — the published one is quoted in README/STATUS). free_edition overrides
+      # this per-target; its underlying CDF-sourced queries have nothing to read there, so its
+      # widgets error/empty rather than show data — left in anyway since that's harmless.
       parent_path: /Users/abhisek.bastia17@gmail.com/dashboards
       file_path: ../dashboards/fleetguard_overview.lvdash.json
       warehouse_id: ${var.warehouse_id}
       dataset_catalog: ${var.catalog}
       dataset_schema: ${var.schema}
       lifecycle:
-        # `parent_path` above stops a *move* from recreating it. This stops a delete. The
-        # published URL is quoted in README and STATUS; a recreated dashboard gets a new
-        # dashboard_id and the old link dies.
-        prevent_destroy: true
+        prevent_destroy: true  # same published-URL reason as parent_path above, for deletes
 
-      # WHO MAY SEE THIS. Same four identities as `fleetguard_console.app.yml`'s ACL, added
-      # 2026-09-14 when the console started linking to this dashboard from Home — before this,
-      # only the owner and the workspace `admins` group had any grant on it (confirmed live via
-      # `databricks permissions get dashboards <id>`), so the new link would have 403'd for
-      # every judge. Dashboards use a DIFFERENT permission vocabulary from apps/jobs — verified
-      # live via `databricks permissions get-permission-levels dashboards <id>`:
-      # CAN_READ < CAN_RUN < CAN_EDIT < CAN_MANAGE. `CAN_VIEW` (the App's lowest level) does not
-      # exist here. CAN_RUN, not CAN_READ, because the dashboard is published with
-      # `embed_credentials: false` — each viewer's own identity runs the underlying queries, so
-      # "view" without "run" would render an empty page, not a read-only one.
-      #
-      # Deliberately NO base list here, same reasoning as fleetguard_console.app.yml's
-      # `permissions` — each target declares its own ACL under `targets.<name>.resources.
-      # dashboards.fleetguard_overview.permissions` in databricks.yml, since a target-level
-      # override on a list field appends rather than replaces.
+      # Dashboards use a different permission vocabulary from apps/jobs: CAN_READ < CAN_RUN <
+      # CAN_EDIT < CAN_MANAGE, no CAN_VIEW. CAN_RUN (not CAN_READ) because the dashboard is
+      # published with embed_credentials: false, so each viewer's own identity runs the
+      # queries — CAN_READ alone would render an empty page. Deliberately no base `permissions`
+      # list here, same reason as fleetguard_console.app.yml: each target supplies its own ACL
+      # in databricks.yml, since a target-level override on a list field appends not replaces.

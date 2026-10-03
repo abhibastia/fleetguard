@@ -1,35 +1,16 @@
-# Postgres -> gold facts, on a `table_update` trigger. This is the tail of §8.3's velocity
-# claim, and its two intervals are NOT tuning choices: `min_time_between_triggers_seconds` and
-# `wait_after_last_change_seconds` both sit on a hard **60 s platform floor** — `jobs create`
-# rejects smaller values outright ("must be greater than 60 seconds"). The 15 s / 5 s pair that
-# sat in CLAUDE.md as project spec for a week could never have been created (I-081).
+# Postgres -> gold facts, on a `table_update` trigger.
 #
-# Consequences worth keeping straight, because they were conflated once already:
-#   - A `table_update` trigger therefore CANNOT deliver a sub-minute Postgres->gold path.
-#     Measured end to end, twice: **155 s and 269 s** — state it as roughly 2.5-4.5 minutes,
-#     never as one averaged number.
-#   - The sub-minute figure (7.1-15.6 s, I-046) belongs to **CDF replication only**,
-#     Postgres -> `bootcamp_cdc`. Never quote it for the whole chain.
+# Both trigger intervals have a hard 60s platform floor (`jobs create` rejects anything
+# smaller, I-081) — this is why the chain is ~2.5-4.5 min end to end, not sub-minute; the
+# sub-minute figure (7.1-15.6s, I-046) is CDF replication alone, never the whole chain.
+# `ANY_UPDATED`, not `ALL_UPDATED`: the batch signals loader writes fleetguard_defect_signal
+# with no matching fleetguard_agent_action write, so ALL_UPDATED would wait forever.
 #
-# `ANY_UPDATED`, not `ALL_UPDATED`: `fleetguard_defect_signal` is also written by the batch
-# signals loader with no matching `fleetguard_agent_action` write, so `ALL_UPDATED` would wait
-# for a change that never comes.
-#
-# UNPAUSED on purpose (for prod). `mode: development` would pause it silently — one of the
-# reasons this bundle has no dev target.
-#
-# THE TRIGGER LIVES ONLY UNDER `targets.prod` IN databricks.yml, NOT HERE. `jobs.create`
-# validates a `table_update` trigger's `table_names` against real UC tables at CREATE time
-# (measured 2026-09-25: deploying this job as-is to free_edition failed outright — "The table
-# 'bootcamp_students.bootcamp_cdc.lb_fleetguard_agent_action_history' does not exist"). Free
-# Edition deliberately has no Lakebase CDF setup at all (out of scope for that build), so no
-# table this trigger could legally watch exists there. DABs has no per-target resource
-# exclusion (confirmed: https://github.com/databricks/cli/issues/2872 is still open) — the job
-# itself has to exist under every target that includes resources/*.yml. Giving `free_edition`
-# no `trigger:` override at all leaves the job created but inert (manual-run only), which is
-# the correct shape for "CDF sync is excluded here": present in `jobs list` like the other 29,
-# never fires. See databricks.yml's `targets.prod.resources.jobs.cdf_to_gold` for the real
-# trigger definition prod keeps.
+# The trigger itself lives only under `targets.prod` in databricks.yml, NOT here — DABs has
+# no per-target resource exclusion, and `table_update`'s table_names are validated against
+# real UC tables at CREATE time, which free_edition's CDF-less setup doesn't have. Giving
+# free_edition no `trigger:` override leaves this job created but inert there (manual-run
+# only) — see databricks.yml's `targets.prod.resources.jobs.cdf_to_gold` for the real trigger.
 
 resources:
   jobs:

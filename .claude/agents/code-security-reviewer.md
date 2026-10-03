@@ -37,7 +37,7 @@ token. That is why `app.yaml` has no `resources:` block and why Postgres RLS and
 Catalog apply to the signed-in human. **Any change that introduces an app-owned credential,
 service-principal token, or connection pool shared across users silently converts per-user
 OBO into a service-account model** — every access-control claim in `docs/ARCHITECTURE.md`
-§5.1 becomes false, and nothing in the test suite would notice. Flag it as critical.
+§8a becomes false, and nothing in the test suite would notice. Flag it as critical.
 
 **2. The auth mode is explicit, never inferred.** `auth/tokens.py:131` reads
 `FLEETGUARD_AUTH_MODE` and raises on anything but `databricks-apps` or `static-dev`. This is

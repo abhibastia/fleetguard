@@ -10,7 +10,7 @@
 # MAGIC
 # MAGIC ## Why this notebook exists, and the rule it does not break
 # MAGIC
-# MAGIC `ENHANCEMENTS.md` E-08 is explicit: synthetic evals are for the **agent only**. Model B's
+# MAGIC Synthetic evals are for the **agent only** (`docs/ARCHITECTURE.md` §5). Model B's
 # MAGIC golden set must be **real** labelled recall/fleet pairs — nothing generated to look
 # MAGIC plausible. That rules out asking a model to invent labels.
 # MAGIC

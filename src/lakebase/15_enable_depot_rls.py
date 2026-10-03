@@ -8,7 +8,7 @@
 # MAGIC
 # MAGIC ## Scope — deliberately narrow, and the narrowing is stated, not hidden
 # MAGIC
-# MAGIC Full Phase 10 (`PLAN.md`) is Data Classification + ABAC + DQ Monitors + System Tables.
+# MAGIC Full governance scope is Data Classification + ABAC + DQ Monitors + System Tables.
 # MAGIC That was cut to a **visible slice** on 2026-08-31: depot-scoped RLS on the operational
 # MAGIC path, proved once, not the full governance matrix. This notebook is that slice.
 # MAGIC

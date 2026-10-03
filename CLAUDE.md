@@ -30,9 +30,10 @@ order they must happen in.
 **`docs/ARCHITECTURE.md` is the living spec — what the system actually is.** Keep it true;
 update it in the same commit as the code that changes it.
 
-Build sequence in `PLAN.md`; **every problem hit during development is logged in
-`docs/ISSUES.md` — add to it whenever something breaks or turns out to be wrong, especially
-anything that failed silently.**
+**Every problem hit during development is logged in `docs/ISSUES.md`** — add to it whenever
+something breaks or turns out to be wrong, especially anything that failed silently. (Build
+sequencing used to live in `PLAN.md`; removed 2026-10-04 once every phase was done and
+`docs/ARCHITECTURE.md` §2's build-state table had superseded it.)
 
 ## Verified facts — do not re-derive, do not "correct" without re-checking live
 
@@ -74,7 +75,7 @@ live system or current docs — not against training data or a cached skill refe
   365 days**). (2) *investigation → recall issued* = regulatory latency, median **118 days**
   (886 campaigns joined on `CAMPNO`, 97.2% investigation-first) — context only, **never
   report this as a system result**. (3) *recall → operator response* = seconds by design.
-  The 118-day figure was briefly written into §3 as if it were the lead time; it is not.
+  The 118-day figure was briefly written in as if it were the lead time; it is not.
 - `PROD_TYPE`: V 96.78% / T 1.85% / C 0.68% / E 0.68%. Tire-only and restraint-only columns
   are perfectly scoped (zero population outside their type). V+T keeps 98.63%.
 - Harm fields are **never null** (always `Y`/`N`): CRASH 6.25% Y, FIRE 2.53% Y,
@@ -265,8 +266,8 @@ post-routing invariants — if one fires, the split logic is broken, not the sou
   Databricks publishes **no** latency SLA for this path — don't attribute one.
 
 **Databricks U2M OAuth (custom app integration — confirmed 2026-08-31):**
-> **The console this was built for no longer exists.** It served the Render-hosted surface
-> (§8.7), which sat outside the Databricks Apps ingress and so had to obtain a user token
+> **The console this was built for no longer exists.** It served the Render-hosted surface,
+> which sat outside the Databricks Apps ingress and so had to obtain a user token
 > itself. Render was removed 2026-09-10; the implementation is at
 > commit **`2b5727a`**. *That was the `deploy/render` branch until 2026-09-29, when it was
 > deleted in a repo-wide branch cleanup (I-121) — the commit survives, and
@@ -275,8 +276,8 @@ post-routing invariants — if one fires, the split logic is broken, not the sou
 > OAuth app integration, and the scope finding in particular is why this path was abandoned.
 > Nothing on `main` uses U2M today: Databricks Apps supplies the token via OBO.
 - This is a *different* flow from Apps OBO above and from the M2M `client_credentials`
-  path (§8.2/§5.2 of the proposal). It is what a console hosted outside the Apps ingress
-  needs in order to obtain a real user token itself.
+  path (see `docs/ARCHITECTURE.md` §8b's "Evaluated and closed" table). It is what a console
+  hosted outside the Apps ingress needs in order to obtain a real user token itself.
 - Requires registering a **custom OAuth app integration** first — done in the
   **account console** ("App connections" → Add connection) or via
   `databricks account custom-app-integration create`. This is account-level, not
@@ -310,8 +311,7 @@ post-routing invariants — if one fires, the split logic is broken, not the sou
   non-localhost `redirect_uri`s (localhost plain-HTTP is shown as valid in
   Databricks' own example); whether narrower scopes than `all-apis` are accepted.
 
-**Lakeflow Jobs `table_update` trigger** (used for the CDF→fact-table pipeline,
-§8.3 of the proposal):
+**Lakeflow Jobs `table_update` trigger** (used for the CDF→fact-table pipeline):
 **CORRECTED 2026-09-08 (I-081) — the config previously recorded here could not be created.**
 Both intervals were below the platform floor and both table paths were wrong. As built and
 accepted (job `fleetguard-cdf-to-gold`, `851598550157757`):
@@ -337,7 +337,7 @@ Three corrections, each verified by the API rejecting the old value:
 - **The old rationale was therefore false.** It claimed both were "tight by design" because a
   longer settle window "would push worst-case latency past the sub-minute velocity claim".
   The platform *forces* a settle window over a minute, so a `table_update` trigger cannot
-  deliver a sub-minute Postgres→gold-fact path at all. **§8.3's sub-minute claim survives only
+  deliver a sub-minute Postgres→gold-fact path at all. **A sub-minute claim survives only
   for CDF replication itself** (measured 7.1–15.6 s, I-046) — Postgres→`bootcamp_cdc`.
   **MEASURED end to end 2026-09-08, two live cycles (n=2): Postgres commit → gold fact
   available = 155 s and 269 s.** Trigger detection is the variable part (102 s / 213 s to run
@@ -390,7 +390,7 @@ GMC WMIs labelled RAM). 400 generated VINs verified independently: 400/400 exact
   Chosen over `fg_<entity>` because a 2-letter prefix is independently guessable in a
   schema shared by ~296 students, whereas no one else is building FleetGuard. Also makes
   `SHOW TABLES LIKE 'lb_fleetguard_%'` return exactly our tables out of 354+.
-  The 11 tables map 1:1 to proposal §4.4:
+  The 11 tables are:
   `fleetguard_vehicle`, `_depot`, `_defect_signal`, `_recall_campaign`, `_vehicle_exposure`,
   `_service_campaign`, `_work_order`, `_agent_action`, `_approval`, `_audit_log`,
   `_public_summary`.
@@ -398,8 +398,8 @@ GMC WMIs labelled RAM). 400 generated VINs verified independently: 400/400 exact
   (`lb_x_history_1`) *silently*, and renaming a Postgres table orphans its history table.
   105 of the 256 existing `lb_*` tables in that schema are exactly such orphans.
 - CDF is **schema-level**: every table created in that Postgres schema replicates, so all
-  11 land in `bootcamp_cdc`, not just the two §8.3's trigger reads.
-- §8.3's trigger path is therefore
+  11 land in `bootcamp_cdc`, not just the two this trigger reads.
+- The trigger's table path is therefore
   `bootcamp_students.bootcamp_cdc.lb_fleetguard_agent_action_history`.
 - Lakebase CDF config itself is **UI-only** — no CLI or API.
 
@@ -447,9 +447,9 @@ readiness. `/healthz` is unchanged, unauthenticated and always-200 — it is the
 `RetrievalGroundedness`/`RetrievalRelevance`/`RetrievalSufficiency` read a `SpanType.RETRIEVER`
 span, which the agent already emits — but the docs do not state what they do with a span whose
 output is a list of plain dicts (what `search_complaints` returns). mlflow is **not installed
-locally**; it runs only on Databricks. Do not assert either way. `ENHANCEMENTS.md` E-18 has the
-verification sequence. Adding an unverified scorer to the gating path would risk taking the hard
-gates down with it.
+locally**; it runs only on Databricks. Do not assert either way. `docs/ARCHITECTURE.md` §11 has
+the verification sequence. Adding an unverified scorer to the gating path would risk taking the
+hard gates down with it.
 
 **Declarative Automation Bundle — built and deployed 2026-09-10. `databricks.yml` +
 `resources/` are now the deployment mechanism.** What it owns: the App
@@ -550,8 +550,8 @@ claim you then have to keep true; rejected experiments belong in `src/` and `doc
   defaults to a free read-only `--check`; `--create` bills ~$6.72/day — I-116), the agent serving endpoint, or **either** metric view (`evidence_metrics`
   and `fleet_exposure_metrics`, added 2026-09-17 — DABs has no `metric_views` resource type
   at all, confirmed via `bundle summary`'s resource keys: `apps`, `dashboards`, `jobs`,
-  `pipelines`, nothing else). §8.5's "a single `bundle deploy` produces a consistent
-  environment" has **five** documented exceptions, not one.
+  `pipelines`, nothing else). The promise that a single `bundle deploy` produces a consistent
+  environment has **five** documented exceptions, not one — see `docs/ARCHITECTURE.md` §9.1.
 
 ## Environment quirks
 
@@ -628,7 +628,6 @@ claim you then have to keep true; rejected experiments belong in `src/` and `doc
 - Prefer stating a number as "estimated, to be measured" over asserting it, unless
   it's been checked against a live system this session. `docs/EVIDENCE.md`'s backtest
   and latency sections follow this discipline — new additions should too.
-- `PLAN.md` is the source of truth for build sequencing and phase definitions of done.
 - **CI runs on every push and PR** (`.github/workflows/ci.yml`, added 2026-09-09). Run the same
   checks locally before committing — **~45 s for 666 backend tests, not the "about two seconds"
   it used to be**: `tests/pipelines/` (2026-09-17) starts a local Spark session and JVM startup

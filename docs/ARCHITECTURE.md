@@ -11,11 +11,9 @@ Companion documents, each with one job:
 
 | Document                                           | Job                                                  | Lifecycle                     |
 | -------------------------------------------------- | ---------------------------------------------------- | ----------------------------- |
-| **This file**                                      | What the system *is*                                 | Living — update with the code |
+| **This file**                                      | What the system *is* — §11 also carries the rejected/deferred alternatives `ENHANCEMENTS.md` used to own | Living — update with the code |
 | [`STATUS.md`](STATUS.md)                           | Where the build has got to                           | Living, high-churn            |
-| [`ENHANCEMENTS.md`](ENHANCEMENTS.md)               | Evaluated backlog — adopt/defer/reject, with reasons | Living                        |
 | [`ISSUES.md`](ISSUES.md)                           | Every problem hit, root cause, resolution            | Append-only                   |
-| [`../PLAN.md`](../PLAN.md)                         | Phase sequencing and definitions of done             | Living                        |
 | [`../CLAUDE.md`](../CLAUDE.md)                     | Verified facts that must not be re-derived           | Living                        |
 
 Every number below is measured against the live workspace. Anything not yet measured is
@@ -71,7 +69,7 @@ against 11.1% on a volume-matched placebo** (1.44×, z ≈ 2.62, p ≈ 0.009).
 | 8 App + external surface   | ✅ Done — `fleetguard-console` on Databricks Apps, verified in a real browser 2026-09-08 and re-verified across all ten `DEMO.md` beats in Run 1 (I-113). **Stopped between the two online windows by design** |
 | 9 Model A + backtest       | ✅ Done — **result is negative**, see §6 |
 | 10 Governance              | ✅ Visible slice — Postgres RLS on depot scoping, proved live |
-| 11 Hardening               | ✅ Done — the `table_update` trigger is built and has fired unattended (§8.3); demo state is seeded through the real API, not direct INSERTs. "Render always-on" left this phase when Render did |
+| 11 Hardening               | ✅ Done — the `table_update` trigger is built and has fired unattended (§7.3); demo state is seeded through the real API, not direct INSERTs. "Render always-on" left this phase when Render did |
 | 12 Second connector        | ❌ Cut for schedule |
 
 Everything lives in one schema, `bootcamp_students.fleetguard`, inside a **shared** bootcamp
@@ -240,7 +238,7 @@ those figures in `docs/EVIDENCE.md` as measured, including if poor.
 
 ### 4.5 Operational store — Lakebase + CDF
 
-**11 core tables** (`fleetguard_<entity>`, 1:1 with proposal §4.4) plus **3 added since**
+**11 core tables** (`fleetguard_<entity>`) plus **3 added since**
 (`fleetguard_depot_assignment`, `fleetguard_technician`, `fleetguard_watchlist`) — **14 total**,
 every one `REPLICA IDENTITY FULL` (a hard CDF prerequisite — without it the WAL carries only
 the key and `update_preimage` is useless). Full column-level reference: §4.6.
@@ -362,7 +360,7 @@ across `app/backend/fleetguard_api/` and `src/agent/`):
 | Table                       | Key columns                                                                                         | Notes |
 | --------------------------- | --------------------------------------------------------------------------------------------------- | ---------- |
 | `fleetguard_approval`       | `approval_id` PK, `action_id`, `service_campaign_id`, `decision` (`APPROVE`/`REJECT`), `decided_by` | Superseded in practice — the live approval flow (§7.3) records its decision directly on `fleetguard_service_campaign`/`fleetguard_audit_log` instead |
-| `fleetguard_public_summary` | `metric_key` PK, `metric_value`, `metric_text`, `unit`                                              | Built for an unauthenticated read surface (proposal §5.2); the current Evidence tab (README) sources from the published backtest result instead |
+| `fleetguard_public_summary` | `metric_key` PK, `metric_value`, `metric_text`, `unit`                                              | Built for an unauthenticated read surface; the current Evidence tab (README) sources from the published backtest result instead |
 
 ---
 
@@ -405,8 +403,8 @@ negative, 69 excluded as genuinely ambiguous rather than force-labelled.
 threshold=1.000 traced to a feature (`model_is_substring_of_recall`) that was 0% by
 *construction* of the negative-label rule, not by anything learned. Fixed, retrained.
 **Reported: precision 83.7%, recall 96.3%, ROC-AUC 0.925** on a 230-row held-out split —
-published on the evidence page (`GET /api/evidence` → `model_b`), per the proposal's own
-requirement that precision/recall appear on the application's own page.
+published on the evidence page (`GET /api/evidence` → `model_b`) — precision/recall appear on
+the application's own page, not just in this doc.
 
 ---
 
@@ -432,8 +430,8 @@ detector tracking a genuine ramp looks like, rather than one firing on backgroun
 
 ### The semantic hypothesis was tested and falsified
 
-The proposal claimed semantic clustering would surface defects earlier, and that *"the
-semantic half is load-bearing rather than an enhancement."* Both were tested.
+An earlier hypothesis held that semantic clustering would surface defects earlier, and that
+*"the semantic half is load-bearing rather than an enhancement."* Both were tested.
 
 | grouping       | REAL      | PLACEBO | lift  |
 | -------------- | --------- | ------- | ----- |
@@ -464,8 +462,8 @@ signal, writing `failure_mode`/`severity_language` — descriptive only, never a
 input, same rule as `harm_share`. Written 2026-09-08; not yet executed against live data, and
 the Lakebase loader / `routers/signals.py` / `Signals.tsx` do not read the new columns yet.
 Closes the gap between this section's design claim and what `src/` actually contained — until
-this cell existed, `ai_extract` was never called anywhere in the codebase, despite being named
-as a Spark-pipeline strength in the original proposal.
+this cell existed, `ai_extract` was never called anywhere in the codebase, despite having been
+named a Spark-pipeline strength from the start.
 
 ---
 
@@ -764,8 +762,8 @@ Stated so they are not mistaken for omissions.
 - **No pre-2010 recall coverage.** Deliberate — operators don't run vehicles that old.
 - **No `ai_extract` on the ingest path.** `COMPDESC` already ships structured; re-deriving it
   across 2.24M rows is pure cost.
-- **No AI Gateway PII guardrail — and it is not available to this project at all.** The frozen
-  proposal §4.5 claims one; that claim is wrong and this is the correction (E-01). Two facts,
+- **No AI Gateway PII guardrail — and it is not available to this project at all.** An earlier
+  design iteration claimed one; that claim was wrong, and here is the correction. Two facts,
   both measured 2026-09-09:
   1. **Agent endpoints do not support guardrails.** An endpoint deployed with `agents.deploy()`
      supports `inference_table_config` only — not `guardrails`, `rate_limits` or
@@ -870,8 +868,8 @@ workspace (fixed 2026-09-03, `tests/test_approval_gate.py`). Where snapshot mode
 returns **501** rather than simulating a write: a plausible service-campaign id for a campaign
 that was never created would be a lie told by the safety-critical path.
 
-§5.1's "identity determines both rows and columns, and the frontend cannot bypass it" holds on
-both surviving surfaces, because both carry a real per-caller Databricks token: it mints the
+The claim that identity determines both rows and columns, and the frontend cannot bypass it,
+holds on both surviving surfaces, because both carry a real per-caller Databricks token: it mints the
 Lakebase credential, so Postgres evaluates RLS under the caller's own identity and the write
 path is genuinely live. What remains app-enforced rather than database-enforced is `FLEETGUARD_APPROVERS` (an env-var allowlist, not a UC grant) and
 `scoping.py`'s depot predicate — the latter backed by real RLS on `fleetguard_vehicle`, though
@@ -894,7 +892,7 @@ sentence are said on purpose.
 
 **Free-edition Databricks Apps are not viable.** Free edition supports Apps, but it is a
 separate workspace *and* account, and app **resource bindings are workspace-local** — it
-cannot bind abhi's Lakebase, warehouse, or serving endpoint. Worse, §5.1's guarantee
+cannot bind abhi's Lakebase, warehouse, or serving endpoint. Worse, that guarantee
 requires the signed-in user to *be* an abhi identity so UC evaluates ABAC under their token.
 A free-edition user is not, so every query would run as one service principal and the row
 filters and column masks would be decorative.
@@ -928,7 +926,7 @@ no scope negotiation, which is the path this project took instead.
 **Other identities in this same shared workspace have their own Databricks accounts**
 (confirmed 2026-09-03) — which makes `databricks-apps` OBO the actually strong path for them
 to check the system: they sign in with their own account, and Unity
-Catalog / Postgres evaluate access under their genuine identity — §5.1's claim demonstrated,
+Catalog / Postgres evaluate access under their genuine identity — the claim above demonstrated,
 not simulated. Read access being open to anyone in the shared workspace is therefore the
 intended shape, not a leak.
 
@@ -1032,8 +1030,8 @@ per-work-order cost capture:
   average for the same repair" instead of one number that erases both distinctions.
 - `ServiceCampaigns.tsx`'s panel states the measured lead-time context (still using the Evidence
   page's own `real.median_lead_days`, still careful to say "before an investigation would open,"
-  not before a recall or an incident — conflating those was an earlier mistake in this project's
-  proposal draft, see the three-intervals warning in CLAUDE.md) alongside the real logged-cost
+  not before a recall or an incident — conflating those was an earlier mistake in this project,
+  see the three-intervals warning in CLAUDE.md) alongside the real logged-cost
   total and its coverage, with the by-component/by-depot tables beneath it. No dollar figure
   anywhere in this feature is now assumed — every one is a sum of what someone actually entered.
 
@@ -1113,7 +1111,8 @@ arrives. Everything downstream (SQL, Lakebase, agent invocation, ABAC) is identi
 Therefore the backend resolves the caller's token through **a single swappable provider**
 selected by configuration; **no route handler reads a header or session directly**. This is
 built in MVP, not retrofitted: with the seam the migration is an afternoon, without it a
-rewrite in the final week, on the code path carrying every authorisation guarantee in §5.
+rewrite in the final week, on the code path carrying every authorisation guarantee in the
+auth seam (§8a/§8b).
 
 **The seam's claim was tested on 2026-09-08 and held.** Deploying to Databricks Apps needed an
 `app.yaml`, one CLI scope grant, and **one line of code** (`auth_type="pat"`, I-082) — no route
@@ -1230,8 +1229,8 @@ database.
 Since **2026-09-10** the deployable surface is a **Declarative Automation Bundle**:
 `databricks.yml` plus `resources/`. Before that, every workspace object had been created by
 hand (`jobs create`/`reset`/`update --json`, the UI, `databricks sync` + `apps deploy`, a raw
-SQL-statement REST call), and the proposal's §8.5/§9 claim that a bundle was the deployment
-path had never been true.
+SQL-statement REST call), and the earlier claim that a bundle was the deployment path had
+never been true.
 
 **What the bundle owns**, all *bound* to the objects that already existed, so deploying
 updates them in place and creates nothing:
@@ -1292,8 +1291,8 @@ to proceed until it was set.
 **Editing a bound object by hand is silently undone** by the next deploy, which re-asserts
 every bound resource from YAML.
 
-**§8.5's "a single `bundle deploy` produces a consistent environment" has five exceptions**,
-and they should be stated rather than the claim repeated: **Lakebase CDF** (UI-only, not a
+**The promise that a single `bundle deploy` produces a consistent environment has five
+exceptions**, and they should be stated rather than the claim repeated: **Lakebase CDF** (UI-only, not a
 bundle resource — I-017), the **AI Search endpoint and index** (created by
 `00_create_all_objects.py`, kept manual because they are the only recurring cost), the
 **agent serving endpoint** (`agents.deploy()` in `src/agent/15_deploy_agent.py`), the
@@ -1313,10 +1312,9 @@ declares `postgres`.
 
 ### 9.1a The CD half — designed, blocked by account permissions, not by choice
 
-The frozen proposal (§9) says *"GitHub Actions runs `databricks bundle deploy` on merge to
-main."* **The CI half exists; the CD half does not**, and the reason is a measured permission
-fact rather than an oversight. Stating it here because the claim is in the proposal and a
-reader can reasonably ask.
+GitHub Actions runs CI on every push; it does not run CD (`bundle deploy` on merge). **The CI
+half exists; the CD half does not**, and the reason is a measured permission fact rather than
+an oversight:
 
 **The design that would be correct.** Not a stored token — **GitHub workload identity
 federation (OIDC)**, which Databricks now documents as the recommended mechanism for automated
@@ -1348,8 +1346,8 @@ a week.
    that restarts the App under whoever is using it, which is the original reason deployment is
    manual (I-097). The App step stays human even with CD.
 2. **Gate it on a GitHub Environment with required reviewers.** This does double duty: it is
-   what scopes the OIDC subject, and it is the human gate — the same shape as §5.3's approval
-   model, applied to deployment.
+   what scopes the OIDC subject, and it is the human gate — the same shape as the approval
+   model in §7.3, applied to deployment.
 
 **One thing CD would fix for free.** A runner always deploys from a clean checkout at a known
 SHA, which structurally closes the deploy-provenance gap in I-098 — the one that recurred
@@ -1422,3 +1420,69 @@ Two habits this round established, both after a test passed when it should not h
 - **Verify a regression test fails against the unfixed code** before trusting it. Every fix in
   the 2026-09-07 review batch (I-063, I-071, I-072) was confirmed this way; it is what caught
   the above, and the `list()`-snapshot race in `prune_sessions`.
+
+---
+
+## 11. Rejected and deferred alternatives
+
+`docs/ENHANCEMENTS.md` (the evaluated backlog, retired 2026-10-04 once everything adoptable
+had been adopted) carried the full reasoning behind each of these. Folded here rather than
+lost, because each is a real decision this project made and could be asked about.
+
+**LangGraph as the agent's orchestration — not needed.** It was considered for exactly one
+reason: the write path must halt, surface a proposed action, and resume on approval, which
+LangGraph's interrupt/resume handles natively. That requirement is satisfied instead by the
+**action-envelope pattern** (§7.1) — the model emits an envelope and stops; the FastAPI app
+validates and performs the write under the caller's own OBO token. That is a *stronger* form
+of suspend/resume than a graph interrupt, because the suspension crosses a process **and**
+identity boundary — the model has no database path at all, so it cannot resume itself even in
+principle. A LangGraph interrupt would keep both halves inside one process under one identity.
+
+**A supervisor agent routing by persona (Agent Bricks) — rejected on security grounds, not
+schedule.** Persona differences here are an authorisation problem, not an orchestration one,
+and §8b already solves it: Unity Catalog evaluates ABAC under the caller's own token, and a
+tool the agent has not been granted cannot be invoked regardless of what the model attempts.
+An LLM deciding what a user may see is not a security boundary — it converts a claim this
+project can *prove* into one it would have to hope holds. One agent, one set of tools, grants
+enforced below the model, stays correct as personas are added; a persona-routing supervisor
+would re-implement access control in prompt space on top of it.
+
+**TSBs as a corroborating signal for Model A — measured and rejected, the project's second
+published negative** (after the semantic-clustering falsification in §6). 5.8M TSB rows were
+already ingested and conformed, and the intuition was real: a manufacturer bulletin on the
+same component is an independent observer, not more complaints. Measured on the full 777
+REAL / 606 PLACEBO population: never-investigated series carried **more** prior-year TSBs
+(48.5% vs 55.9%, opposite the hypothesised direction), because the placebo arm was
+volume-matched on complaints, never on bulletins, and its vehicles carry 2.4× the TSB volume
+overall. Controlling for that with each vehicle's own TSB share moved the *mean* the right
+way but the *medians were identical* — every apparent effect, in both directions, was the TSB-
+volume mismatch. Not shipped; a descriptive TSB column would have put an unvalidated number in
+front of an operator. Revisit only with a placebo arm matched on TSB propensity, not complaint
+volume — a different control-construction problem.
+
+**A canonical vehicle-model alias table — deferred, not rejected.** NHTSA writes `F-250 SD`;
+vPIC writes `F-250`. Same truck, no exact match, and getting this wrong has cost real time four
+separate times (the gold exposure layer, the agent write path, the emerging detector, and the
+AI Search index source, which excluded the fleet's most numerous vehicle from retrieval
+outright until I-115). All five paths agree today because the matching predicate is **copied**
+verbatim from `src/backtest/10_emerging_signals.py`, not re-derived — agreement by convention,
+which holds only because everyone who touches it knows to copy it. A table
+(`nhtsa_make · nhtsa_model · canonical_make · canonical_series · match_basis · source`), joined
+once by every consumer, would make that agreement by *construction* instead. Not built because
+migrating five already-agreeing call sites this close to a release risks the exact class of bug
+the table exists to prevent. Revisit when a sixth consumer needs the comparison, or any path is
+found to have drifted from the copied predicate.
+
+**MLflow's built-in RAG judges (`RetrievalGroundedness`/`RetrievalRelevance`/
+`RetrievalSufficiency`) — deferred on an unverified API, not on effort.** The agent already
+emits what they read (`search_complaints` is `@mlflow.trace(span_type=SpanType.RETRIEVER)`),
+but the docs do not state what these judges do with a retriever span whose output is a list of
+plain dicts — exactly what that tool returns — and mlflow is not installed locally to check
+(it runs only on Databricks, and the index/endpoint it would need are both torn down between
+demo windows). Adding an unverified scorer to the agent evaluation's **gating** path is the
+wrong trade: if it raises for a reason unrelated to the agent, it takes the hard gates down
+with it, and the hard gates are what stop a regressed agent shipping. What exists instead,
+and is not nothing: `src/search/28_rag_eval.py` measures the retriever directly (known-item
+Recall@10/MRR, topical Precision@10/hit rate — §4.4, `docs/EVIDENCE.md` §8). That measures the
+*retriever*; the MLflow judges would measure *groundedness* — whether the answer is supported
+by what was retrieved — a different, genuinely worth-having question, not worth guessing at.

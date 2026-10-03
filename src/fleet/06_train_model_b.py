@@ -141,8 +141,8 @@ proba = clf.predict_proba(X_test)[:, 1]
 # MAGIC %md
 # MAGIC ## Tune the threshold for recall, then report precision at that threshold
 # MAGIC
-# MAGIC The done-when in `PLAN.md` is explicit: "precision/recall numbers exist and are real,
-# MAGIC not placeholders." Both are computed here against the held-out test split, not asserted.
+# MAGIC Precision/recall numbers must exist and be real, not placeholders (`docs/ARCHITECTURE.md`
+# MAGIC §5). Both are computed here against the held-out test split, not asserted.
 
 # COMMAND ----------
 

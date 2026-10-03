@@ -18,7 +18,7 @@ PREFIX = "fleetguard_"
 
 #: The current operational tables. Started as the eleven mapping 1:1 to proposal §4.4;
 #: `fleetguard_approval` and `fleetguard_public_summary` were dropped 2026-09-16 (built,
-#: never wired to any router or agent tool — see docs/ENHANCEMENTS.md), and
+#: never wired to any router or agent tool — see docs/ARCHITECTURE.md §4.6), and
 #: `fleetguard_technician`/`fleetguard_watchlist`/`fleetguard_depot_assignment` were added
 #: since as real, live tables (`src/lakebase/15_enable_depot_rls.py`,
 #: `17_create_technician_roster.py`, `22_create_watchlist_table.py`). Keep this list in sync

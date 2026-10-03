@@ -1,16 +1,13 @@
-# Referential integrity for the Lakebase schema — the 14 relationships that were
-# app-checked but never database-enforced, plus five supporting indexes on FK child
-# columns (an unindexed child makes every parent DELETE a sequential scan).
+# Referential integrity for the Lakebase schema — relationships that were app-checked but
+# never database-enforced, plus supporting indexes on FK child columns. Also repairs I-107
+# (`fleetguard_depot_assignment` missing `REPLICA IDENTITY FULL`, so no CDF history table).
 #
-# Also repairs I-107: `fleetguard_depot_assignment` was created without
-# `REPLICA IDENTITY FULL` and had no CDF history table as a result.
-#
-# Idempotent. `ADD CONSTRAINT` has no `IF NOT EXISTS` in Postgres (I-067), so the notebook
-# checks `pg_constraint` itself; the indexes use `CREATE INDEX IF NOT EXISTS`. A re-run is
-# a no-op that still re-proves enforcement.
+# Idempotent: Postgres has no `ADD CONSTRAINT ... IF NOT EXISTS`, so the notebook checks
+# `pg_constraint` itself before adding each one. A re-run is a no-op that still re-proves
+# enforcement.
 #
 # The `environments` block is load-bearing: for serverless jobs the dependency list lives
-# in the job, not the notebook (I-045).
+# in the job, not the notebook.
 
 resources:
   jobs:

@@ -442,7 +442,7 @@ def cites_complaint_ids(inputs, outputs):
     mileage constantly, so `150000 miles` would otherwise satisfy a citation requirement. A bare
     odometer figure with no unit word (`odometer read 150000`) still can. That is a proxy's
     floor, not a bug to regex around: the robust form is `cited_ids ⊆ retrieved_ids`, which needs
-    trace-level scoring (see `ENHANCEMENTS.md`). Stated because a scorer that implies more than
+    trace-level scoring. Stated because a scorer that implies more than
     it checks is the failure this evaluation exists to avoid.
 
     **Not scored against the retrieved set**, deliberately: `predict_fn` returns the answer

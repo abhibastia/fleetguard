@@ -5,6 +5,56 @@
 > staged but not yet live, and the traps in the order they bite. The session log below is
 > newest-first history; you do not need to read it to resume.
 
+## SESSION 2026-10-04 (3) — stopped comparing the repo to the deleted proposal doc
+
+**No live resource touched.** The 2026-10-03 removal of `docs/FleetGuard_Proposal.md` patched
+five "live dependents" but missed a cluster of lingering references: sentences structured as
+"the proposal claimed X, here's why that's wrong," and bare `§N` section-number citations that
+were the *proposal's* numbering scheme, now unlookupable since that doc is gone. An Explore
+sweep across README, `CLAUDE.md`, `docs/ARCHITECTURE.md`, `docs/EVIDENCE.md`,
+`app/backend/README.md`, and `.claude/agents/code-security-reviewer.md` found ~20 such spots
+and classified each as a dangling reference (fix required) or a self-contained historical note
+(no doc needed, but still framed comparatively). Fixed all of them — either repointed to the
+*current* home of the fact (e.g. `§5.1` → `§8a`, `proposal §4.4` → dropped since `§4.6` already
+lists the tables) or reworded to drop the "proposal said" framing and state the fact plainly.
+One of the fixes was functionally important, not just cosmetic: `code-security-reviewer.md`
+pointed at `docs/ARCHITECTURE.md` §5.1, which has never existed (ARCHITECTURE's own §5 is
+"Models," no subsections) — a reviewer agent following that literally would never find the
+section. **Diagrams needed no work** — confirmed already captioned cleanly as "as-built," and
+the original proposal's diagram files are confirmed deleted from git history. `docs/STATUS.md`
+and `docs/ISSUES.md` keep their old proposal mentions — dated history, out of scope by the same
+rule applied to the PLAN.md/ENHANCEMENTS.md cleanup earlier today.
+
+## SESSION 2026-10-04 (2) — doc-cleanup pass: deduped living docs, retired PLAN/ENHANCEMENTS
+
+**No live resource touched.** Second doc-only pass today, triggered by a repo-hygiene request
+to remove unnecessary detail now that the project is finished and resubmission is the only
+remaining task.
+
+- **Deduped near-identical restatement across living docs.** The AI Search rescoping story
+  (I-111 → I-115) was narrated in full in `ARCHITECTURE.md` §4.4, `EVIDENCE.md` §8, and
+  `PLAN.md` Phase 3; trimmed `EVIDENCE.md`/`PLAN.md` to their own numbers with a pointer to
+  `ARCHITECTURE.md` §4.4. Caught `PLAN.md` Phase 3 asserting the widened-scope chunk count
+  "has not been measured" — stale since Run 2 (2026-09-30) measured it at 179,347 — fixed in
+  the same edit. Also consolidated a duplicated 75-minute index-restore breakdown that
+  `EVIDENCE.md` stated in full twice (§4 and §8).
+- **`PLAN.md` deleted.** Every phase is done; `ARCHITECTURE.md` §2's build-state table and this
+  file already superseded it, with nothing unique left.
+- **`docs/ENHANCEMENTS.md` deleted.** Unlike `PLAN.md`, it held unique reasoning (why
+  LangGraph/Agent Bricks/TSB-corroboration/a canonical alias table/MLflow's RAG judges were
+  rejected or deferred) — folded the load-bearing entries into a new `ARCHITECTURE.md` §11
+  before deleting, rather than losing the reasoning. `docs/STATUS.md` and `docs/ISSUES.md`
+  keep their old `ENHANCEMENTS.md`/`PLAN.md` references as-is — dated history, same rule
+  applied when `docs/FleetGuard_Proposal.md` was removed on 2026-10-03.
+- **Fixed every live dependent**: README's doc map, `CLAUDE.md` (3 spots), the
+  `doc-fact-checker` agent definition, `app/backend/README.md` (+ its free-edition mirror, via
+  `sync_free_edition_app.sh`, not hand-edited), and four `src/` notebook comments that cited
+  `PLAN.md`/`ENHANCEMENTS.md` by name.
+- **Trimmed essay-length comment blocks in `databricks.yml` and `resources/*.yml`** to
+  one-line "why" notes — `fleetguard_console.app.yml` was 70 of its 87 lines comments. Kept
+  the load-bearing trap warnings (e.g. the 60-second trigger-interval floor), cut the
+  session-narrative prose that belongs in `docs/ISSUES.md`, not in a deploy config.
+
 ## SESSION 2026-10-04 — TA will restart the stack themselves; README pointed at RUNBOOK.md
 
 **No live resource touched.** The TA replied to the offer (made in the 2026-10-03 cold-start

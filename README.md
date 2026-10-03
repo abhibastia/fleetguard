@@ -126,9 +126,8 @@ genuine big-data claim and it is measured.
 
 **Velocity is deliberately not claimed:** the Postgres→Unity Catalog capture is 7.1–15.6 s, but
 the end-to-end business-event→analytics path measures **2.5–4.5 minutes**, because a
-`table_update` trigger has a hard 60-second platform floor on both its intervals (I-081). The
-frozen proposal claims sub-minute there; its contradictions table records that as unreachable
-rather than quietly leaving it.
+`table_update` trigger has a hard 60-second platform floor on both its intervals (I-081), so
+sub-minute is not achievable on this path at all.
 
 - **Ingestion → medallion pipeline** (Lakeflow Declarative Pipelines): NHTSA's complaint,
   recall, investigation, and TSB flat files → bronze → silver → gold, with a quarantine
@@ -237,7 +236,7 @@ the next deploy.
 | ------------- | ---------- |
 | `src/`        | Ingestion, medallion pipelines, fleet registry, search, agent, backtest, Lakebase migrations |
 | `app/`        | The FastAPI backend + React console that make up the live product |
-| `docs/`       | Living architecture spec, build status, evidence map, issue log, and the frozen original proposal. `docs/screenshots/` is gitignored build output — regenerate with `scripts/capture_screenshots.py` |
+| `docs/`       | Living architecture spec, build status, evidence map, issue log. `docs/screenshots/` is gitignored build output — regenerate with `scripts/capture_screenshots.py` |
 | `scripts/`    | Runnable setup/build scripts — local dev server, console build, evidence/snapshot export, demo-state seeding |
 | `tests/`      | Unit tests (run everywhere) and integration tests (opt-in, hit the live workspace) |
 | `dashboards/` | AI/BI dashboard definitions |
@@ -258,9 +257,7 @@ Read `docs/STATUS.md` first if you're picking this up cold — it's the one page
 | [`docs/TRANSCRIPTS.md`](docs/TRANSCRIPTS.md)                 | **Five verbatim agent exchanges from Run 2**, generated from the saved JSON responses rather than retyped — deterministic exposure, retrieval with cited complaint ids, a write reaching the lakehouse, graceful degradation after the index was deleted, and what the endpoint returns right now |
 | [`docs/DEMO.md`](docs/DEMO.md)                               | **Start here to look around** — pre-flight, the ten beats, numbers with sources, what not to claim |
 | [`docs/RUNBOOK.md`](docs/RUNBOOK.md)                          | **How to run it** — local dev, deploying, and operating the live resources: restoring the AI Search index, the agent endpoint, and the App, in that order, with exact commands |
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)               | The living spec — what the system *is*, kept true with the code |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)               | The living spec — what the system *is*, kept true with the code, including §11's rejected/deferred alternatives |
 | [`docs/API.md`](docs/API.md)                                 | Every console REST endpoint and every external API this project consumes, one page |
 | [`docs/STATUS.md`](docs/STATUS.md)                           | Where the build has got to, updated every session |
 | [`docs/ISSUES.md`](docs/ISSUES.md)                           | Every problem hit during the build, root cause, resolution — append-only |
-| [`docs/ENHANCEMENTS.md`](docs/ENHANCEMENTS.md)               | Evaluated backlog: adopted, deferred, or rejected, with reasons |
-| [`PLAN.md`](PLAN.md)                                         | Phase sequencing and definitions of done |

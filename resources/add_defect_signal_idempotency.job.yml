@@ -1,14 +1,10 @@
 # Creates ux_fg_defect_signal_agent_active — one OPEN agent signal per (actor, series,
 # component), so a retried or double-clicked `open_defect_signal` cannot write the same
-# observation twice (I-110 #6, from the second external repo review).
+# observation twice (I-110).
 #
-# Bound like every other schema migration on this table: `create_remaining_tables` makes
-# `fleetguard_defect_signal`, `add_defect_signal_provenance` adds its source/opened_by
-# columns, and this adds its uniqueness rule — so a rebuild from empty has a runnable step
-# for each. An unbound migration is a constraint that exists only in whoever ran it once
-# (the mistake corrected for `create_remaining_tables` on 2026-09-11).
-#
-# Idempotent: `CREATE UNIQUE INDEX IF NOT EXISTS`, and the notebook's proofs all run inside
+# Bound like every other schema migration on this table, so a rebuild from empty has a
+# runnable step for it rather than a constraint that exists only in whoever ran it once.
+# Idempotent (`CREATE UNIQUE INDEX IF NOT EXISTS`); the notebook's proofs run inside
 # savepoints that are rolled back.
 #
 # The `environments` block is load-bearing: for serverless jobs the dependency list lives in

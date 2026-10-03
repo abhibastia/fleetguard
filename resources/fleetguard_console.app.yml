@@ -1,64 +1,27 @@
 # Databricks App: the FleetGuard operations console.
 #
-# THIS FILE EXISTS TO KILL I-083. The App's OBO scopes are the single most expensive piece of
-# configuration in the project — a `user_authorization: scopes:` block in `app/backend/app.yaml`
-# is **silently ignored**, the app deploys clean, and every Lakebase route returns
-# `403 Invalid scope, required scopes: postgres`. The working fix was a CLI invocation
-# (`databricks apps update --json '{"user_api_scopes":[...]}'`) that existed nowhere in the
-# repo, only quoted inside a comment. A rebuild from source produced a broken app. It is now
-# declared, version-controlled, and re-asserted on every `bundle deploy`.
+# OBO scopes are declared here, not in app.yaml's `user_authorization:` block — that form is
+# silently ignored and every Lakebase route 403s (I-083). Must be re-granted after any change
+# AND the app restarted (identical 403 either way, I-086); each user's consent is also sticky
+# and does not widen on its own — see docs/ARCHITECTURE.md §8a for the full consent-fix path.
 #
 #   postgres       -> generate_database_credential + get_endpoint (every Lakebase read/write)
 #   sql            -> SQL warehouse, for the routes that query UC rather than Postgres
 #   model-serving  -> POST /serving-endpoints/.../invocations, from the chat panel
-#   vector-search  -> get_index, for /api/readyz's index check (ADDED 2026-09-30, I-123)
+#   vector-search  -> get_index, for /api/readyz's index check (I-123)
 #
-# `vector-search` was missing until the first live run of `/api/readyz`, on free edition. The
-# index check is not optional decoration: it exists because an index can report `ready: true`
-# while being SHORT (I-105 — a sync silently restarting from zero answers every query without
-# erroring). Without the scope it returned
-# `PermissionDenied: Provided OAuth token does not have required scopes: vector-search` and,
-# because that check fails closed, **`/api/readyz` could never return 200 through the App on
-# either target.** A readiness endpoint structurally incapable of going green is worse than
-# none, because the first person to see the 503 debugs the index instead of the scope list.
-#
-# Proved to be the App's cap rather than the caller's token: the *same* bearer token returned
-# HTTP 200 calling `/api/2.0/vector-search/indexes/...` directly, and 403 through the App. The
-# Apps ingress downscopes the forwarded token to this list.
-#
-# TWO THINGS THIS FILE STILL CANNOT DO, both from I-086 — declaring the scopes is necessary
-# and not sufficient:
-#   1. **The app must be restarted after a scope change.** Granted-but-not-restarted returns
-#      the identical 403 as never-granted. There is no signal distinguishing them.
-#   2. **Each user must consent, and consent is sticky.** It is stored per (user, app) and does
-#      NOT widen when this list widens. Anyone who opened the app before a scope was added
-#      keeps a defaults-only grant forever, through restarts and re-logins. Fix is
-#      self-service: `DELETE /api/2.0/oauth-app-integrations/<oauth2_app_client_id>/user-consent/me`
-#      then reopen in an INCOGNITO window (revocation does not invalidate tokens already
-#      issued, ~1 h). This app's client id is ed81b232-1eff-44ee-a422-ac522cf38de9.
-#
-# NO `config:` BLOCK, DELIBERATELY. The bundle *can* carry `command` and `env`, and doing so
-# overrides `app/backend/app.yaml` — which holds ~90 lines of prose explaining why each value
-# is what it is (the auth-mode trust model, what the approver list costs per approval, the
-# consent trap above). Duplicating those five env vars here would create two sources of truth
-# for runtime config with no warning when they disagree. **The bundle owns identity, scopes and
-# permissions; `app.yaml` owns runtime configuration.** Do not "helpfully" merge them.
-#
-# NO `resources:` BLOCK EITHER, and that is a design claim, not an omission. The App holds no
-# privileges of its own: `db.py` mints its Lakebase credential from the *caller's* forwarded
-# token and `chat.py` calls the serving endpoint with the caller's token, so the app's service
-# principal needs no `database` or `serving-endpoint` resource. Every read and write runs as
-# the signed-in human and Postgres RLS applies to them exactly as it does locally.
+# No `config:` block: it would override app/backend/app.yaml's own env-var documentation,
+# creating two sources of truth for runtime config. This file owns identity/scopes/permissions
+# only. No `resources:` block either: the App holds no privileges of its own (every Lakebase
+# and serving-endpoint call runs under the caller's forwarded token, never the app's).
 
 resources:
   apps:
     fleetguard_console:
       name: fleetguard-console
       description: FleetGuard operations console — FastAPI serving /api/* and the built React SPA from one process.
-      # `app/backend/` is the deploy root so `fleetguard_api` is importable without `--app-dir`.
-      # The React console under `fleetguard_api/console/` is COMMITTED, not built here: the Apps
-      # runtime has no Node. Re-run `./scripts/build_console.sh` after any change under
-      # `app/frontend/`, or this ships stale UI while every test still passes.
+      # React console under fleetguard_api/console/ is COMMITTED, not built here (Apps has no
+      # Node). Re-run ./scripts/build_console.sh after any app/frontend/ change.
       source_code_path: ../app/backend
 
       user_api_scopes:
@@ -68,20 +31,12 @@ resources:
         - vector-search
 
       lifecycle:
-        # `bundle destroy` would take the demo with it. The App is the primary demoable
-        # workflow and its URL is published in README and DEMO.
-        prevent_destroy: true
+        prevent_destroy: true  # bundle destroy would take the demo with it
 
-      # WHO MAY OPEN AND START THE APP. Distinct from who may APPROVE — that is
-      # `FLEETGUARD_APPROVERS` in app.yaml, enforced in application logic, and a workspace
-      # admin does not bypass it. Deliberately NO base `permissions:` list here — each target
-      # declares its own ACL under `databricks.yml`'s `targets.<name>.resources.apps.
-      # fleetguard_console.permissions`. A target-level resource override on a list field
-      # APPENDS to a base-file list rather than replacing it (measured 2026-09-25: prod's four
-      # abhi-cohort emails aren't valid principals in the free-edition account, so appending
-      # onto them there would fail the deploy outright) — leaving the base list empty and
-      # letting each target supply its own is append-to-empty, which is a full list in
-      # practice. A `${var.x}`-style whole-field variable substitution was tried first and
-      # rejected by this CLI version ("cannot interpolate non-primitive value of type sequence
-      # into string") — that schema-advertised capability doesn't work here, so don't reach
-      # for it again without re-testing against a newer CLI.
+      # Deliberately no base `permissions:` list — each target in databricks.yml supplies its
+      # own ACL. A target-level override on a list field APPENDS rather than replaces, so an
+      # empty base list is what makes a per-target ACL work instead of accumulating across
+      # targets (prod's abhi-cohort emails aren't valid principals in free_edition).
+      # `${var.x}` substitution for this whole list was tried and rejected by this CLI version
+      # ("cannot interpolate non-primitive value of type sequence into string") — don't retry
+      # without checking a newer CLI first.

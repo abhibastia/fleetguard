@@ -1,21 +1,11 @@
-# RAG retrieval evaluation — the measurement, not the wiring.
+# RAG retrieval evaluation — the measurement, not the wiring. Only produces numbers while
+# `complaint_chunk_idx` is live (a costed window), so it's bound here but runs alongside the
+# index rebuild it depends on.
 #
-# This job only produces numbers while `complaint_chunk_idx` is live, which is a costed window
-# (~$6.72/day, and billing runs 24 h past the last index delete). So it is bound here now, in
-# a free offline session, and first RUN in Run 2 alongside the index rebuild it depends on.
-# Binding it early is the point: the alternative is writing bundle YAML at 11pm on 2 October.
-#
-# `catalog`/`schema` ARE passed below — they select which target's tables to read, the same
-# ${var.catalog}/${var.schema} every other widget-ized job already uses, not a value `bundle
-# generate` could pin from a live run (I-098's risk was a *model version* widget, which this
-# notebook does not have). Missing entirely until a free_edition end-to-end test hit
-# `ResourceDoesNotExist: bootcamp_students.fleetguard.complaint_chunk_idx` (hardcoded).
-#
-# SEED, unlike catalog/schema, stays a module constant and is NOT a base parameter — it exists
-# precisely so two runs over the same index are comparable, and a run with a different seed is
-# a different evaluation rather than a repeat of this one.
-#
-# Timeout is 1 h: 200 index queries plus three behavioural checks. If it approaches that, the
+# `catalog`/`schema` are passed as base_parameters rather than hardcoded, so the notebook
+# reads whichever target's tables the job was deployed against. `seed` stays a module
+# constant, not a parameter — a different seed is a different evaluation, not a repeat.
+# Timeout is 1h: 200 index queries plus three behavioural checks; if it approaches that, the
 # index is the problem, not the notebook.
 
 resources:
