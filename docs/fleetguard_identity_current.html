@@ -79,7 +79,7 @@
 <body>
 <div class="page">
 
-  <h1>FleetGuard</h1><span class="sub">Identity &amp; authorisation architecture</span><span class="live">AS-BUILT · 2026-09-08</span>
+  <h1>FleetGuard</h1><span class="sub">Identity &amp; authorisation architecture</span><span class="live">AS-BUILT · 2026-10-02</span>
   <p class="strap">One swappable auth seam, two token providers, one auto-provisioned service-principal identity that cannot reach the database. Tracks <span class="m">ARCHITECTURE.md</span> §8a/§8b — supersedes <span class="m">fleetguard_identity.html</span>, the frozen 2026-08-31 proposal diagram (which had this backwards: a Render-hosted console as Phase 1 primary, Databricks Apps as Phase 2). Render and its two providers were removed 2026-09-10 — see the <span class="m">deploy/render</span> branch.</p>
   <div class="rule"></div>
 
@@ -103,9 +103,9 @@
         <p><span class="m">fleetguard_vehicle</span> RLS ENABLE+FORCE</p>
         <p>evaluated at the data layer, frontend cannot bypass it</p>
         <p class="k">fail-open — nobody enrolled in depot scoping yet</p></div>
-      <div class="st"><span class="tag warn">I-084 open</span><div class="sh"><span class="sn">5</span>Operator console</div>
+      <div class="st"><div class="sh"><span class="sn">5</span>Operator console</div>
         <p>signal queue · exposure ranking · approve · assign</p>
-        <p class="k">verified for the <b>owner's identity only</b> — no second identity tested</p></div>
+        <p class="k">verified for the owner's identity, and a <b>second identity browsed every page</b> (2026-09-11)</p></div>
     </div>
   </div>
 

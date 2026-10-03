@@ -1,6 +1,6 @@
 ---
 name: doc-fact-checker
-description: Use PROACTIVELY before any URL, API endpoint, product/feature name, or specific technical claim is written into docs/FleetGuard_Proposal.md, PLAN.md, or CLAUDE.md. Also invoke when reviewing an already-written claim in those files that looks specific enough to be wrong (a URL, an endpoint path, a column name, a config key, a product name). Verifies claims against live systems (curl, databricks CLI) or current docs (WebFetch/WebSearch) rather than trusting training data or cached skill references. Do NOT use for general coding, editing, or non-factual writing tasks.
+description: Use PROACTIVELY before any URL, API endpoint, product/feature name, or specific technical claim is written into PLAN.md or CLAUDE.md. Also invoke when reviewing an already-written claim in those files that looks specific enough to be wrong (a URL, an endpoint path, a column name, a config key, a product name). Verifies claims against live systems (curl, databricks CLI) or current docs (WebFetch/WebSearch) rather than trusting training data or cached skill references. Do NOT use for general coding, editing, or non-factual writing tasks.
 tools: Read, Grep, Glob, Bash, WebFetch, WebSearch
 model: sonnet
 ---

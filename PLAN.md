@@ -1,8 +1,8 @@
 # FleetGuard — Build Action Plan
 
-Turns the delivery plan in `docs/FleetGuard_Proposal.md` (§11) into concrete, sequenced,
-verifiable work. Grounded in what was already confirmed live before build start (see
-"Starting point" below) — not re-derived from scratch.
+Turns the original delivery plan into concrete, sequenced, verifiable work. Grounded in what
+was already confirmed live before build start (see "Starting point" below) — not re-derived
+from scratch.
 
 > **For current status, read `docs/STATUS.md`** — one page covering phase progress,
 > what exists in the workspace, measured results, cost, and open decisions. This file is

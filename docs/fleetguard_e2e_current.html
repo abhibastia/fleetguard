@@ -71,7 +71,7 @@
   .riskh{background:#fbf3e6; color:var(--warn); font-size:10.5px; font-weight:700;
          letter-spacing:.8px; text-transform:uppercase; padding:7px 13px;
          border-bottom:1px solid #eeddb8}
-  .riskgrid{display:grid; grid-template-columns:repeat(3,1fr); gap:20px; padding:13px 15px 15px}
+  .riskgrid{display:grid; grid-template-columns:repeat(2,1fr); gap:20px; padding:13px 15px 15px}
   .riskgrid h4{font-size:11.5px; font-weight:700; margin-bottom:3px; color:var(--ink)}
   .riskgrid p{font-size:11px; color:var(--mut); line-height:1.45}
 
@@ -91,7 +91,7 @@
 <body>
 <div class="page">
 
-  <h1>FleetGuard</h1><span class="sub">Vehicle defect early warning &amp; recall response — end-to-end architecture</span><span class="live">AS-BUILT · 2026-09-08</span>
+  <h1>FleetGuard</h1><span class="sub">Vehicle defect early warning &amp; recall response — end-to-end architecture</span><span class="live">AS-BUILT · 2026-10-02</span>
   <p class="strap">Real NHTSA defect data · Lakeflow → AI Search → MLflow → Agent Framework → Lakebase → CDF → gold facts · Databricks App (primary) · local server (development). Tracks <span class="m">ARCHITECTURE.md</span> — supersedes <span class="m">fleetguard_e2e.html</span>, the frozen 2026-08-31 proposal diagram.</p>
   <div class="rule"></div>
 
@@ -129,10 +129,6 @@
         <p>400 generated VINs independently vPIC-verified, 400/400 exact</p>
       </div>
 
-      <div class="card dash"><span class="badge">Cut</span><div class="ch">2nd connector</div>
-        <p class="strike">CPSC SaferProducts · USDA FSIS</p>
-        <p>deliberately dropped for schedule (Phase 12)</p>
-      </div>
     </div>
 
     <!-- 2 -->
@@ -204,10 +200,11 @@
       <div class="top"></div><div class="colhead">4 Agent · Lakebase</div>
 
       <div class="card"><span class="badge done">OLTP</span><div class="ch">Lakebase · managed Postgres</div>
-        <p class="m">vehicle · depot · defect_signal · recall_campaign</p>
+        <p class="m">vehicle · depot · depot_assignment · defect_signal · recall_campaign</p>
         <p class="m">vehicle_exposure · service_campaign · work_order</p>
         <p class="m">agent_action · approval · audit_log · technician · watchlist</p>
-        <p>13 tables, all <span class="m">REPLICA IDENTITY FULL</span></p>
+        <p class="m">public_summary · recall_api_poll · recall_api_alert</p>
+        <p>16 tables, all <span class="m">REPLICA IDENTITY FULL</span></p>
       </div>
 
       <div class="card"><div class="ch">ResponsesAgent · 5 read tools</div>
@@ -235,7 +232,7 @@
 
       <div class="card"><div class="ch">MLflow 3 · agent tracing</div>
         <p>traces, tool calls, token cost (inference table)</p>
-        <p class="k">v6 serving · scale-to-zero on</p>
+        <p class="k">v8 · stopped between sessions, scale-to-zero when live</p>
       </div>
     </div>
 
@@ -260,10 +257,10 @@
         <p>on the existing SQL warehouse, no new compute</p>
       </div>
 
-      <div class="card em" style="border-color:#9fb4c9"><span class="badge warn">I-084 open</span>
+      <div class="card em" style="border-color:#9fb4c9"><span class="badge done">Verified</span>
         <div class="ch">Databricks App · primary surface</div>
         <p class="k"><span class="m">fleetguard-console</span> — OBO, live Lakebase, real OBA</p>
-        <p>verified end to end under the <b>owner's identity only</b></p>
+        <p>verified end to end under the owner's identity, and a <b>second identity browsed every page</b> (2026-09-11)</p>
         <p>kept <span class="m">STOPPED</span> between sessions — start ~2 min before use</p>
       </div>
 
@@ -281,18 +278,17 @@
       <div><h4>Unity Catalog</h4><p><span class="m">bootcamp_students.fleetguard</span>, one schema — catalog creation unavailable here</p></div>
       <div><h4>Postgres RLS</h4><p><span class="m">fleetguard_vehicle</span> ENABLE+FORCE, proved toggled — fail-open, nobody enrolled yet</p></div>
       <div><h4>Golden set + MLflow Eval</h4><p>765 labelled pairs, precision/recall published on Evidence</p></div>
-      <div><h4>Testing</h4><p>289 unit tests + 24 live-workspace integration tests, every router covered</p></div>
+      <div><h4>Testing</h4><p>646 backend tests (24 skipped without live credentials) + 156 frontend tests, every router covered</p></div>
       <div><h4>Auth seam</h4><p>2 token providers, one swappable seam — removing the other two changed <b>no</b> handler</p></div>
       <div><h4>Audit</h4><p><span class="m">fleetguard_audit_log</span>, before/after state, CSV export, append-only</p></div>
     </div>
   </div>
 
   <div class="risk">
-    <div class="riskh">Open, as of 2026-09-08 — stated rather than hidden</div>
+    <div class="riskh">Open, as of 2026-10-02 — stated rather than hidden</div>
     <div class="riskgrid">
-      <div><h4>I-084 · single-identity verification</h4><p>The App works end to end for the owner. No second real identity has signed in — unknown whether Lakebase auto-provisions a Postgres role for anyone else.</p></div>
-      <div><h4>Approvers gate excludes judges</h4><p><span class="m">FLEETGUARD_APPROVERS</span> holds the owner's email only — a judge can read everything and gets 403 on approve, by choice not oversight.</p></div>
-      <div><h4>E-01 · AI Gateway on the wrong endpoint</h4><p>Agent endpoints deployed via <span class="m">agents.deploy()</span> do not support <span class="m">ai_gateway</span> guardrails — only inference tables. The proposal's PII-guardrail claim needs a wrapper LLM endpoint to become true.</p></div>
+      <div><h4>A1 · fresh-identity robustness (untested)</h4><p>A second identity has signed in and browsed every page (2026-09-11), retiring the demo-day risk. Unconfirmed: whether Lakebase auto-provisions a Postgres role for an identity that has <b>never</b> used the app before — a narrower robustness item, off the critical path.</p></div>
+      <div><h4>Approvers gate excludes other reviewers</h4><p><span class="m">FLEETGUARD_APPROVERS</span> holds the owner's email only — anyone else can read everything and gets 403 on approve, by choice not oversight.</p></div>
     </div>
   </div>
 

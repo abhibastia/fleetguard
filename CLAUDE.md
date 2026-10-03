@@ -30,10 +30,6 @@ order they must happen in.
 **`docs/ARCHITECTURE.md` is the living spec — what the system actually is.** Keep it true;
 update it in the same commit as the code that changes it.
 
-`docs/FleetGuard_Proposal.md` is **FROZEN** at 2026-08-31 — the design as proposed, never
-updated. Do not "fix" it to match later findings: the gap between proposal and architecture
-is the record of what was learned, and its header tabulates the known contradictions.
-
 Build sequence in `PLAN.md`; **every problem hit during development is logged in
 `docs/ISSUES.md` — add to it whenever something breaks or turns out to be wrong, especially
 anything that failed silently.**
@@ -624,17 +620,15 @@ claim you then have to keep true; rejected experiments belong in `src/` and `doc
   asymmetry is itself worth knowing.
 
 
-- **Never write a specific URL, API endpoint, or product/feature name into
-  `docs/FleetGuard_Proposal.md` without verifying it against a live system or
-  current docs first.** This project has already shipped two rounds of confidently
-  wrong technical claims (a dead recall-data URL, a fabricated NHTSA conditional-
-  request mechanism, a feature-name flip-flop) that only surfaced because someone
-  checked. Assume the same risk applies to any new claim.
+- **Never write a specific URL, API endpoint, or product/feature name into a project doc
+  without verifying it against a live system or current docs first.** This project has
+  already shipped two rounds of confidently wrong technical claims (a dead recall-data URL,
+  a fabricated NHTSA conditional-request mechanism, a feature-name flip-flop) that only
+  surfaced because someone checked. Assume the same risk applies to any new claim.
 - Prefer stating a number as "estimated, to be measured" over asserting it, unless
-  it's been checked against a live system this session. The proposal's own backtest
+  it's been checked against a live system this session. `docs/EVIDENCE.md`'s backtest
   and latency sections follow this discipline — new additions should too.
-- `PLAN.md` is the source of truth for build sequencing and phase definitions of
-  done. Keep it in sync with the proposal if either changes.
+- `PLAN.md` is the source of truth for build sequencing and phase definitions of done.
 - **CI runs on every push and PR** (`.github/workflows/ci.yml`, added 2026-09-09). Run the same
   checks locally before committing — **~45 s for 666 backend tests, not the "about two seconds"
   it used to be**: `tests/pipelines/` (2026-09-17) starts a local Spark session and JVM startup

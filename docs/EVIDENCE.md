@@ -1,6 +1,6 @@
 # Evidence map
 
-**Last updated 2026-09-20.** One page pointing at the concrete artefact behind every
+**Last updated 2026-10-03.** One page pointing at the concrete artefact behind every
 claim — file, table, job, measured number, screenshot.
 
 It exists because the demo surfaces are **asleep between sessions on purpose**: the
@@ -68,8 +68,8 @@ resource woken up first.
 | Schema                  | 16 `fleetguard_*` tables. Column-level reference: ARCHITECTURE §4.6 |
 | Keys                    | Primary key on every table; `BIGSERIAL` where there is no natural key |
 | Constraints             | `CHECK` on work-order status, non-negative cost, signal source, approval decision, exposure-has-a-source; partial unique indexes for campaign idempotency and watchlist de-duplication |
-| Referential integrity   | **14 foreign keys** (ARCHITECTURE §4.6a), added 2026-09-20 after scanning all 14 candidate relationships clean against live data — zero orphans across 118,323 exposure rows. No `CASCADE` anywhere; one `SET NULL`; `audit_log` deliberately excluded because its `entity_id` is polymorphic and an audit row must outlive what it describes |
-| Indexes                 | **23** named `ix_fg_*`/`ux_fg_*`, including five added specifically as FK child indexes |
+| Referential integrity   | **23 foreign keys** (ARCHITECTURE §4.6a) as of 2026-10-03, up from the 14 scanned clean against live data on 2026-09-20 (zero orphans across 118,323 exposure rows at that scan) as new tables were added since. No `CASCADE` anywhere; one `SET NULL`; `audit_log` deliberately excluded because its `entity_id` is polymorphic and an audit row must outlive what it describes |
+| Indexes                 | **24** named `ix_fg_*`/`ux_fg_*`, including five added specifically as FK child indexes |
 | Timestamps / audit      | `created_at`/`updated_at` defaults throughout; `fleetguard_audit_log` is append-only with `before_state`/`after_state` JSONB |
 | Governance              | Postgres RLS on `fleetguard_vehicle`, `ENABLE` **and** `FORCE` (the owner is not exempt). Fail-open by construction and nobody is enrolled — the mechanism is real, the enrolment is future work, and ARCHITECTURE §8a says so |
 | App reads and writes it | Every authenticated route goes through `db.py connect(principal)` under the **caller's own** OBO token |
@@ -124,7 +124,7 @@ resource woken up first.
 | Views                 | 10 — Home, Recall queue, Emerging, Evidence, Launched, Work orders, Audit log, Depots, Trends, Recall API — plus the Assistant dock |
 | States                | Every view handles gated (401) → first-load error → loading skeleton → empty dataset → no-match-after-filter, in that order |
 | Consequential actions | Approval is a confirmation flow behind `FLEETGUARD_APPROVERS`, writes campaign + N work orders + audit in **one transaction**, and returns `409` naming the existing campaign on a re-approval (I-063) |
-| Tests                 | **147 frontend** (23 files) + **478 backend** |
+| Tests                 | **156 frontend** (23 files) + **646 backend** (24 skipped without live credentials) |
 | Screenshots           | `scripts/capture_screenshots.py` — all 10 views, **both themes**, from live Lakebase. Output is gitignored; regenerate before release (see the box at the top) |
 
 ### 7. Deployed application
@@ -132,7 +132,7 @@ resource woken up first.
 |                                      |  |
 | ------------------------------------ | ---------- |
 | URL                                  | `https://fleetguard-console-1352785079224954.aws.databricksapps.com` |
-| Deployment                           | Declarative Automation Bundle — `databricks.yml` + `resources/` own the App, the pipeline, the dashboard and **29 jobs**, all bound to existing objects |
+| Deployment                           | Declarative Automation Bundle — `databricks.yml` + `resources/` own the App, the pipeline, the dashboard and **31 jobs** (`ls resources/*.job.yml | wc -l` — count it, this has drifted before), all bound to existing objects |
 | Setup documented                     | README *Deploying*; ARCHITECTURE §9.1 lists the **five** things the bundle does not cover |
 | Secrets / config                     | No secrets in the repo. The App holds **no privileges of its own**: `db.py` mints the Lakebase credential from the caller's forwarded token, so every read runs as the signed-in human |
 | Auth                                 | Databricks Apps OBO; scopes declared as code in `resources/fleetguard_console.app.yml` |

@@ -24,7 +24,7 @@ FleetGuard gives the team two capabilities instead of one:
 
 ![FleetGuard end-to-end architecture](docs/fleetguard_e2e_current.png)
 
-*As-built, tracks `docs/ARCHITECTURE.md`. See also the [identity & authorisation diagram](docs/fleetguard_identity_current.png) and the [frozen 2026-08-31 proposal diagrams](docs/FleetGuard_Proposal.md) for what changed and why.*
+*As-built, tracks `docs/ARCHITECTURE.md`. See also the [identity & authorisation diagram](docs/fleetguard_identity_current.png).*
 
 ## Live demo
 
@@ -253,5 +253,4 @@ Read `docs/STATUS.md` first if you're picking this up cold — it's the one page
 | [`docs/STATUS.md`](docs/STATUS.md)                           | Where the build has got to, updated every session |
 | [`docs/ISSUES.md`](docs/ISSUES.md)                           | Every problem hit during the build, root cause, resolution — append-only |
 | [`docs/ENHANCEMENTS.md`](docs/ENHANCEMENTS.md)               | Evaluated backlog: adopted, deferred, or rejected, with reasons |
-| [`docs/FleetGuard_Proposal.md`](docs/FleetGuard_Proposal.md) | What was proposed, before the build — **frozen**, not updated as facts changed |
 | [`PLAN.md`](PLAN.md)                                         | Phase sequencing and definitions of done |
