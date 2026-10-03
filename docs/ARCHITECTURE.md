@@ -21,12 +21,10 @@ Companion documents, each with one job:
 Every number below is measured against the live workspace. Anything not yet measured is
 marked **(planned)** and carries no figure.
 
-**Diagrams (as-built, tracks this file):** [`fleetguard_e2e_current.html`](fleetguard_e2e_current.html)
-/ [`.png`](fleetguard_e2e_current.png) (system architecture) ·
-[`fleetguard_identity_current.html`](fleetguard_identity_current.html) /
-[`.png`](fleetguard_identity_current.png) (identity & authorisation, §8a/§8b). The similarly-named
-files without `_current` are the **frozen 2026-08-31 proposal diagrams** — do not confuse the two;
-update these when this file changes, never those.
+**Diagrams (as-built, tracks this file):** [`fleetguard_e2e_current.png`](fleetguard_e2e_current.png)
+(system architecture) · [`fleetguard_identity_current.png`](fleetguard_identity_current.png)
+(identity & authorisation, §8a/§8b). Update these when this file changes. The original
+2026-08-31 proposal diagrams were retired 2026-09-16 and no longer exist in the repo.
 
 ---
 
@@ -802,7 +800,7 @@ Two surfaces, one codebase, decided 2026-09-01 (E-12/E-13). **Narrowed to these 
 
 | Surface                                                                             | Auth mode                                            | Data source   | State |
 | ----------------------------------------------------------------------------------- | ---------------------------------------------------- | ------------- | ---------- |
-| **Databricks App** `fleetguard-console` in `abhi` — *the operator console, primary* | `databricks-apps` — `x-forwarded-access-token` (OBO) | live Lakebase | **Built and verified 2026-09-08**, kept `STOPPED` between sessions (`apps start`, ~2 min). Verified under the **owner's identity only** — see **I-084**, the open risk |
+| **Databricks App** `fleetguard-console` in `abhi` — *the operator console, primary* | `databricks-apps` — `x-forwarded-access-token` (OBO) | live Lakebase | **Built and verified 2026-09-08**, kept `STOPPED` between sessions (`apps start`, ~2 min). Verified under the owner's identity, and a **second identity browsed every page** (2026-09-11), retiring I-084's demo-day risk |
 | Local server — development and verification                                         | `static-dev` — developer's own token                 | live Lakebase | `scripts/run_local_static_dev.sh`; screenshotted end to end |
 
 `FLEETGUARD_AUTH_MODE` accepts exactly these two values. It is required, never inferred: an
@@ -1137,7 +1135,7 @@ unrecognised value raises at startup rather than falling through.
 
 | mode              | provider                       | identity arrives via                                                               | status |
 | ----------------- | ------------------------------ | ---------------------------------------------------------------------------------- | ---------- |
-| `databricks-apps` | `ForwardedHeaderTokenProvider` | `x-forwarded-access-token`, injected by the Apps ingress                           | verified live 2026-09-08 — **owner identity only, see I-084** |
+| `databricks-apps` | `ForwardedHeaderTokenProvider` | `x-forwarded-access-token`, injected by the Apps ingress                           | verified live 2026-09-08, plus a **second identity 2026-09-11** (I-084 retired) |
 | `static-dev`      | `StaticTokenProvider`          | `databricks auth token --profile abhi`, held statically (1 h life, I-053-adjacent) | used daily |
 
 Two more providers existed until 2026-09-10 — `SessionTokenProvider` (`render-u2m`, U2M OAuth

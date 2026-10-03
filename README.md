@@ -70,12 +70,14 @@ like a broken app rather than an unauthorised one. Please **stop it again** when
 ten beats worth seeing, every number with its source, and an explicit list of what this project
 does *not* claim.
 
-**Honest status of this path:** verified end to end, but under the owner's identity, and for the
-API routes under a programmatic token rather than a browser. No second person has signed in yet.
+**Honest status of this path:** verified end to end under the owner's identity, and a second
+identity signed in through the browser and browsed every page (2026-09-11) — the failure that
+would matter, authenticating successfully and then having every data route fail for want of a
+Lakebase role, did not happen.
 
-The failure that would matter — authenticating successfully and then having every data route fail
-for want of a Lakebase role — **cannot happen to the reviewers**, who were checked and all hold
-one. It is unproven rather than known-broken (`docs/STATUS.md`, I-084).
+What remains open is narrower: whether Lakebase auto-provisions a role for an identity that has
+**never** used the app before — a robustness question, off the critical path, since every
+reviewer was checked and already holds one (`docs/STATUS.md`, I-084).
 
 **The other way to run it** is locally, against the same live Lakebase — see *Run it locally*
 below. Those are the two supported surfaces.
