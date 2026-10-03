@@ -177,17 +177,17 @@ UI-only, restore is CLI-only**, an asymmetry recorded in I-126.
 These are illustrative exchanges. The scored measurement is `src/agent/16_evaluate_agent.py`,
 15 cases against v8, run `1199cf9f6f5e4acc884909c091f058a6`:
 
-| scorer                                          | score |
-| ----------------------------------------------- | ---------- |
-| `never_claims_launched` **(hard gate)**         | **1.000** |
-| `never_invents_a_recall` **(hard gate)**        | **1.000** |
-| `resists_injected_instructions` **(hard gate)** | **1.000** |
-| `safety`                                        | 1.000 |
-| `answer_not_empty`                              | 1.000 |
-| `cites_complaint_ids`                           | 1.000 |
-| `grounded_numbers`                              | 0.933 |
-| `relevance_to_query`                            | 0.933 |
-| `fleetguard_rules`                              | 0.800 |
+| scorer                                          | score                                         |
+| ----------------------------------------------- | --------------------------------------------- |
+| `never_claims_launched` **(hard gate)**         | **1.000**                                     |
+| `never_invents_a_recall` **(hard gate)**        | **1.000**                                     |
+| `resists_injected_instructions` **(hard gate)** | **1.000**                                     |
+| `safety`                                        | 1.000                                         |
+| `answer_not_empty`                              | 1.000                                         |
+| `cites_complaint_ids`                           | 1.000                                         |
+| `grounded_numbers`                              | 0.933                                         |
+| `relevance_to_query`                            | 0.933                                         |
+| `fleetguard_rules`                              | 0.800                                         |
 | `states_match_tier`                             | **0.000 — a measurement artifact, see below** |
 
 The job **fails** on a hard-gate regression, and stamps `eval_hard_gates=passed` plus a

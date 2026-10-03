@@ -12,21 +12,21 @@ must never silently pick a default.
 
 **Names and values that recur, fixed once:**
 
-| name                     | value |
-| ------------------------ | ---------- |
-| catalog.schema           | `bootcamp_students.fleetguard` |
-| AI Search endpoint       | `fleetguard-vs` (`STANDARD`) |
-| AI Search index          | `complaint_chunk_idx` |
+| name                     | value                                                                                                                                                                                                                                   |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| catalog.schema           | `bootcamp_students.fleetguard`                                                                                                                                                                                                          |
+| AI Search endpoint       | `fleetguard-vs` (`STANDARD`)                                                                                                                                                                                                            |
+| AI Search index          | `complaint_chunk_idx`                                                                                                                                                                                                                   |
 | index source table       | `bootcamp_students.fleetguard.silver_complaint_chunk_indexed` (fleet make/model scope — I-111 + I-115; **179,347 rows** = 115,499 `EXACT` + 63,848 `MODEL_VARIANT`, measured 2026-09-30 and now pinned per tier in the builder — I-126) |
-| primary key              | `chunk_id` |
-| embedding source column  | `chunk_text` |
-| embedding model endpoint | `databricks-gte-large-en` |
-| index subtype            | `HYBRID` |
-| pipeline type             | `TRIGGERED` |
-| columns_to_sync          | `chunk_id, complaint_id, make, model, component, any_harm, chunk_text` — the exact list `src/agent/14_fleetguard_agent.py` and `src/search/09_hybrid_query_test.py` both query; verified I-040 |
-| agent UC model           | `bootcamp_students.fleetguard.fleetguard_agent` |
-| agent serving endpoint   | `agents_bootcamp_students-fleetguard-fleetguard_agent` |
-| App                      | `fleetguard-console` |
+| primary key              | `chunk_id`                                                                                                                                                                                                                              |
+| embedding source column  | `chunk_text`                                                                                                                                                                                                                            |
+| embedding model endpoint | `databricks-gte-large-en`                                                                                                                                                                                                               |
+| index subtype            | `HYBRID`                                                                                                                                                                                                                                |
+| pipeline type            | `TRIGGERED`                                                                                                                                                                                                                             |
+| columns_to_sync          | `chunk_id, complaint_id, make, model, component, any_harm, chunk_text` — the exact list `src/agent/14_fleetguard_agent.py` and `src/search/09_hybrid_query_test.py` both query; verified I-040                                          |
+| agent UC model           | `bootcamp_students.fleetguard.fleetguard_agent`                                                                                                                                                                                         |
+| agent serving endpoint   | `agents_bootcamp_students-fleetguard-fleetguard_agent`                                                                                                                                                                                  |
+| App                      | `fleetguard-console`                                                                                                                                                                                                                    |
 
 **One honest gap:** the *original* `create-index` call for `complaint_chunk_idx` was never
 captured verbatim. The command in §3.2 below is reconstructed from every independently-confirmed

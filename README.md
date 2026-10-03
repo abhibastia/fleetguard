@@ -26,75 +26,59 @@ FleetGuard gives the team two capabilities instead of one:
 
 *As-built, tracks `docs/ARCHITECTURE.md`. See also the [identity & authorisation diagram](docs/fleetguard_identity_current.png).*
 
+**Terms used throughout these docs**, since the commands below name them bare:
+
+| Term                | What it is                                                                                                                                                                                                                       |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `abhi`              | The Databricks CLI profile for the primary, paid workspace this project deploys to and runs the live demo on. Every `--profile abhi` below means "the real deployment."                                                          |
+| `bootcamp_students` | The shared Unity Catalog catalog this workspace's metastore uses — shared with ~296 other students, not exclusive to this project. All of FleetGuard's own objects live in one schema inside it, `bootcamp_students.fleetguard`. |
+| `free-edition`      | A second, separate Databricks account used only for isolated agent/app testing. Never the submission deliverable — that's always `abhi`.                                                                                         |
+
 ## Live demo
 
 **Primary — Databricks App:** [`fleetguard-console`](https://fleetguard-console-1352785079224954.aws.databricksapps.com)
-— real per-user OBO: every query runs as *your* Databricks identity, not a service account
-and not a simulation, so Unity Catalog and Postgres apply their own rules to you rather than
-the app deciding what you may see.
+— real per-user OBO. Every query runs as *your* Databricks identity, not a service account,
+so Unity Catalog and Postgres apply their own access rules to you rather than the app deciding
+what you may see.
 
-**It is kept stopped between sessions** so it isn't billing idle compute, and it will not
-answer a cold URL. **Start it yourself — about two minutes:**
+**Kept stopped between sessions** to avoid billing idle compute, so it will not answer a cold
+URL. Start it yourself — about two minutes:
 
 ```bash
 databricks apps start fleetguard-console
 ```
 
-You'll then see an **OAuth consent screen** listing `postgres`, `sql`, `model-serving` and
-`vector-search`. Accept it; declining returns `403 Invalid scope` on every data page, which looks
-like a broken app rather than an unauthorised one. Please **stop it again** when you're done.
+You'll see an **OAuth consent screen** listing `postgres`, `sql`, `model-serving` and
+`vector-search`. Accept it — declining returns `403 Invalid scope` on every data page. Please
+**stop it again** when you're done.
 
-> ### The Assistant is currently OFFLINE, deliberately — everything else is live
+> ### The Assistant tab is offline; every other tab is live
 >
-> The agent's AI Search index (**179,347 chunks**) was deleted after the final verification run:
-> it bills ~$6.72/day and this project ran a two-window cost plan. **Every other tab is
-> unaffected** and reads live Lakebase.
+> The agent's AI Search index (179,347 chunks, ~$6.72/day to keep running) was deleted after
+> the final verification run to stop billing. Every other tab reads live Lakebase and is
+> unaffected.
 >
-> **There is no quick way to bring just the Assistant back**, and that is a platform constraint
-> rather than a choice. Model Serving validates the model's logged resource dependencies at
-> start, so with the index gone both `update-config` and the UI's Start button refuse outright
-> (*"Dependencies do not exist: table … complaint_chunk_idx"* — I-129). The index must be rebuilt
-> first: **~75 min measured**, then ~3 min for the endpoint.
+> The agent itself still answers deterministic questions correctly without the index — only
+> complaint *search* depends on it (`docs/TRANSCRIPTS.md` §4 shows this live). Model Serving
+> refuses to start the endpoint while the index it depends on is missing, so rebuilding the
+> index is the only way to bring the Assistant back; there is no faster path.
 >
-> **The agent itself is fine** — it answers deterministic questions correctly with the index
-> absent; only complaint *search* depends on it. See `docs/TRANSCRIPTS.md` §4 for exactly that,
-> run live after deletion.
+> **Stands in for a live Assistant:** [`docs/TRANSCRIPTS.md`](docs/TRANSCRIPTS.md) (five
+> verbatim exchanges), `docs/screenshots/` (22 stills plus a 7-beat walkthrough video), and a
+> scored evaluation (15 cases, all three safety hard gates at 1.000).
 >
-> **What stands in for it:** [`docs/TRANSCRIPTS.md`](docs/TRANSCRIPTS.md) (five verbatim
-> exchanges, generated from the saved responses), `docs/screenshots/` (22 stills including the
-> Assistant answering with cited complaint ids, plus a 7-beat walkthrough video), and the scored
-> evaluation — 15 cases, **all three safety hard gates 1.000**.
->
-> **To restore the full stack yourself:** [`docs/RUNBOOK.md`](docs/RUNBOOK.md) §3 has the exact
-> commands. Restore order is fixed — **AI Search index → agent serving endpoint → App**
-> (`docs/RUNBOOK.md` §3.2 → §3.3 → §3.7) — deleting the index makes the agent *undeployable*,
-> not merely degraded, so it must go first. Budget **~75 minutes** for the index, then ~3
-> minutes for the agent, then ~2 minutes for the App. All four reviewers hold `CAN_MANAGE` and
-> can start the App itself (`databricks apps start fleetguard-console`) without touching the
-> index or agent at all, if just that is needed.
+> **To restore it:** [`docs/RUNBOOK.md`](docs/RUNBOOK.md) §3 has the exact commands. Restore
+> order is fixed — AI Search index → agent endpoint → App (§3.2 → §3.3 → §3.7); the index must
+> go first. Budget ~75 min for the index, ~3 min for the agent, ~2 min for the App. All three
+> reviewers hold `CAN_MANAGE` and can start the App on its own, without touching the index or
+> agent, if that's all that's needed.
 
-**[`docs/DEMO.md`](docs/DEMO.md) is the guided tour** — pre-flight with measured timings, the
-ten beats worth seeing, every number with its source, and an explicit list of what this project
-does *not* claim.
+**[`docs/DEMO.md`](docs/DEMO.md) is the guided tour** — pre-flight steps, the ten beats worth
+seeing, every number with its source, and what this project does *not* claim.
 
-**Honest status of this path:** verified end to end under the owner's identity, and a second
-identity signed in through the browser and browsed every page (2026-09-11) — the failure that
-would matter, authenticating successfully and then having every data route fail for want of a
-Lakebase role, did not happen.
-
-What remains open is narrower: whether Lakebase auto-provisions a role for an identity that has
-**never** used the app before — a robustness question, off the critical path, since every
-reviewer was checked and already holds one (`docs/STATUS.md`, I-084).
-
-**The other way to run it** is locally, against the same live Lakebase — see *Run it locally*
-below. Those are the two supported surfaces.
-
-A third, a public Render deployment with its own OAuth login, was removed on 2026-09-10 and is
-preserved on the `deploy/render` branch; the `render-u2m` browser login it carried was never
-confirmed working, having stalled on an account-admin scope grant.
-
-The **Evidence** tab needs no identity on either surface — it's the published backtest result
-above, sourced from the same measurement.
+This console and a local dev server (see *Run it locally* below) are the two supported
+surfaces, both authenticating against the same live Lakebase. The **Evidence** tab needs no
+sign-in on either surface — it serves the published backtest result directly.
 
 ## How to review this
 
@@ -125,9 +109,9 @@ structurally different NHTSA datasets, joined to a 20,000-vehicle fleet registry
 genuine big-data claim and it is measured.
 
 **Velocity is deliberately not claimed:** the Postgres→Unity Catalog capture is 7.1–15.6 s, but
-the end-to-end business-event→analytics path measures **2.5–4.5 minutes**, because a
-`table_update` trigger has a hard 60-second platform floor on both its intervals (I-081), so
-sub-minute is not achievable on this path at all.
+the end-to-end business-event→analytics path measures **2.5–5 minutes**, because a
+`table_update` trigger has a hard 60-second platform floor on both its intervals — sub-minute
+is not achievable on this path at all.
 
 - **Ingestion → medallion pipeline** (Lakeflow Declarative Pipelines): NHTSA's complaint,
   recall, investigation, and TSB flat files → bronze → silver → gold, with a quarantine
@@ -139,9 +123,8 @@ sub-minute is not achievable on this path at all.
 - **Semantic retrieval**: Databricks AI Search, hybrid (BM25 + embedding) search. The
   lakehouse holds the full **2.2M+ complaint corpus**; the vector index is deliberately scoped
   to the make/model pairs this fleet operates — matched in the same `EXACT` / `MODEL_VARIANT`
-  tiers used everywhere else, so NHTSA's `F-250 SD` and vPIC's `F-250` retrieve as one vehicle
-  (I-115). Offline scale and online retrieval scope are separate numbers and are reported
-  separately.
+  tiers used everywhere else, so NHTSA's `F-250 SD` and vPIC's `F-250` retrieve as one vehicle.
+  Offline scale and online retrieval scope are separate numbers, reported separately.
 - **A registered, deployed agent** (Agent Framework, Model Serving), traced with MLflow and
   evaluated against a held-out golden set built from NHTSA's own recall text. Two of its seven
   tools write — always executed by the app under the caller's own identity, never by the
@@ -221,7 +204,7 @@ databricks apps start fleetguard-console --profile abhi           # if stopped, 
 databricks bundle run fleetguard_console -t prod --profile abhi   # ← ships the code
 ```
 
-`bundle deploy` alone does not ship the App's code — see `docs/ARCHITECTURE.md` §9.1 (I-097).
+`bundle deploy` alone does not ship the App's code — see `docs/ARCHITECTURE.md` §9.1.
 
 Deploying stays a deliberate manual act: it restarts the App under whoever is using it, so CI
 runs tests and lint only and holds no workspace credentials. What the bundle does and does not
@@ -232,32 +215,25 @@ the next deploy.
 
 ## Repository layout
 
-| Path          | What's there |
-| ------------- | ---------- |
-| `src/`        | Ingestion, medallion pipelines, fleet registry, search, agent, backtest, Lakebase migrations |
-| `app/`        | The FastAPI backend + React console that make up the live product |
+| Path          | What's there                                                                                                                                                       |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `src/`        | Ingestion, medallion pipelines, fleet registry, search, agent, backtest, Lakebase migrations                                                                       |
+| `app/`        | The FastAPI backend + React console that make up the live product                                                                                                  |
 | `docs/`       | Living architecture spec, build status, evidence map, issue log. `docs/screenshots/` is gitignored build output — regenerate with `scripts/capture_screenshots.py` |
-| `scripts/`    | Runnable setup/build scripts — local dev server, console build, evidence/snapshot export, demo-state seeding |
-| `tests/`      | Unit tests (run everywhere) and integration tests (opt-in, hit the live workspace) |
-| `dashboards/` | AI/BI dashboard definitions |
-| `resources/`  | Bundle resource files — the App, the pipeline, the dashboard and every job, as code (`ls resources/*.job.yml | wc -l`) |
+| `scripts/`    | Runnable setup/build scripts — local dev server, console build, evidence/snapshot export, demo-state seeding                                                       |
+| `tests/`      | Unit tests (run everywhere) and integration tests (opt-in, hit the live workspace)                                                                                 |
+| `dashboards/` | AI/BI dashboard definitions                                                                                                                                        |
+| `resources/`  | Bundle resource files — the App, the pipeline, the dashboard and every job, as code (`ls resources/*.job.yml | wc -l`)                                             |
 
 ## Documentation map
 
-**This table is the canonical one.** `docs/STATUS.md` used to carry a second copy; it now
-points here, because two lists of the same nine documents is two things to keep true and the
-other one had already drifted.
-
-Read `docs/STATUS.md` first if you're picking this up cold — it's the one page answering
-"where are we," with next steps in priority order.
-
-| Document                                                     | Job |
-| ------------------------------------------------------------ | ---------- |
-| [`docs/EVIDENCE.md`](docs/EVIDENCE.md)                       | **What backs each claim** — the artefact, table, job or measured number behind every claim, and what is deliberately still missing. **Start here**: it is organised by the eight capability areas |
-| [`docs/TRANSCRIPTS.md`](docs/TRANSCRIPTS.md)                 | **Five verbatim agent exchanges from Run 2**, generated from the saved JSON responses rather than retyped — deterministic exposure, retrieval with cited complaint ids, a write reaching the lakehouse, graceful degradation after the index was deleted, and what the endpoint returns right now |
-| [`docs/DEMO.md`](docs/DEMO.md)                               | **Start here to look around** — pre-flight, the ten beats, numbers with sources, what not to claim |
-| [`docs/RUNBOOK.md`](docs/RUNBOOK.md)                          | **How to run it** — local dev, deploying, and operating the live resources: restoring the AI Search index, the agent endpoint, and the App, in that order, with exact commands |
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)               | The living spec — what the system *is*, kept true with the code, including §11's rejected/deferred alternatives |
-| [`docs/API.md`](docs/API.md)                                 | Every console REST endpoint and every external API this project consumes, one page |
-| [`docs/STATUS.md`](docs/STATUS.md)                           | Where the build has got to, updated every session |
-| [`docs/ISSUES.md`](docs/ISSUES.md)                           | Every problem hit during the build, root cause, resolution — append-only |
+| Document                                       | Job                                                                                                                                                                                                                                                                                               |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`docs/EVIDENCE.md`](docs/EVIDENCE.md)         | **What backs each claim** — the artefact, table, job or measured number behind every claim, and what is deliberately still missing. **Start here**: it is organised by the eight capability areas                                                                                                 |
+| [`docs/TRANSCRIPTS.md`](docs/TRANSCRIPTS.md)   | **Five verbatim agent exchanges from Run 2**, generated from the saved JSON responses rather than retyped — deterministic exposure, retrieval with cited complaint ids, a write reaching the lakehouse, graceful degradation after the index was deleted, and what the endpoint returns right now |
+| [`docs/DEMO.md`](docs/DEMO.md)                 | **Start here to look around** — pre-flight, the ten beats, numbers with sources, what not to claim                                                                                                                                                                                                |
+| [`docs/RUNBOOK.md`](docs/RUNBOOK.md)           | **How to run it** — local dev, deploying, and operating the live resources: restoring the AI Search index, the agent endpoint, and the App, in that order, with exact commands                                                                                                                    |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | The living spec — what the system *is*, kept true with the code, including §11's rejected/deferred alternatives                                                                                                                                                                                   |
+| [`docs/API.md`](docs/API.md)                   | Every console REST endpoint and every external API this project consumes, one page                                                                                                                                                                                                                |
+| [`docs/STATUS.md`](docs/STATUS.md)             | Where the build has got to, updated every session                                                                                                                                                                                                                                                 |
+| [`docs/ISSUES.md`](docs/ISSUES.md)             | Every problem hit during the build, root cause, resolution — append-only                                                                                                                                                                                                                          |

@@ -32,7 +32,7 @@ update it in the same commit as the code that changes it.
 
 **Every problem hit during development is logged in `docs/ISSUES.md`** — add to it whenever
 something breaks or turns out to be wrong, especially anything that failed silently. (Build
-sequencing used to live in `PLAN.md`; removed 2026-10-04 once every phase was done and
+sequencing used to live in `PLAN.md`; removed 2026-10-03 once every phase was done and
 `docs/ARCHITECTURE.md` §2's build-state table had superseded it.)
 
 ## Verified facts — do not re-derive, do not "correct" without re-checking live
@@ -111,11 +111,11 @@ to load a complete corpus early rather than late.
 **Silver (built 2026-08-31).** Every layer reconciles exactly — `bronze = silver + quarantine`,
 no silent drops:
 
-| grain | bronze | silver | quarantine |
-|---|---|---|---|
-| complaints (V+T scope) | 2,209,695 | 2,209,123 | 572 |
-| recalls | 244,925 | 244,701 | 224 |
-| investigations | 154,367 | 154,191 | 176 |
+| grain                  | bronze    | silver    | quarantine |
+| ---------------------- | --------- | --------- | ---------- |
+| complaints (V+T scope) | 2,209,695 | 2,209,123 | 572        |
+| recalls                | 244,925   | 244,701   | 224        |
+| investigations         | 154,367   | 154,191   | 176        |
 
 Quarantine reasons: complaints 569 `incident_after_received` + 3 `missing_make`; recalls 224
 `inverted_manufacture_window`; investigations 157 `unparseable_odate` + 19 `closed_before_opened`.
