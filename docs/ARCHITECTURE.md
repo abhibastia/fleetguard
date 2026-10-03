@@ -2,10 +2,8 @@
 
 **Living document. Must be true now.** Last reconciled against the workspace: **2026-09-24**.
 
-> Run 1 (2026-09-23) exercised the whole system live end to end and then tore the billable
-> half down again — so "reconciled" below means *reconciled against what Run 1 observed*,
-> not against resources running right now. The AI Search index and the App are deliberately
-> down until Run 2 (2–3 October); `docs/STATUS.md` is the page that tracks which.
+> The AI Search index and the App are deliberately kept down between demo windows to cap
+> billing; `docs/STATUS.md` tracks current live/down state.
 
 Companion documents, each with one job:
 
@@ -21,8 +19,7 @@ marked **(planned)** and carries no figure.
 
 **Diagrams (as-built, tracks this file):** [`fleetguard_e2e_current.png`](fleetguard_e2e_current.png)
 (system architecture) · [`fleetguard_identity_current.png`](fleetguard_identity_current.png)
-(identity & authorisation, §8a/§8b). Update these when this file changes. The original
-2026-08-31 proposal diagrams were retired 2026-09-16 and no longer exist in the repo.
+(identity & authorisation, §8a/§8b). Update these when this file changes.
 
 ---
 
@@ -43,19 +40,14 @@ against 11.1% on a volume-matched placebo** (1.44×, z ≈ 2.62, p ≈ 0.009).
 > **Precision about what is predicted.** The system predicts **that NHTSA will open an
 > investigation**. It does *not* predict recall issuance, and it does not identify affected
 > VINs. Investigation → recall is separate regulatory latency (median 118 days across 886
-> campaigns) — real context, **never reported as a system result**. These three intervals
-> have been conflated once already; keep them apart.
+> campaigns) — real context, **never reported as a system result**.
 
 ---
 
 ## 2. Build state
 
-> **Corrected 2026-09-24.** Three rows below read **"Not started"** until this date — Phases
-> 6, 8 and 11 — while the App had been deployed, verified in a browser and exercised end to
-> end in Run 1. They were written before those phases were built and never revisited, and this
-> is the *living spec*: a reader taking §2 at its word concluded the console did not exist.
-> `docs/STATUS.md`'s phase table was right throughout, which is how the drift went unnoticed —
-> the two were never read against each other.
+> **Corrected 2026-09-24.** Phases 6, 8 and 11 are Done — this table had read "Not started"
+> for all three since before they were built.
 
 | Phase                      | State                                                                                                                                                                                                                                              |
 | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -64,12 +56,12 @@ against 11.1% on a volume-matched placebo** (1.44×, z ≈ 2.62, p ≈ 0.009).
 | 3 Chunking + AI Search     | ✅ Done — **rescoped 2026-09-23** from the post-2010 series to the fleet's own make/model pairs (I-111), then widened again to the `EXACT` + `MODEL_VARIANT` tiers (I-115). Built and torn down twice; **179,347 chunks measured in Run 2** (I-126) |
 | 4 Model B + golden set     | ✅ Done — precision 83.7% / recall 96.3%, real numbers on the evidence page                                                                                                                                                                         |
 | 5 Lakebase + CDF           | ✅ Done — loaded and latency-measured                                                                                                                                                                                                               |
-| 6 OAuth wiring             | ✅ Done — the auth seam (E-13) with two providers, `databricks-apps` (OBO) and `static-dev`. U2M was built, flipped live, and then **retired with Render** (E-14); it is preserved at commit `2b5727a` (the deleted `deploy/render` branch)         |
+| 6 OAuth wiring             | ✅ Done — the auth seam with two providers, `databricks-apps` (OBO) and `static-dev`. U2M was built, flipped live, and then **retired with Render**; it is preserved at commit `2b5727a` (the deleted `deploy/render` branch)                       |
 | 7 Agent tools + write path | ✅ Done — seven tools; both writes (`open_defect_signal`, `watch_campaign`) execute in the app under the caller's identity, see §7.1                                                                                                                |
 | 8 App + external surface   | ✅ Done — `fleetguard-console` on Databricks Apps, verified in a real browser 2026-09-08 and re-verified across all ten `DEMO.md` beats in Run 1 (I-113). **Stopped between the two online windows by design**                                      |
 | 9 Model A + backtest       | ✅ Done — **result is negative**, see §6                                                                                                                                                                                                            |
 | 10 Governance              | ✅ Visible slice — Postgres RLS on depot scoping, proved live                                                                                                                                                                                       |
-| 11 Hardening               | ✅ Done — the `table_update` trigger is built and has fired unattended (§7.3); demo state is seeded through the real API, not direct INSERTs. "Render always-on" left this phase when Render did                                                    |
+| 11 Hardening               | ✅ Done — the `table_update` trigger is built and has fired unattended (§7.3); demo state is seeded through the real API, not direct INSERTs                                                                                                        |
 | 12 Second connector        | ❌ Cut for schedule                                                                                                                                                                                                                                 |
 
 Everything lives in one schema, `bootcamp_students.fleetguard`, inside a **shared** bootcamp
@@ -238,23 +230,20 @@ those figures in `docs/EVIDENCE.md` as measured, including if poor.
 
 ### 4.5 Operational store — Lakebase + CDF
 
-**11 core tables** (`fleetguard_<entity>`) plus **3 added since**
-(`fleetguard_depot_assignment`, `fleetguard_technician`, `fleetguard_watchlist`) — **14 total**,
+**16 tables** (`fleetguard_<entity>`, verified 2026-10-02 — count via `SHOW TABLES IN
+bootcamp_students.bootcamp_cdc LIKE 'lb_fleetguard_%'`, this has grown as tables were added),
 every one `REPLICA IDENTITY FULL` (a hard CDF prerequisite — without it the WAL carries only
 the key and `update_preimage` is useless). Full column-level reference: §4.6.
 
-> **This section claimed "every one" while one table was the exception, from the day
-> `fleetguard_depot_assignment` was created until 2026-09-20 (I-107).** It was created without
-> `REPLICA IDENTITY FULL` and without the read-back assertion its sibling creation scripts
-> carry, so it never replicated: there were **13** history tables, not 14. Repaired, and the
-> invariant is now checked across the whole schema by `24_add_foreign_keys.py` rather than
-> once per creation script. **Re-verified live 2026-09-20: 14/16 tables (re-counted live 2026-10-02 — **this figure has now drifted twice**, 11→14→16; count it rather than trusting the line: `SHOW TABLES IN bootcamp_students.bootcamp_cdc LIKE 'lb_fleetguard_%'`) `FULL`, 14/14 history
-> tables present**, and the repaired table's first replicated `delete` carries its non-key
-> columns — which is the property FULL exists to provide. The claim above is true again, and
-> is worth re-measuring rather than re-reading the next time a table is added.
+> **One table was an exception for a while.** `fleetguard_depot_assignment` was created
+> without `REPLICA IDENTITY FULL` and without the read-back assertion its sibling creation
+> scripts carry, so it never replicated (I-107). Repaired 2026-09-20, and the invariant is now
+> checked across the whole schema by `24_add_foreign_keys.py` rather than once per creation
+> script — the repaired table's first replicated `delete` carries its non-key columns, which is
+> the property FULL exists to provide.
 
 CDF replicates to `bootcamp_students.bootcamp_cdc` as `lb_fleetguard_<entity>_history`. All
-14 exist with exact names and **no `_1` collision suffixes**.
+exist with exact names and **no `_1` collision suffixes**.
 
 - **CDF replicates DDL**, so destinations appear at `CREATE TABLE`, not on first write —
   **but not universally.** Measured 2026-09-20 (I-107): `fleetguard_depot_assignment` existed
@@ -271,7 +260,7 @@ CDF replicates to `bootcamp_students.bootcamp_cdc` as `lb_fleetguard_<entity>_hi
 
 ### 4.6 Data model reference
 
-Column-level detail for the 16 tables (re-counted live 2026-10-02 — **this figure has now drifted twice**, 11→14→16; count it rather than trusting the line: `SHOW TABLES IN bootcamp_students.bootcamp_cdc LIKE 'lb_fleetguard_%'`) introduced in §4.5, grouped by role. Gold-layer row
+Column-level detail for the 16 tables introduced in §4.5, grouped by role. Gold-layer row
 counts stay owned by §4.3 — linked here, not restated. Postgres schema fragments in §8a
 (RLS policy, `fleetguard_vehicle`/`fleetguard_depot_assignment`) are summarized here too.
 
@@ -396,8 +385,8 @@ Gradient-boosted, isotonic-calibrated, threshold tuned for recall (target 0.90).
 
 **Golden set is text-derived, not human-labelled.** 765 (campaign, make, model) pairs, labels
 from whether the vehicle model appears in NHTSA's own `defect_description` — real regulatory
-text, not synthetic (E-08 forbids synthetic labels here specifically). 621 positive, 144
-negative, 69 excluded as genuinely ambiguous rather than force-labelled.
+text, not synthetic. 621 positive, 144 negative, 69 excluded as genuinely ambiguous rather
+than force-labelled.
 
 **I-060 — the first run leaked and was caught before being reported.** Precision=1.000 at
 threshold=1.000 traced to a feature (`model_is_substring_of_recall`) that was 0% by
@@ -514,9 +503,9 @@ envelope*, the FastAPI app validates it against a Pydantic model (`OpenDefectSig
 dispatches on the envelope's action name to the matching handler; an unrecognised name is
 refused (400) rather than silently ignored.
 
-This is a stronger property than it looks like a workaround for: the write lands as the
-signed-in human, so `opened_by` is a genuine identity and Postgres RLS applies to the agent's
-write exactly as it does to a click in the UI. Nothing an LLM emits can widen its own reach.
+This also has a security benefit: the write lands as the signed-in human, so `opened_by` is a
+genuine identity and Postgres RLS applies to the agent's write exactly as it does to a click in
+the UI. Nothing an LLM emits can widen its own reach.
 
 **The Emerging tab shows that identity on the row itself** ("opened by …", `source='AGENT'`
 only) — until 2026-09-08 it was recorded correctly and visible only in the Audit log, which
@@ -706,9 +695,9 @@ actual dispatch happens through this sequence instead.
    `bit_xor(xxhash64(to_json(struct(<every column, sorted>))))`: order-independent, no
    overflow, and the column list is explicit so a MERGE leaving a different column order
    cannot read as drift. A content mismatch takes the same rebuild-record-and-still-fail
-   path, and the failure message names which kind of drift occurred. This is the change E-16 named as the trigger for reconsidering
-   `AUTO CDC INTO`; that comparison was made and `AUTO CDC INTO` lost on its own objection,
-   since a hand-written MERGE keeps the I-080 regression guard its opaque ranking would cost.
+   path, and the failure message names which kind of drift occurred. A hand-written MERGE
+   keeps the I-080 regression guard that `AUTO CDC INTO`'s opaque ranking would cost, which is
+   why this job isn't built on `AUTO CDC INTO` despite the fit otherwise being close.
 
    **Verified live 2026-09-20, both directions, unattended.** A probe signal was inserted
    into Lakebase and then deleted; the `table_update` trigger fired on its own each time.
@@ -728,7 +717,7 @@ actual dispatch happens through this sequence instead.
    `gold_agent_activity_daily` (requests, write actions, success rate, latency percentiles
    and tokens by day/tool/actor) and `gold_api_poll_health` (sweep attempts, failure rates by
    class, retries, gated rebuilds). Latency and tokens come from the MLflow inference table,
-   never from `gold_agent_action`'s deliberately NULL columns (E-04); a success rate over
+   never from `gold_agent_action`'s deliberately NULL columns; a success rate over
    zero traced requests is **NULL, not 0%**, because "not traced" and "all failed" are
    different answers.
 7. `/api/work-orders` and `/api/queue` reflect the new state on next read.
@@ -793,8 +782,8 @@ Stated so they are not mistaken for omissions.
 
 ## 8a. Hosting and the auth seam
 
-Two surfaces, one codebase, decided 2026-09-01 (E-12/E-13). **Narrowed to these two on
-2026-09-10**, when Render was removed (see below).
+Two surfaces, one codebase. **Narrowed to these two on 2026-09-10**, when Render was removed
+(see below).
 
 | Surface                                                                             | Auth mode                                            | Data source   | State                                                                                                                                                                                                                     |
 | ----------------------------------------------------------------------------------- | ---------------------------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -811,32 +800,24 @@ Render deployment serving the public evidence page and a signed-in console — w
 U2M OAuth (PKCE) flow this application implemented itself, because Render sits outside the
 Apps ingress and no platform injects a token there.
 
-Two things are worth recording rather than quietly dropping.
-
-*First, the constraint that produced it was real and enumerated, not a preference.* Measured
+**The constraint that produced it was real and enumerated, not a preference.** Measured
 2026-09-02, every machine-credential route was closed on this account:
 `service-principals create` → *"only accessible by admins"*; `tokens list` → *"User does not
 have permission to use tokens"*; Lakebase roles all `LAKEBASE_OAUTH_V1` (no password auth,
 credentials minted from a Databricks token, one-hour life). That is why a public host got an
 app-owned GitHub login and a data snapshot rather than a Databricks identity.
 
-*Second, the U2M replacement was never confirmed working in a browser.* It was built,
-deployed and configured correctly — the authorize URL was well-formed, with the right
-`client_id`, an exactly-matching `redirect_uri` and PKCE present — but sign-in stalled on an
-account admin granting the `all-apis` scope, and a custom OAuth app integration can be
-assigned no narrower scope covering what this app needs (`postgres` and `model-serving` are
-first-party Apps-OBO scopes, unavailable to that app type). So it sat on `main` for a week in
-a state that could not be demonstrated. Removing it closes that gap rather than leaving a
-claim the system could not back.
+The U2M OAuth flow meant to replace that GitHub login was never confirmed working in a
+browser — full account below, in the U2M section.
 
 Everything Render-specific — the blueprint, both auth flows, and the session machinery behind
-them — is preserved at commit **`2b5727a`** (the `deploy/render` branch until 2026-09-29, when the branch was deleted in a repo-wide cleanup — the commit survives and `git branch deploy/render 2b5727a` restores it),
-the commit where it last ran. It is an archive and was never merged.
+them — is preserved at commit **`2b5727a`** (the `deploy/render` branch until 2026-09-29, when
+the branch was deleted in a repo-wide cleanup — the commit survives and
+`git branch deploy/render 2b5727a` restores it). It is an archive and was never merged.
 
 **What removing it left behind is the argument for the seam.** Two of four providers went,
 along with every cookie, session store and TTL check in the codebase, and no route handler
-changed — because none of them ever read a header or a cookie. That was E-13's entire claim,
-tested by an event it was designed for.
+changed — because none of them ever read a header or a cookie.
 
 **Snapshot mode is dormant, not removed — and is kept tested for that reason.** Nothing in
 production selects it today, and the surface it was built for is gone, but it remains the only
@@ -887,8 +868,7 @@ actually reads — not trusted on configuration alone (`src/lakebase/15_enable_d
 Column-level schema for `fleetguard_vehicle`/`fleetguard_depot_assignment`: §4.6.
 
 **Nobody is currently enrolled**, so every live caller is on the fail-open path in practice;
-the mechanism is real, the enrollment is the remaining work, and both halves of that
-sentence are said on purpose.
+the mechanism is real, the enrollment is the remaining work.
 
 **Free-edition Databricks Apps are not viable.** Free edition supports Apps, but it is a
 separate workspace *and* account, and app **resource bindings are workspace-local** — it
@@ -897,18 +877,18 @@ requires the signed-in user to *be* an abhi identity so UC evaluates ABAC under 
 A free-edition user is not, so every query would run as one service principal and the row
 filters and column masks would be decorative.
 
-**U2M (Path D) is retired (E-14).** It required a custom OAuth app registered in the
-Databricks *account* console; measured 2026-09-02, this account's groups are `['users']`
-(not `admins`) and the account API returns `Not Found`, so it cannot be registered. It is
-also unnecessary: U2M and OBO both end with the app holding the user's token, and Apps
-ingress performs the login for free.
+**U2M is retired.** It required a custom OAuth app registered in the Databricks *account*
+console; measured 2026-09-02, this account's groups are `['users']` (not `admins`) and the
+account API returns `Not Found`, so it cannot be registered. It is also unnecessary: U2M and
+OBO both end with the app holding the user's token, and Apps ingress performs the login for
+free.
 
 **U2M was revived on 2026-09-03 and removed on 2026-09-10, never having been confirmed
 working.** Worth recording as a closed chapter rather than deleted, because the reason it
 failed is structural and would recur for anyone attempting the same thing.
 
-An account admin registered the custom OAuth app integration, closing E-14's stated blocker,
-and the code was built: `auth/databricks_oauth.py` (PKCE, token exchange, refresh) and
+An account admin registered the custom OAuth app integration, and the code was built:
+`auth/databricks_oauth.py` (PKCE, token exchange, refresh) and
 `routers/databricks_auth_routes.py`. The server side was demonstrably correct — a well-formed
 authorize URL with the right `client_id`, an exactly-matching `redirect_uri` and PKCE present.
 Sign-in still failed, on `Scopes 'all-apis' are not assigned to the client`, and the admin
@@ -920,8 +900,8 @@ assigned only from a fixed set of six — `all-apis`, `sql`, `offline_access`, `
 `model-serving` for the chat panel) are first-party Databricks Apps OBO scopes and are not
 offered to that app type at all. So the choice was `all-apis` or nothing.
 
-Removed with Render (commit `2b5727a`, the deleted `deploy/render` branch). Databricks Apps needs no custom app registration and
-no scope negotiation, which is the path this project took instead.
+Removed with Render (see above). Databricks Apps needs no custom app registration and no
+scope negotiation, which is the path this project took instead.
 
 **Other identities in this same shared workspace have their own Databricks accounts**
 (confirmed 2026-09-03) — which makes `databricks-apps` OBO the actually strong path for them
@@ -971,10 +951,9 @@ router. A bare `import psycopg` in a router sorts into the third-party block *ab
 `from ..db import ...` line, so it would execute before `db.py`'s `_select_psycopg_impl()` and
 silently defeat the I-045 FIPS workaround on Databricks serverless.
 
-**Work orders don't end at `OPEN` (added 2026-09-04).** `approve_campaign` always created one
-`fleetguard_work_order` row per exposed vehicle, but until this session nothing ever read or
-updated them again — the console had no way to show whether a vehicle was actually fixed.
-`routers/work_orders.py` adds `GET /api/work-orders` (filterable by campaign/depot/status) and
+**Work orders don't end at `OPEN`.** `approve_campaign` creates one `fleetguard_work_order` row
+per exposed vehicle. `routers/work_orders.py` adds `GET /api/work-orders` (filterable by
+campaign/depot/status) and
 `PATCH /api/work-orders/{id}`, gated by the same `FLEETGUARD_APPROVERS` allowlist as approval
 for the same reason: marking a safety recall "completed" when it wasn't is a compliance risk,
 not casual data entry. `fleetguard_work_order.status` gained a real `CHECK` constraint the same
@@ -993,10 +972,9 @@ indistinguishable. Both status changes and (re)assignments get their own `fleetg
 row (`STATUS_CHANGE` / `ASSIGNED`) with real `before_state`/`after_state` — the first live use
 of `before_state`, which existed in the schema since Phase 7 but had never been populated.
 
-**Launched campaigns have a persistent home (added 2026-09-04).** `GET /api/service-campaigns`
-(`routers/approval.py`) existed since the approval gate itself but had no consumer — the only
-way to see what had been launched was to re-query Lakebase by hand. It now returns a typed
-`ServiceCampaignOut` per row (was a bare `list[dict]`) with a per-status work-order breakdown
+**Launched campaigns have a persistent home.** `GET /api/service-campaigns`
+(`routers/approval.py`) returns a typed `ServiceCampaignOut` per row with a per-status
+work-order breakdown
 (`open_count`/`in_progress_count`/`completed_count`/`cancelled_count`) computed via `FILTER`
 clauses over the same join `list_work_orders` uses, so a launched-but-untouched campaign and a
 fully-closed-out one read differently at a glance — that distinction did not exist before
@@ -1006,13 +984,10 @@ its first consumer; clicking a row opens `WorkOrders.tsx` pre-filtered to that
 filter" affordance to return to the unfiltered list. No new gate — this is a read endpoint
 under the same `CurrentPrincipal` requirement as every other fleet-data read, not a write.
 
-**Cost tracking is logged and summed, not assumed (added 2026-09-04, revised same day).** A
-first version of this feature multiplied one editable "$ assumed cost per vehicle" input by the
-completed-work-order count — flagged in review as still wrong even with the assumption made
-visible: different repairs cost different amounts (a steering-rack repair on a Class 8 tractor
-and a brake job on a pickup are not the same cost), and a single blended multiplier can't
-represent that regardless of how honestly it's labeled. It was replaced same-day with real
-per-work-order cost capture:
+**Cost tracking is logged and summed, not assumed.** A steering-rack repair on a Class 8
+tractor and a brake job on a pickup are not the same cost, so a single blended $/vehicle
+multiplier can't represent real spend regardless of how honestly it's labeled. Real
+per-work-order cost capture instead:
 
 - `fleetguard_work_order.actual_cost` (`NUMERIC(10,2)`, nullable, `CHECK (actual_cost >= 0)`) —
   `src/lakebase/18_add_work_order_actual_cost.py`. Nullable because cost is logged manually and
@@ -1035,10 +1010,9 @@ per-work-order cost capture:
   total and its coverage, with the by-component/by-depot tables beneath it. No dollar figure
   anywhere in this feature is now assumed — every one is a sum of what someone actually entered.
 
-**Audit log has a consumer (added 2026-09-04).** `fleetguard_audit_log` has recorded every
-campaign launch, work-order status change, (re)assignment, and cost log since Phase 7, but
-nothing ever exposed it — the same gap `list_service_campaigns` had before `ServiceCampaigns.tsx`
-existed. `routers/audit_log.py` adds `GET /api/audit-log` (filterable by `entity_type`/
+**Every write is audited.** `fleetguard_audit_log` records every campaign launch, work-order
+status change, (re)assignment, and cost log. `routers/audit_log.py` adds `GET /api/audit-log`
+(filterable by `entity_type`/
 `entity_id`/`action`) and `GET /api/audit-log/export.csv` (same filters, streamed as a
 downloadable file with `Content-Disposition: attachment`). Both are read-only, so — unlike
 approval and work-order writes — they carry no `FLEETGUARD_APPROVERS` gate: the allowlist exists
@@ -1053,9 +1027,7 @@ plain `<a href>` rather than a fetch-and-blob dance — the browser already carr
 cookie (or, on Databricks Apps, the platform-injected header) on a same-origin navigation, so no
 extra client code is needed to authenticate the download.
 
-**Depot risk has a home (added 2026-09-04).** `fleetguard_depot` (60 rows, Phase 2) had nothing
-reading it beyond `resolve_scope`'s depot-narrowing predicate — no view showed which depots
-actually carry the most exposure. `GET /api/depot-risk` (`routers/depots.py`) joins three
+**Depot risk, fleet-wide.** `GET /api/depot-risk` (`routers/depots.py`) joins three
 independent aggregates per depot — fleet size (`fleetguard_vehicle`), exposure and urgency
 (`fleetguard_vehicle_exposure` joined to `fleetguard_recall_campaign`, split on
 `park_it OR do_not_drive`), and work-order backlog (`fleetguard_work_order`, outstanding vs.
@@ -1065,16 +1037,15 @@ across three independently-cardinal relationships.
 **Deliberately no single blended "risk
 score":** a composite index with hidden weights is the same mistake I-069 already caught once
 (a flat cost-per-vehicle multiplier that looked data-driven but wasn't) — this returns the real
-component numbers and lets `DepotRisk.tsx` sort/filter by whichever one matters, the same
-pattern as every other table added this session. The one visual shortcut taken is a heatmap
+component numbers and lets `DepotRisk.tsx` sort/filter by whichever one matters. The one visual shortcut taken is a heatmap
 tint on the "Urgent" and "Overdue" cells, tiered by `urgent_vehicles_exposed ÷ fleet_size` (a
 plain ratio, not a formula) so a depot with a small fleet and a few urgent vehicles isn't
 ranked the same as a large depot with the same raw count.
 
-**Recall trend — this app's first chart (added 2026-09-04).** `fleetguard_recall_campaign.
-issued_at` is the real NHTSA filing date (not a demo timestamp), and joined to the fleet's own
-exposure match it turns out to hold 13 years of real history (2014–2026) already sitting in
-Lakebase — no SQL Warehouse call needed. `GET /api/recall-trend` (`routers/trends.py`) groups
+**Recall trend.** `fleetguard_recall_campaign.issued_at` is the real NHTSA filing date (not a
+demo timestamp), joined to the fleet's own exposure match — 13 years of real history
+(2014–2026) already in Lakebase, no SQL Warehouse call needed. `GET /api/recall-trend`
+(`routers/trends.py`) groups
 by year; `Trends.tsx` renders it as two small bar charts (campaigns per year, with a red
 sub-segment for the Park It/Do Not Drive portion; vehicles exposed per year, kept separate
 because the two don't always move together). The chart itself is hand-rolled inline SVG
@@ -1083,13 +1054,6 @@ because the two don't always move together). The chart itself is hand-rolled inl
 Years with zero fleet-relevant campaigns are simply absent from the response rather than
 zero-filled, so the endpoint never asserts a count for a year it didn't actually find data for.
 
-**The "no shared identity on a public host" rule was never waived, and no longer has a host
-to apply to.** Its stated reason was that a public URL plus a write path means one shared
-identity would let anyone approve service campaigns. It was satisfied on Render by a sign-in
-plus a disabled write path, and became moot on 2026-09-10 when that surface was removed. Both
-remaining surfaces carry a per-caller identity by construction; neither has a shared one to
-share.
-
 **The agent chat panel needs a real Databricks token, and now always has one.** `POST /api/chat`
 invokes the serving endpoint with the caller's own token. On the removed `app-login` surface no
 such token existed, so the panel returned 401 and rendered an explanation rather than an error
@@ -1097,14 +1061,6 @@ such token existed, so the panel returned 401 and rendered an explanation rather
 (`static-dev` locally, OBO on Apps), so that inert state no longer occurs. `Assistant.tsx`
 keeps its own 401 handling for the different case where the caller *is* identified and the
 serving-endpoint call itself fails.
-
-**The public landing page is Evidence, not a login screen.** Google Safe Browsing flagged
-the deployment as a *"Dangerous site"* while its entire anonymous surface was a "Continue with
-GitHub" prompt on a zero-reputation shared subdomain — a textbook phishing signature (I-057).
-The served bundle was byte-compared against the local build to rule out compromise before
-concluding it was a false positive. Anonymous visitors now land on the measured result, with
-sign-in as a header action; an explicit link such as `#/queue` is still honoured, because a
-shared link must go where it says.
 
 **The auth seam.** The two environments differ in exactly one way — how the user's token
 arrives. Everything downstream (SQL, Lakebase, agent invocation, ABAC) is identical.
@@ -1235,12 +1191,12 @@ never been true.
 **What the bundle owns**, all *bound* to the objects that already existed, so deploying
 updates them in place and creates nothing:
 
-| Resource        | Key                         | Bound to                                                                                                                                                                                                                           |
-| --------------- | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Databricks App  | `fleetguard_console`        | `fleetguard-console`                                                                                                                                                                                                               |
-| Pipeline        | `bronze_silver`             | `937b9ce4-4fbe-4493-96ad-b76317bf58db`                                                                                                                                                                                             |
-| AI/BI dashboard | `fleetguard_overview`       | `01f1a7257e801a2ebb71bdc18fc2113a`                                                                                                                                                                                                 |
-| Jobs            | every `resources/*.job.yml` | the live / rebuild-from-empty `fleetguard-*` jobs (31 as of 2026-09-29, after adding `build_fleet_exposure` (I-119) — count via `ls resources/*.job.yml \| wc -l` rather than trusting a number written here, it has grown before) |
+| Resource        | Key                         | Bound to                                                                                                        |
+| --------------- | --------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Databricks App  | `fleetguard_console`        | `fleetguard-console`                                                                                            |
+| Pipeline        | `bronze_silver`             | `937b9ce4-4fbe-4493-96ad-b76317bf58db`                                                                          |
+| AI/BI dashboard | `fleetguard_overview`       | `01f1a7257e801a2ebb71bdc18fc2113a`                                                                              |
+| Jobs            | every `resources/*.job.yml` | the live / rebuild-from-empty `fleetguard-*` jobs — 31, verified 2026-10-03 (`ls resources/*.job.yml \| wc -l`) |
 
 The other **7** `fleetguard-*` jobs are excluded on purpose — `lead-time-backtest-v2`,
 `semantic-subdivision` and `embed-backtest-complaints` (the semantic arm §6 measured and
@@ -1361,23 +1317,16 @@ is deleted. Embedding was ~$5 one-off.
 
 **Rebuild.** `src/setup/00_create_all_objects.py` creates the foundations nothing else
 creates, prints a **20-step** rebuild order naming each producer, and verifies
-present-vs-expected across **41 objects** (both re-counted 2026-10-02 — step 20 and the two
-metric views were added by I-130, which found the dashboard depending on objects no documented
-path recreated. This paragraph had already drifted once, at I-119; count from the file itself if
-it matters, not from this sentence). It is deliberately **not** pure DDL: most tables here are derived, and
-`CREATE TABLE` for `silver_complaint` would yield an empty table with the right name — a
-rebuild that looks successful and isn't.
+present-vs-expected across **41 objects** (both verified 2026-10-02). It is deliberately
+**not** pure DDL: most tables here are derived, and `CREATE TABLE` for `silver_complaint`
+would yield an empty table with the right name — a rebuild that looks successful and isn't.
 
 **Manual steps no script covers:** Lakebase CDF enablement (UI-only), and AI Search
 endpoint/index creation (kept manual because it is the only recurring cost — it should never
-be resurrected by accident). An index rebuild took **~39 min** at the current fleet scope in
-Run 1 — not the ~7 h this line said until 2026-09-24, which was the figure for the
-superseded 1,746,601-chunk corpus and was the exact stale cost I-115's lesson is about.
-Still never attempt one inside a demo window: I-112 records a fresh endpoint stalling ~25
-min before the build even starts. `scripts/provision_search.sh` now wraps this.
-These are two of the **five** exceptions in §9.1 (which says five — this line said four
-until 2026-09-24, and the fifth had been added a week earlier); the bundle does not close
-them.
+be resurrected by accident). An index rebuild measures **~75 min** at the current fleet
+scope — never attempt one inside a demo window; a fresh endpoint can stall ~20-25 min before
+the build even starts. `scripts/provision_search.sh` wraps this.
+These are two of the **five** exceptions in §9.1; the bundle does not close them.
 
 **Verification discipline.** Never infer success from a CLI exit code. Three variants have
 been observed in one day: a watcher exiting `0` at 51% complete, `jobs run-now` returning `0`
@@ -1390,11 +1339,11 @@ for a `FAILED` run, and the CLI reporting `Error: timed out` while the job ran o
 
 Three layers, deliberately separate:
 
-| Layer                       | Coverage                                                                                                                                                                       | Run                                       |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------- |
-| Unit                        | 646 tests, no Databricks (count via `pytest --ignore=tests/pipelines`, not this line) — includes 17 that assert the **bundle** YAML offline (`tests/test_bundle_resources.py`) | `pytest`                                  |
-| Pipeline expectations       | In-pipeline, `_dq_failures` quarantine split                                                                                                                                   | With the pipeline                         |
-| Data quality + live scoping | 24 tests against the live workspace                                                                                                                                            | `pytest -m integration --run-integration` |
+| Layer                       | Coverage                                                                                                                                | Run                                       |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| Unit                        | 646 tests (verified 2026-10-03), no Databricks — includes 17 that assert the **bundle** YAML offline (`tests/test_bundle_resources.py`) | `pytest`                                  |
+| Pipeline expectations       | In-pipeline, `_dq_failures` quarantine split                                                                                            | With the pipeline                         |
+| Data quality + live scoping | 24 tests against the live workspace                                                                                                     | `pytest -m integration --run-integration` |
 
 Logic that has been wrong once lives in `src/fleetguard/` (`vin.py`, `chunking.py`,
 `naming.py`) so it is testable off-platform, with each past bug encoded as a named

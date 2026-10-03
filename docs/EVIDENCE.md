@@ -3,14 +3,12 @@
 **Last updated 2026-10-03.** One page pointing at the concrete artefact behind every
 claim — file, table, job, measured number, screenshot.
 
-It exists because the demo surfaces are **asleep between sessions on purpose**: the
-Databricks App is stopped, the agent endpoint is scaled to zero, and the AI Search index is
-deleted to cap billing (I-101, I-105). Someone reading this repo cold cannot click through
-the product — deployment URL, Spark execution logs, Lakebase schema, CDF configuration,
-dataset size, measured latency, API error-handling code, agent tool definitions, and
-screenshots are the usual things a cold reader cannot verify for themselves. Every one of
-those is **reachable** from here; this page says how, and says plainly which ones need a
-resource woken up first.
+The demo surfaces are asleep between sessions to cap billing (the App is stopped, the agent
+endpoint is scaled to zero, the AI Search index is deleted), so this page is how to verify
+every claim without the live product: deployment URL, Spark execution logs, Lakebase schema,
+CDF configuration, dataset size, measured latency, API error-handling code, agent tool
+definitions, and screenshots — each with the artefact and, where one is needed, which resource
+to wake up first.
 
 **Nothing on this page is an estimate.** Where a number could not be measured, it says so.
 
@@ -82,7 +80,7 @@ resource woken up first.
 | Write mechanics                                  | §7.1. The model returns an action envelope; `app/backend/fleetguard_api/agent_actions.py` validates it with Pydantic, checks `authz.may_approve`, and executes the insert **under the caller's own token** — so `opened_by` is a real human and RLS applies as it does to a UI click. The model never holds a database path                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | Safeguards                                       | Field-level bounds on every LLM-supplied value; authorization gate on both writes; unique-violation handling; audit row in the same transaction; existence checks that return a 404 naming the missing entity rather than a bare `ForeignKeyViolation`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | Never reaches                                    | `fleetguard_work_order` / `fleetguard_service_campaign` — dispatch stays behind `FLEETGUARD_APPROVERS`, asserted in the build                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| Tracing / eval                                   | MLflow tracing (typed `RETRIEVER`/`TOOL` spans), inference table `fleetguard_agent_payload`, `mlflow.genai.evaluate` against **15** adversarial cases (E-05) and a 765-pair golden set built from NHTSA's own recall text. **Three scorers are HARD GATES** — the job fails if the agent claims a launch, invents a recall, or acts on an instruction embedded in retrieved text. The result is **tagged onto the UC model version** (`eval_run_id`, `eval_hard_gates`, a `score_*` per scorer), so "was the deployed artefact evaluated?" is answerable from the registry rather than by hunting runs                                                                                                                                                                                                                                                                                                                                                                |
+| Tracing / eval                                   | MLflow tracing (typed `RETRIEVER`/`TOOL` spans), inference table `fleetguard_agent_payload`, `mlflow.genai.evaluate` against **15** adversarial cases and a 765-pair golden set built from NHTSA's own recall text. **Three scorers are HARD GATES** — the job fails if the agent claims a launch, invents a recall, or acts on an instruction embedded in retrieved text. The result is **tagged onto the UC model version** (`eval_run_id`, `eval_hard_gates`, a `score_*` per scorer), so "was the deployed artefact evaluated?" is answerable from the registry rather than by hunting runs                                                                                                                                                                                                                                                                                                                                                                       |
 | **Agent evaluation — MEASURED 2026-09-30 on v8** | `fleetguard_agent` **v8**, run `1199cf9f6f5e4acc884909c091f058a6`, 15 cases. **All three hard gates 1.000** — `never_claims_launched`, `never_invents_a_recall`, and **`resists_injected_instructions`, the first live measurement of the I-118 defence on this workspace**. Also `safety` 1.000, `answer_not_empty` 1.000, `cites_complaint_ids` 1.000, `grounded_numbers` 0.933, `relevance_to_query` 0.933, `fleetguard_rules` 0.800. **`states_match_tier` scored 0.000 and that is a measurement artifact, not an agent failure** — one case, and the scorer's sentence splitter does not break on em-dashes, so an unrelated *"so no confirmation is needed"* clause negates an otherwise correct tier statement; resampling the same question 5× passes 4/5. Diagnosed in I-126, not fixed before release because `_asserts` is shared with the three hard gates. `eval_hard_gates=passed` is stamped on v8, so `/api/readyz`'s release check reads a real tag |
 | **Prompt-injection defence**                     | `search_complaints` is the only tool returning text this project did not write — **2.24M public, user-submitted ODI narratives**. Three layers (ARCHITECTURE §7.1a): untrusted-data markers + action-sentinel stripping in `_neutralise()`, system-prompt rule 9, and the console's Python-stamped item-id check. Structural half tested offline (`tests/agent/test_agent_injection.py`, mutation-checked); behavioural half is the hard gate above, **measured in Run 2**. Severity is bounded by `may_approve` and server-side fleet-relevance recomputation — stated in I-118 rather than implied                                                                                                                                                                                                                                                                                                                                                                  |
 | **Citations**                                    | Rule 10 requires complaint ids behind narrative claims, scored by `cites_complaint_ids`. **The scorer's limit is documented in the scorer**: it sees answer text only, so it cannot distinguish a real citation from a fabricated one — "cites only ids a tool returned" remains a prompt rule, not a measurement                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
@@ -145,15 +143,10 @@ resource woken up first.
 989,042 exposure rows; 118,323 in Lakebase — the full corpus (2.2M complaints, 5.8M TSBs)
 stays in Delta regardless of AI Search scope.
 
-**The vector-index chunk count is no longer the 1,746,601 quoted historically.** Why it
-dropped — the two same-day rescopes, I-111 then I-115 — is `docs/ARCHITECTURE.md` §4.4's
-story, not restated here. **Measured 2026-09-30 in Run 2 (I-126): 179,347 chunks** — 115,499
-`EXACT` + 63,848 `MODEL_VARIANT`, with the `EXACT` half reproducing the 2026-08-31 figure to
-the row, and the total agreeing exactly with an independent ad-hoc count run before the job.
-
-The lakehouse-scale claim survives on the pipeline/corpus side; it is specifically the
-*indexed* figure that dropped below the 1M mark, and that reflects a deliberate retrieval-scope
-decision, not reduced volume processed.
+**The AI Search index is deliberately scoped to the fleet's own make/model pairs, not the full
+corpus** — 179,347 chunks (115,499 `EXACT` + 63,848 `MODEL_VARIANT`), measured 2026-09-30. See
+`docs/ARCHITECTURE.md` §4.4 for how that scope was chosen. The full 2.2M-complaint corpus stays
+in Delta regardless; only retrieval is scoped down.
 
 **Variety — demonstrated, with one caveat.** Free-text complaint narratives are chunked,
 embedded, indexed and hybrid-searched (BM25 + vector), and surfaced through the agent's
@@ -163,16 +156,14 @@ embedded, indexed and hybrid-searched (BM25 + vector), and surfaced through the 
 Search index itself is deleted** to cap billing between verification runs, so the retrieval
 half cannot be demonstrated live until it is rebuilt.
 
-**Measured end to end on 2026-09-30: ~21 min of I-112 stall in which nothing
-appears to happen, then ~52 min of syncing — budget ~75 min, not the ~27-39 min this line used to
-claim** (I-126, I-127; the older figure was the 115,499-chunk scope). `scripts/provision_search.sh --create` is the rebuild, idempotent and
-polling for I-105's restart-from-zero.
+**Measured end to end on 2026-09-30: ~21 min of stall in which nothing appears to happen, then
+~52 min of syncing — budget ~75 min.** `scripts/provision_search.sh --create` is the rebuild,
+idempotent and polling for a restart-from-zero.
 
 #### Retrieval quality — MEASURED 2026-09-30 on the shipped 179,347-chunk index
 
-`ops_rag_eval`, run `2026-09-30T23:34:06Z`, seed `20260924`, k=10. Published as measured, per the
-rule I-049 and I-111 set — and in this case the result is good, which is not a reason to present
-it any differently.
+`ops_rag_eval`, run `2026-09-30T23:34:06Z`, seed `20260924`, k=10. Published as measured
+regardless of outcome — the result below happens to be good.
 
 | family     | type       | probes | hit rate   | Recall@10 | P@10      | MRR       | relevant pool |
 | ---------- | ---------- | ------ | ---------- | --------- | --------- | --------- | ------------- |
@@ -205,27 +196,20 @@ rank 1 or 2.
 excellent, ranking is middling. Nothing downstream depends on rank-1 (the agent reads the whole
 top-k), so this is a real limitation with no current consequence, not a defect.
 
-All three I-040 behavioural checks passed in the same run: `columns_to_sync` complete,
-`any_harm` filter effective, HYBRID differing from ANN.
-
-**The harness was committed before any of this was measured.** Until 2026-09-24
-the strongest claim available here was *"AI Search is implemented"* plus a three-query
-behavioural probe — which shows the feature is wired up, not that it works.
+All three behavioural checks passed in the same run: `columns_to_sync` complete, `any_harm`
+filter effective, HYBRID differing from ANN.
 
 `src/search/28_rag_eval.py` (job `fleetguard-rag-eval`) scores two probe families over the
 live index and writes `ops_rag_eval`: **known-item** (a distinctive excerpt from one narrative;
 Recall@10 and MRR are meaningful because the relevant set has one member) and **topical** (a
 question built from a real recall campaign; Precision@10 and hit rate, because the relevant set
 runs to thousands of chunks and Recall@10 over it would read as ~0.003 and mean nothing). It
-re-runs the three I-040 behavioural checks at the shipped scope in the same pass — a debt open
-since the rescope.
+re-runs the same three behavioural checks at the shipped scope in the same pass.
 
-**The scoring arithmetic is unit-tested offline**
-(`tests/test_retrieval_metrics.py`), so it is not debugged inside a billed window; only the
-numbers wait for the index. **Whatever it returns gets published**, the rule I-049 and I-111
-already set. The limitation belongs next to the result: relevance here is *metadata* agreement
-— right make, right model under the EXACT/MODEL_VARIANT rule, right component — not a human
-judging whether the narrative answers the question.
+**The scoring arithmetic is unit-tested offline** (`tests/test_retrieval_metrics.py`), so it is
+not debugged inside a billed window; only the numbers wait for the index. Relevance here is
+*metadata* agreement — right make, right model under the EXACT/MODEL_VARIANT rule, right
+component — not a human judging whether the narrative answers the question.
 
 **Velocity — partial, and stated honestly in two numbers.** These must never be collapsed:
 
@@ -281,14 +265,10 @@ re-run.
 
 Two properties of the screenshot script worth knowing before trusting its output:
 
-- **It refuses to run against snapshot mode.** Evidence must come from live data; capturing
-  the demo snapshot and presenting it as the product would be the exact failure the Evidence
-  tab exists to avoid.
-- **It waits for each view's loading skeleton to clear.** `networkidle` is not enough — every
-  view fetches on mount from a `useEffect`, so the document goes idle before the API call is
-  issued. The first run produced twenty pixel-perfect screenshots of placeholders and
-  reported success. A screenshot of a spinner is worse than no screenshot: it is evidence
-  that the page does not work.
+- **It refuses to run against snapshot mode** — evidence must come from live data.
+- **It waits for each view's loading skeleton to clear** rather than relying on network
+  idleness, since every view fetches on mount from a `useEffect` after the document is
+  already idle.
 
 ### Checking the numbers on this page
 
@@ -302,7 +282,7 @@ jq '.datasets | length' dashboards/fleetguard_overview.lvdash.json  # dashboard 
 ```
 
 and against live Postgres — table count, foreign keys, indexes, and the replica-identity
-invariant that I-107 was hiding in:
+invariant every table needs for CDF:
 
 ```sql
 SELECT COUNT(*) FROM pg_tables
@@ -314,6 +294,5 @@ SELECT relname, relreplident FROM pg_class c
  WHERE n.nspname = 'bootcamp_students' AND relname LIKE 'fleetguard_%' AND relkind = 'r';
 ```
 
-The last one is the check that did not exist before 2026-09-20, and its absence is why one
-table silently failed to replicate for weeks (I-107). Run it across the **whole schema**,
-not per table — that was the actual lesson.
+Run the last one across the **whole schema**, not per table — a replica-identity gap on just
+one table is otherwise easy to miss.

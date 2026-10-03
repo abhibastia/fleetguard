@@ -92,7 +92,7 @@ z 5.62, 64 complaints) behind it.
 
 **Say what the badge means, it is the honest part.** NHTSA writes `PROMASTER`; the fleet
 registry, built from vPIC, writes `PROMASTER 1500`/`2500`/`3500`. Same trucks, no exact string
-match — which is why this signal read **0 fleet vehicles** until 2026-09-11.
+match, hence the `VARIANT` badge rather than `EXACT`.
 
 The 2,418 includes 315 `PROMASTER CITY`, a smaller van arguably not the same vehicle, so the
 tier travels with the count rather than being blended away: §7's determinism guarantee covers
@@ -130,13 +130,10 @@ exposed vehicle + audit row. **205 work orders in 3 s**, measured.
 
 331 work orders — the split across completed/in-progress/open/cancelled and the overdue count
 both **move with the calendar** (overdue = `due_date` in the past and not completed/cancelled,
-against uncompleted seed data). Measured 2026-09-09: 144/84/94/9, **44 overdue across 28
-depots**. Re-measured 2026-09-23 (I-113, no writes in between): 144/83/95/9 — a 1-order drift
-— but **93 overdue across 43 depots**, more than double, purely from two more weeks passing
-with no completions on those orders. **Say the overdue figure live from the app, never quote
-this doc's number** — it will be wrong again by the next session, predictably and by a lot.
-All work orders are assigned to a technician **at the right depot** — the server rejects a
-cross-depot assignment, it is not UI filtering.
+against uncompleted seed data). **Say the overdue figure live from the app, never quote a
+number from this doc** — it moves every session purely from time passing, with no writes
+needed. All work orders are assigned to a technician **at the right depot** — the server
+rejects a cross-depot assignment, it is not UI filtering.
 
 ### Beat 7 · Cost and audit — why a fleet buys this
 
@@ -162,8 +159,8 @@ path. `opened_by` is a real human.
 ### Beat 9 · The trip through the platform
 
 The write just made lands in Postgres → Lakebase CDF → Unity Catalog. **CDF capture 7.1–15.6 s**;
-**Postgres commit → gold fact 2.5–4.5 minutes** (measured 155 s and 269 s, n=2 — quote the range,
-never one averaged number).
+**Postgres commit → gold fact 2.5–5 minutes** (measured 155 s, 269 s, and a third ~5 min
+sample — quote the range, never one averaged number).
 
 ### Beat 10 · The audit trail and the trace are the same trail — close on this
 
@@ -189,42 +186,35 @@ rather than asserted.
 **Two caveats to state.** The inference table ingests in **batches with a >30 minute lag**, so a
 write made during the demo will not appear in this join immediately — show it against an existing
 row. And rows written before 2026-09-09 have `trace_id` NULL: the column and the write path both
-existed, but nothing supplied the id until E-03 was wired (`ISSUES.md`).
+existed before tracing was wired up to populate it.
 
 ---
 
 ## 3. Numbers, with sources
 
-| Claim                      | Value                                                                                                                                                                                                                                                              | Source                                                                                                                                         |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| Detection, real arm        | 124/777 = **16.0%**, median **197 d**                                                                                                                                                                                                                              | `gold_lead_time_summary`                                                                                                                       |
-| Detection, placebo         | 67/606 = **11.1%**, median 343 d                                                                                                                                                                                                                                   | `gold_lead_time_summary`                                                                                                                       |
-| Lift / significance        | **1.44×**, z **2.62**, p **0.009**                                                                                                                                                                                                                                 | recomputed from arm counts                                                                                                                     |
-| Complaints corpus          | **2,240,289**                                                                                                                                                                                                                                                      | `bronze_complaints`                                                                                                                            |
-| Recall campaigns           | 244,925 rows / **15,211** campaigns                                                                                                                                                                                                                                | `bronze_recalls`                                                                                                                               |
-| Investigations             | 154,367 rows / **5,344** distinct                                                                                                                                                                                                                                  | `bronze_investigations`                                                                                                                        |
-| Indexed chunks             | **179,347** — measured in Run 2, 2026-09-30 (I-126): 115,499 `EXACT` + 63,848 `MODEL_VARIANT`. 115,499 was the EXACT-only scope (I-111) before the join was widened (I-115). Still read it live if the demo shows it; this cell is the expectation, not the source | `complaint_chunk_idx`                                                                                                                          |
-| Fleet                      | **20,000** vehicles · **60** depots · 47 models                                                                                                                                                                                                                    | `gold_fleet_vehicle`                                                                                                                           |
-| Exposure (EXACT)           | **118,323** distinct (vin, campaign)                                                                                                                                                                                                                               | `fleetguard_vehicle_exposure`                                                                                                                  |
-| `17V629000`                | **25** vehicles / **22** depots, EXACT                                                                                                                                                                                                                             | verified 2026-09-09                                                                                                                            |
-| Ford F-250 in fleet        | **2,116**                                                                                                                                                                                                                                                          | verified 2026-09-09                                                                                                                            |
-| Signals                    | **48** detected / 9 live / **4** fleet-relevant                                                                                                                                                                                                                    | `gold_emerging_signal`, rebuilt 2026-09-11                                                                                                     |
-| Signals in console         | **50** / 9 live / **6** fleet-relevant                                                                                                                                                                                                                             | Lakebase = 48 detector + 2 agent-opened                                                                                                        |
-| Top signal (RAM PROMASTER) | **2,418** vehicles, `MODEL_VARIANT`                                                                                                                                                                                                                                | verified 2026-09-11                                                                                                                            |
-| RAM 2500 signal            | **1,256** vehicles, z 5.62, 64 complaints, `EXACT`                                                                                                                                                                                                                 | verified 2026-09-11                                                                                                                            |
-| Model B                    | precision **83.7%**, recall **96.3%**, AUC 0.925                                                                                                                                                                                                                   | 765-pair golden set                                                                                                                            |
-| Work orders / audit / cost | **331** / 723→**727** / **$84,409.68**                                                                                                                                                                                                                             | verified 2026-09-09, re-checked 2026-09-23 (I-113) — cost and work-order total unchanged, audit rows drifted +4 from activity between sessions |
+| Claim                      | Value                                                                                                                                        | Source                                                                                                                                         |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Detection, real arm        | 124/777 = **16.0%**, median **197 d**                                                                                                        | `gold_lead_time_summary`                                                                                                                       |
+| Detection, placebo         | 67/606 = **11.1%**, median 343 d                                                                                                             | `gold_lead_time_summary`                                                                                                                       |
+| Lift / significance        | **1.44×**, z **2.62**, p **0.009**                                                                                                           | recomputed from arm counts                                                                                                                     |
+| Complaints corpus          | **2,240,289**                                                                                                                                | `bronze_complaints`                                                                                                                            |
+| Recall campaigns           | 244,925 rows / **15,211** campaigns                                                                                                          | `bronze_recalls`                                                                                                                               |
+| Investigations             | 154,367 rows / **5,344** distinct                                                                                                            | `bronze_investigations`                                                                                                                        |
+| Indexed chunks             | **179,347**: 115,499 `EXACT` + 63,848 `MODEL_VARIANT`. Still read it live if the demo shows it; this cell is the expectation, not the source | `complaint_chunk_idx`                                                                                                                          |
+| Fleet                      | **20,000** vehicles · **60** depots · 47 models                                                                                              | `gold_fleet_vehicle`                                                                                                                           |
+| Exposure (EXACT)           | **118,323** distinct (vin, campaign)                                                                                                         | `fleetguard_vehicle_exposure`                                                                                                                  |
+| `17V629000`                | **25** vehicles / **22** depots, EXACT                                                                                                       | verified 2026-09-09                                                                                                                            |
+| Ford F-250 in fleet        | **2,116**                                                                                                                                    | verified 2026-09-09                                                                                                                            |
+| Signals                    | **48** detected / 9 live / **4** fleet-relevant                                                                                              | `gold_emerging_signal`, rebuilt 2026-09-11                                                                                                     |
+| Signals in console         | **50** / 9 live / **6** fleet-relevant                                                                                                       | Lakebase = 48 detector + 2 agent-opened                                                                                                        |
+| Top signal (RAM PROMASTER) | **2,418** vehicles, `MODEL_VARIANT`                                                                                                          | verified 2026-09-11                                                                                                                            |
+| RAM 2500 signal            | **1,256** vehicles, z 5.62, 64 complaints, `EXACT`                                                                                           | verified 2026-09-11                                                                                                                            |
+| Model B                    | precision **83.7%**, recall **96.3%**, AUC 0.925                                                                                             | 765-pair golden set                                                                                                                            |
+| Work orders / audit / cost | **331** / 723→**727** / **$84,409.68**                                                                                                       | verified 2026-09-09, re-checked 2026-09-23 (I-113) — cost and work-order total unchanged, audit rows drifted +4 from activity between sessions |
 
 **Why the console says 6 and the warehouse says 4.** `gold_emerging_signal` holds 48 detector
 rows, **4** of them fleet-relevant. Lakebase adds the 2 agent-opened signals, giving **50 and 6**.
 Both are right; they count different things.
-
-**Updated 2026-09-11 — the rebuild happened.** It used to read 2 and 4: B1/I-079's tiered match
-reached `main` on 2026-09-09 but the *stored* table still held the pre-fix zeros, so RAM
-PROMASTER and Chevrolet Silverado 1500 both showed **0** against 2,418 and 766 real vehicles.
-
-Rebuilt during the early B3 rehearsal (I-099). If a doc still says "2 of 48" or "4 of 50", it
-predates that.
 
 ---
 
@@ -233,13 +223,10 @@ predates that.
 - **The agent endpoint has two idle states and only one is fatal.** `Scaled to zero` wakes on
   request in ~47 s; `Stopped` does not wake at all. It was found `Stopped` during this dry run,
   having been believed merely scaled down — so check the deployment state, not the flag.
-  **DECIDED 2026-09-09: leave it on scale-to-zero and let the Assistant read as offline.** A
-  stopped endpoint now renders *"The assistant is offline. The queue and approval path are
-  unaffected."* rather than a raw error (I-093). The trade is accepted deliberately: keeping it
-  warm through the demo window costs continuous Small-CPU serving, and the honest offline
-  state is better than a crash. **Restore it as a demo-day step** (~3 min) so it is most
-  likely alive when reviewers look — how long the idle window is before it stops again has not
-  been measured.
+  **Left on scale-to-zero, by design** rather than kept warm, which would cost continuous
+  Small-CPU serving through the demo window. A stopped endpoint renders *"The assistant is
+  offline. The queue and approval path are unaffected."* rather than a raw error. **Restore it
+  as a demo-day step** (~3 min) so it is most likely alive when reviewers look.
 - **Reviewers can approve.** All three are in `FLEETGUARD_APPROVERS` and hold `CAN_MANAGE`. An approval
   writes up to ~200 work orders and replicates to **append-only** CDF that cannot be scrubbed.
   Fine if intended — budget the cleanup.
@@ -258,8 +245,8 @@ predates that.
 - **Not** that a reviewer's sign-in is proven. Every verification ran under the owner's identity, and
   under a **programmatic token** rather than a browser for the App routes. All three reviewers hold
   Lakebase roles, so the known failure mode cannot hit them — but it is untested, not proven.
-- **Not** that `match_basis` is populated. It is NULL for every row until B3 rebuilds; the console
-  correctly shows no tier badge rather than a wrong one.
+- **Not** that `match_basis` is populated on every row. Where it's NULL, the console correctly
+  shows no tier badge rather than a wrong one.
 - **Not** the 118-day investigation→recall figure as a system result. That is regulatory latency,
   context only.
 - **Not** that the semantic/embedding arm helps. It was built, measured, and **falsified** — it
@@ -312,12 +299,6 @@ All three reviewers hold `CAN_MANAGE`, so none of them needs the owner available
 >
 > **Please stop the app when you're done:** `databricks apps stop fleetguard-console`.
 
-Two things this grant carries that are worth knowing: reviewers can bring up **billing compute**
-unattended, and `CAN_MANAGE` also permits deploy, update and **delete**. There is no permission
-level between `CAN_USE` and `CAN_MANAGE`, so this is the smallest grant that allows starting —
-accepted deliberately, since a project that can only be seen when its author is awake is
-worse.
-
 ## 7. Shutdown
 
 ```bash
@@ -326,5 +307,4 @@ databricks apps stop fleetguard-console --profile abhi
 
 The agent endpoint is on scale-to-zero and idles down by itself. **AI Search (`fleetguard-vs`,
 ~$6.72/day) was the only continuously-billing resource** — it has since been deleted to stop
-billing (see README/`docs/STATUS.md`); restoring it measures ~75 min, not the "most of a
-working day" this line used to say (see `docs/RUNBOOK.md` §3.2 for the current figure).
+billing (see README/`docs/STATUS.md`); restoring it measures ~75 min (`docs/RUNBOOK.md` §3.2).

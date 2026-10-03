@@ -12,29 +12,25 @@ must never silently pick a default.
 
 **Names and values that recur, fixed once:**
 
-| name                     | value                                                                                                                                                                                                                                   |
-| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| catalog.schema           | `bootcamp_students.fleetguard`                                                                                                                                                                                                          |
-| AI Search endpoint       | `fleetguard-vs` (`STANDARD`)                                                                                                                                                                                                            |
-| AI Search index          | `complaint_chunk_idx`                                                                                                                                                                                                                   |
-| index source table       | `bootcamp_students.fleetguard.silver_complaint_chunk_indexed` (fleet make/model scope — I-111 + I-115; **179,347 rows** = 115,499 `EXACT` + 63,848 `MODEL_VARIANT`, measured 2026-09-30 and now pinned per tier in the builder — I-126) |
-| primary key              | `chunk_id`                                                                                                                                                                                                                              |
-| embedding source column  | `chunk_text`                                                                                                                                                                                                                            |
-| embedding model endpoint | `databricks-gte-large-en`                                                                                                                                                                                                               |
-| index subtype            | `HYBRID`                                                                                                                                                                                                                                |
-| pipeline type            | `TRIGGERED`                                                                                                                                                                                                                             |
-| columns_to_sync          | `chunk_id, complaint_id, make, model, component, any_harm, chunk_text` — the exact list `src/agent/14_fleetguard_agent.py` and `src/search/09_hybrid_query_test.py` both query; verified I-040                                          |
-| agent UC model           | `bootcamp_students.fleetguard.fleetguard_agent`                                                                                                                                                                                         |
-| agent serving endpoint   | `agents_bootcamp_students-fleetguard-fleetguard_agent`                                                                                                                                                                                  |
-| App                      | `fleetguard-console`                                                                                                                                                                                                                    |
+| name                     | value                                                                                                                                                                                                    |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| catalog.schema           | `bootcamp_students.fleetguard`                                                                                                                                                                           |
+| AI Search endpoint       | `fleetguard-vs` (`STANDARD`)                                                                                                                                                                             |
+| AI Search index          | `complaint_chunk_idx`                                                                                                                                                                                    |
+| index source table       | `bootcamp_students.fleetguard.silver_complaint_chunk_indexed` (fleet make/model scope; **179,347 rows** = 115,499 `EXACT` + 63,848 `MODEL_VARIANT`, measured 2026-09-30, pinned per tier in the builder) |
+| primary key              | `chunk_id`                                                                                                                                                                                               |
+| embedding source column  | `chunk_text`                                                                                                                                                                                             |
+| embedding model endpoint | `databricks-gte-large-en`                                                                                                                                                                                |
+| index subtype            | `HYBRID`                                                                                                                                                                                                 |
+| pipeline type            | `TRIGGERED`                                                                                                                                                                                              |
+| columns_to_sync          | `chunk_id, complaint_id, make, model, component, any_harm, chunk_text` — the exact list `src/agent/14_fleetguard_agent.py` and `src/search/09_hybrid_query_test.py` both query                           |
+| agent UC model           | `bootcamp_students.fleetguard.fleetguard_agent`                                                                                                                                                          |
+| agent serving endpoint   | `agents_bootcamp_students-fleetguard-fleetguard_agent`                                                                                                                                                   |
+| App                      | `fleetguard-console`                                                                                                                                                                                     |
 
-**One honest gap:** the *original* `create-index` call for `complaint_chunk_idx` was never
-captured verbatim. The command in §3.2 below is reconstructed from every independently-confirmed
-fact about that index (I-040's returned columns, I-105's `pipeline_type: TRIGGERED`,
-`ARCHITECTURE.md` §4.4's `HYBRID`/`databricks-gte-large-en`), not copied from a log. Treat a
-smoke-index run as the check that the reconstruction is right, not a formality — if the smoke
-index's `get-index` output doesn't show all seven `columns_to_sync` columns and `HYBRID`, stop
-and fix the command before running it at scale.
+**Before scaling up:** run a smoke-index first, and verify its `get-index` output shows all
+seven `columns_to_sync` columns and `HYBRID` before trusting the full build to the command in
+§3.2.
 
 ---
 
@@ -68,7 +64,7 @@ databricks bundle summary -t prod --profile abhi   # nothing should read "to be 
 ```
 
 Shipping the App specifically needs its own two commands — `bundle deploy` alone does **not**
-ship App code (I-097):
+ship App code:
 
 ```bash
 databricks bundle deploy -t prod --profile abhi
@@ -89,12 +85,11 @@ databricks vector-search-indexes get-index bootcamp_students.fleetguard.complain
 
 These five values together (git SHA, bundle deployment, agent model version, App deployment id,
 index row count) are the release provenance — nothing else in this project puts them in one
-place, which is the gap a 2026-09-20 review named as the biggest practical risk (I-110). Record
-them together after any deploy, not just once.
+place. Record them together after any deploy, not just once.
 
 ### 3.2 Create or restore the AI Search index
 
-**Use `scripts/provision_search.sh` (added 2026-09-24, I-116) rather than the raw commands.**
+**Use `scripts/provision_search.sh` rather than the raw commands.**
 
 ```bash
 ./scripts/provision_search.sh --check  --profile abhi   # free: what exists right now
@@ -107,19 +102,9 @@ block cannot:
 - **idempotent** — `get-endpoint`/`get-index` first, so a re-run after a dropped connection
   resumes instead of erroring on line one.
 - **reads the expected row count** from the source table rather than carrying a literal. Expect
-  **179,347** (measured 2026-09-30, I-126) — a result near 115K means the `EXACT`+`MODEL_VARIANT`
-  widening did not take, not success.
-
-  **Why 179,347 is trustworthy, not just plausible (I-123, I-126):** it decomposes as `EXACT`
-  **115,499** + `MODEL_VARIANT` **63,848**, and the `EXACT` half reproduces the old exact-only
-  scope's figure to the row — a regression that moved rows *between* tiers while preserving the
-  sum would still be caught, since the builder asserts each tier exactly, not just the total. It
-  was also predicted cross-workspace before being measured here: a separate Free Edition
-  workspace running the same widened builder independently measured `116,252 EXACT + 64,577
-  MODEL_VARIANT = 180,829`, within 0.65% of this workspace's `EXACT` half on the old basis —
-  which correctly predicted this workspace would land "near 180K, a few percent lower" (its
-  corpus and fleet roster are both slightly smaller). Confirmed here at **179,347**, 0.82% below
-  the prediction.
+  **179,347** (115,499 `EXACT` + 63,848 `MODEL_VARIANT`, measured 2026-09-30) — a result near
+  115K means the `EXACT`+`MODEL_VARIANT` widening did not take, not success. See
+  `docs/EVIDENCE.md` §8 for how this figure was validated.
 - **polls with drop detection** and treats a *decrease* in `indexed_row_count` as fatal — that is
   I-105's only visible symptom, and the failure that costs a day if missed.
 
@@ -219,8 +204,7 @@ databricks pipelines list-pipeline-events <PIPELINE_ID> --profile abhi
 activity for ~20 minutes before it starts — this has recurred more than once and self-cleared
 each time. Watch the `message` field, not `indexed_row_count` (it reads `None` then `0`
 throughout the stall, indistinguishable from a dead index). **If this happens: wait, do not
-delete-and-recreate** — recreation was tried once and did not clear it; inaction did. Full
-writeup and timings: `docs/ISSUES.md` I-112.
+delete-and-recreate** — recreation was tried once and did not clear it; inaction did.
 
 Done when `status.ready: true` and `indexed_row_count` equals the count the source-table rebuild
 (§3.6) printed — not a number hard-coded here, since the fleet scope and corpus both change over

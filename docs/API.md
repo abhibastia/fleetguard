@@ -25,12 +25,12 @@ below.
 | GET    | `/api/me`          | The caller's own identity and how it was obtained. Proves the auth seam end to end.                                                                                                                                                                                                                                                                                                                                                                                            |
 | GET    | `/api/auth/status` | What auth mode this deployment is running, for the console's own diagnostics.                                                                                                                                                                                                                                                                                                                                                                                                  |
 
-**Why both.** `/healthz` returned `ok` for weeks with the index deleted, the agent stopped and
-Lakebase unreachable — it only ever checked the process, so it could not tell anyone whether
-the system worked (I-115). `/readyz` answers that, and is **authenticated** because its Lakebase
-check has to run under the caller's token: this app holds no privileges of its own (§8a), so
-proving the *app's* access would test something the product does not do. That also means
-`/readyz` cannot serve as a container probe, which is fine — `/healthz` is, and it is unchanged.
+**Why both.** `/healthz` only checks that the process is up — it cannot tell you whether
+Lakebase, the agent, or the index are reachable. `/readyz` answers that instead, and is
+**authenticated** because its Lakebase check has to run under the caller's token: this app
+holds no privileges of its own (§8a), so proving the *app's* access would test something the
+product does not do. That also means `/readyz` cannot serve as a container probe — `/healthz`
+is, and it is unchanged.
 
 **It is free to call.** The agent and index are checked with `serving-endpoints get` and
 `get-index`, control-plane reads. Querying the agent instead would wake a scale-to-zero
@@ -38,10 +38,10 @@ container and bill until it idled down — the one thing a readiness probe must 
 exception is the index row count, which needs a SQL warehouse; it degrades to a note rather
 than failing readiness, because a warehouse scaled to zero is not a broken index.
 
-**It is also the release preflight.** *"Is the live system the thing in the zip?"* was named by
-review as the biggest practical risk, and answering it meant looking in five places. The
-`release` check reports two of them — served agent version and the git SHA the console was
-built at — so the question is one authenticated URL rather than a runbook (I-117).
+**It is also the release preflight.** *"Is the live system the thing in the zip?"* used to mean
+checking five separate places by hand. The `release` check reports two of them — served agent
+version and the git SHA the console was built at — so the question is one authenticated URL
+rather than a runbook.
 
 ## Queue & campaign detail — the operator's primary surface
 
@@ -101,13 +101,12 @@ built at — so the question is one authenticated URL rather than a runbook (I-1
 | GET    | `/api/evidence`             | The published backtest result. **Deliberately unauthenticated** — it serves a measured result about NHTSA data, not fleet or VIN data, so it works without a Databricks identity. |
 | GET    | `/api/corpus`               | Corpus scale for the landing page — bronze row counts, the synthetic fleet's cardinality, and the RAG chunk count. **Also deliberately unauthenticated**, on the same test.       |
 
-**Both public routes serve a committed snapshot, not a live query, and that is a constraint
-rather than a preference:** the public surface has no Databricks credential at request time
-(§8a), so there is nothing to run `COUNT(*)` under. `scripts/export_evidence.py` and
-`scripts/export_corpus.py` regenerate them with provenance (`generated_at`, the source schema,
-the exact statement). A missing snapshot is a loud **503**, never zeros — a page rendering
-"0 complaints" reads as *this system has no data* rather than *the numbers failed to load*
-(I-050).
+**Both public routes serve a committed snapshot, not a live query**, because the public surface
+has no Databricks credential at request time (§8a), so there is nothing to run `COUNT(*)`
+under. `scripts/export_evidence.py` and `scripts/export_corpus.py` regenerate them with
+provenance (`generated_at`, the source schema, the exact statement). A missing snapshot is a
+loud **503**, never zeros — a page rendering "0 complaints" reads as *this system has no data*
+rather than *the numbers failed to load*.
 
 **Why these two and no others.** Every figure served here is public NHTSA corpus scale or a
 *cardinality* of the synthetic fleet registry — no VIN, no depot, no campaign, nothing an
@@ -119,8 +118,7 @@ to be a decision someone makes rather than one that drifts in.
 ## External APIs this project consumes
 
 Distinct from the console API above — these are third-party sources FleetGuard's pipelines and
-fleet registry pull from, not endpoints this project serves. See `CLAUDE.md`'s "Verified facts"
-section for how each was confirmed live.
+fleet registry pull from, not endpoints this project serves.
 
 | API                                                   | Used for                                                                                                                                                                                                                                                                                                                                |
 | ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
