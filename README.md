@@ -63,8 +63,15 @@ like a broken app rather than an unauthorised one. Please **stop it again** when
 > **What stands in for it:** [`docs/TRANSCRIPTS.md`](docs/TRANSCRIPTS.md) (five verbatim
 > exchanges, generated from the saved responses), `docs/screenshots/` (22 stills including the
 > Assistant answering with cited complaint ids, plus a 7-beat walkthrough video), and the scored
-> evaluation — 15 cases, **all three safety hard gates 1.000**. **The full stack can be restored
-> for a scheduled window on request.**
+> evaluation — 15 cases, **all three safety hard gates 1.000**.
+>
+> **To restore the full stack yourself:** [`docs/RUNBOOK.md`](docs/RUNBOOK.md) §3 has the exact
+> commands. Restore order is fixed — **AI Search index → agent serving endpoint → App**
+> (`docs/RUNBOOK.md` §3.2 → §3.3 → §3.7) — deleting the index makes the agent *undeployable*,
+> not merely degraded, so it must go first. Budget **~75 minutes** for the index, then ~3
+> minutes for the agent, then ~2 minutes for the App. All four reviewers hold `CAN_MANAGE` and
+> can start the App itself (`databricks apps start fleetguard-console`) without touching the
+> index or agent at all, if just that is needed.
 
 **[`docs/DEMO.md`](docs/DEMO.md) is the guided tour** — pre-flight with measured timings, the
 ten beats worth seeing, every number with its source, and an explicit list of what this project
@@ -250,6 +257,7 @@ Read `docs/STATUS.md` first if you're picking this up cold — it's the one page
 | [`docs/EVIDENCE.md`](docs/EVIDENCE.md)                       | **What backs each claim** — the artefact, table, job or measured number behind every claim, and what is deliberately still missing. **Start here**: it is organised by the eight capability areas |
 | [`docs/TRANSCRIPTS.md`](docs/TRANSCRIPTS.md)                 | **Five verbatim agent exchanges from Run 2**, generated from the saved JSON responses rather than retyped — deterministic exposure, retrieval with cited complaint ids, a write reaching the lakehouse, graceful degradation after the index was deleted, and what the endpoint returns right now |
 | [`docs/DEMO.md`](docs/DEMO.md)                               | **Start here to look around** — pre-flight, the ten beats, numbers with sources, what not to claim |
+| [`docs/RUNBOOK.md`](docs/RUNBOOK.md)                          | **How to run it** — local dev, deploying, and operating the live resources: restoring the AI Search index, the agent endpoint, and the App, in that order, with exact commands |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)               | The living spec — what the system *is*, kept true with the code |
 | [`docs/API.md`](docs/API.md)                                 | Every console REST endpoint and every external API this project consumes, one page |
 | [`docs/STATUS.md`](docs/STATUS.md)                           | Where the build has got to, updated every session |

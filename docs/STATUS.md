@@ -5,6 +5,27 @@
 > staged but not yet live, and the traps in the order they bite. The session log below is
 > newest-first history; you do not need to read it to resume.
 
+## SESSION 2026-10-04 — TA will restart the stack themselves; README pointed at RUNBOOK.md
+
+**No live resource touched.** The TA replied to the offer (made in the 2026-10-03 cold-start
+note) to bring the Assistant stack back up for a scheduled window: *"that's fine. we will take
+care. make sure you have added the instructions in the readme file."* So **this project does
+not need to restore the index/agent/App itself** — the TAs will do it on their own schedule,
+and the only action this session owed was making sure README.md actually told them how.
+
+**It didn't.** `docs/RUNBOOK.md` — the doc with the exact restore commands — was not linked
+anywhere in README.md, including its own documentation-map table. Fixed in one commit:
+
+- Added a row for `docs/RUNBOOK.md` to the documentation map table.
+- Rewrote the "Assistant is OFFLINE" callout to name the restore order explicitly (**AI Search
+  index → agent serving endpoint → App**, RUNBOOK §3.2 → §3.3 → §3.7), the timing budget
+  (~75 min / ~3 min / ~2 min), and that any of the four `CAN_MANAGE` reviewers can self-start
+  just the App (`databricks apps start fleetguard-console`) without touching the index or
+  agent, if that's all they need.
+
+**Nothing else changes.** The zip resubmission (cold-start item 1) is still open and untouched
+this session.
+
 ## SESSION 2026-10-03 — repo de-academicized; RUNBOOK rewritten; frozen proposal removed
 
 **No live resource touched — purely a documentation and repo-hygiene pass, pushed as four
@@ -1448,17 +1469,17 @@ than discovering it mid-demo.
 
 ## Picking this up tomorrow
 
-### COLD START — state as of 2026-10-03
+### COLD START — state as of 2026-10-04
 
-**Read this section. Then, only if you are bringing the demo back up, `docs/RUNBOOK.md`
-(restructured 2026-10-03 — it is now a generic how-to-run/operate guide, not the old
-Run-1/Run-2 narrative; section numbers changed). Nothing else is required to resume.**
+**Read this section. The TAs are restoring the demo stack themselves — this project does not
+need to. `docs/RUNBOOK.md` (restructured 2026-10-03) is now linked from README.md for exactly
+that reason.**
 
 | | |
 |---|---|
-| **Where the project is** | **BUILT, VERIFIED, SUBMITTED ONCE, AND SWITCHED OFF.** Run 2 completed 2026-10-01; a zip was submitted and is with the TAs. **Nothing is billing.** 2026-10-03 added a full documentation/repo-hygiene pass (de-academicization, `docs/RUNBOOK.md` rewrite, `docs/FleetGuard_Proposal.md` removed) — see the session entry directly above this one. No live resource was touched |
-| **Submission** | Zip uploaded; flagged **Manual Review** — TAs review by hand, and **the AI grader's report goes to them, not to you**. So there is no feedback loop to iterate against. A **resubmission is planned for Sunday (2026-10-04)** — the gap between the submitted zip and `main` has grown again, now also missing all of 2026-10-03's doc work |
-| **`main`** | `6741fc2`, pushed, CI green. Since the submitted zip: **#28** Run 2 record · **#29** Stop-is-UI-only · **#30** transcripts + billing check · **#31** I-129 · **#32** the stat-card fix · **#33** re-stamp · then 2026-10-03's four doc commits (`b5d87fb`, `4de1241`, `0203120`, `6741fc2`) |
+| **Where the project is** | **BUILT, VERIFIED, SUBMITTED ONCE, AND SWITCHED OFF.** Run 2 completed 2026-10-01; a zip was submitted and is with the TAs. **Nothing is billing.** The TAs confirmed 2026-10-04 they'll bring the stack back up themselves — see the session entry directly above this one — so restoring it is off this project's critical path |
+| **Submission** | Zip uploaded; flagged **Manual Review** — TAs review by hand, and **the AI grader's report goes to them, not to you**. So there is no feedback loop to iterate against. A **resubmission is planned**, still open — the gap between the submitted zip and `main` has grown again, now also missing all of 2026-10-03's doc work and the 2026-10-04 README fix |
+| **`main`** | `6741fc2` + the 2026-10-04 README/RUNBOOK-link commit, pushed, CI green. Since the submitted zip: **#28** Run 2 record · **#29** Stop-is-UI-only · **#30** transcripts + billing check · **#31** I-129 · **#32** the stat-card fix · **#33** re-stamp · 2026-10-03's four doc commits (`b5d87fb`, `4de1241`, `0203120`, `6741fc2`) · then 2026-10-04's README fix |
 | **Working tree** | clean · **branches: `main` + `free-edition-deploy`** (frozen pre-fold snapshot, 2026-09-30, do not deploy from it) |
 | **Tests** | **646 backend passed / 24 skipped**, **156** vitest, ruff + typecheck clean — all re-confirmed live 2026-10-03. *The 53 `tests/pipelines/` Spark tests cannot run on this laptop (`Bad CPU type in executable`, x86-only `java`) — CI is the only place they execute* |
 | **Bound job resources** | **31** (`ls resources/*.job.yml \| wc -l` — count it, never trust this number; it has drifted four times; re-confirmed 31 live 2026-10-03) |
@@ -1494,21 +1515,22 @@ Run-1/Run-2 narrative; section numbers changed). Nothing else is required to res
 | **I-126** | The Run 2 record: provenance stamping, the sticky-consent trap, the `states_match_tier` diagnosis |
 | **I-125** | The Assistant screenshot stopped being deferred |
 
-#### What happens next — Sunday
+#### What happens next
 
-1. **Rebuild the zip and resubmit.** The submitted one predates #28–#33 and all of 2026-10-03's
-   doc work, so it lacks `docs/TRANSCRIPTS.md`, the corrected README, the stat-card fix, the
-   de-academicized docs, the rewritten `docs/RUNBOOK.md`, and no longer has
-   `docs/FleetGuard_Proposal.md` to include (removed — see the session entry above).
+1. **Rebuild the zip and resubmit.** The submitted one predates #28–#33, all of 2026-10-03's
+   doc work, and the 2026-10-04 README fix, so it lacks `docs/TRANSCRIPTS.md`, the corrected
+   README (now also linking `docs/RUNBOOK.md`), the stat-card fix, the de-academicized docs,
+   the rewritten `docs/RUNBOOK.md`, and no longer has `docs/FleetGuard_Proposal.md` to include
+   (removed — see the session entry above).
    ```bash
    { git ls-files; find docs/screenshots -type f; } | sort -u > /tmp/m.txt
    zip -q -X fleetguard-submission.zip -@ < /tmp/m.txt
    ```
    **`fleetguard-submission.zip` is gitignored** — build it, never commit it (it was committed
    once by an unscoped `git add -A` and amended out).
-2. **Decide whether to bring the stack up for the TAs.** They can start the App themselves in
-   ~2 min; the Assistant needs the index (~75 min) *then* the agent (~3 min). Offering a
-   scheduled window is the cheaper answer and has been put to them.
+2. ~~Decide whether to bring the stack up for the TAs.~~ **RESOLVED 2026-10-04 — the TAs will
+   restore it themselves**, on the strength of the restore-order/timing writeup now in
+   README.md (§ above). Nothing further needed from this side unless they ask.
 3. **If the index comes back, re-record the walkthrough** — Beat 3 still shows the pre-I-130
    numbers, and Beat 8 needs the agent. The 20 stills are already correct.
 
