@@ -57,11 +57,22 @@ force-stopped, matching what §4 actually says (free while idle, saves a restore
 stricter choice than the runbook calls for, not a requirement. `fleetguard-vs` endpoint
 deleted, App `STOPPED`, both confirmed by direct query rather than assumed from exit codes.
 
-**Still open:** the submission zip still needs rebuilding with this session's fresh
-`docs/screenshots/` content (replacing the stale pre-I-130 `walkthrough-dark.mp4`, now
-deleted) and resubmitting. `docs/EVIDENCE.md` and `README.md` updated in this commit to match
-the new counts (24 stills, 8 beats) and the two new artefacts
-(`walkthrough-dark-captioned.mp4`, `approval-preview-{dark,light}.png`).
+**Zip rebuilt and resubmission-ready after the evidence capture** — `fleetguard-submission.zip`
+regenerated with current code, fresh screenshots, both videos, and the then-current docs.
+
+**I-131 found and fixed afterward, same session, no live resources needed.** Using the
+console locally post-capture surfaced a second discrepancy by the same mechanism as I-130: the
+Recall queue tab's "Launched" filter showed 2 campaigns, the Launched tab showed 3. Root cause:
+`/queue` ranks all 393 campaigns by priority and caps at `limit=50` *before* the frontend's
+Launched filter narrows what's already been fetched — so a launched campaign that doesn't rank
+in the top 50 (low exposure, no Park It) is invisible under that filter no matter what, while
+the Launched tab queries `fleetguard_service_campaign` directly, unranked, and was correct the
+whole time. Fixed with a `launched_only` param on `/queue`, filtered via `HAVING` *before*
+`ORDER BY`/`LIMIT` (`service_campaign_id` only exists post-aggregation) — full writeup in
+`docs/ISSUES.md` I-131. Needed only the local dev server against live Lakebase, no App/agent/
+index restore. Two commits pushed (`a46c145` content, `0fc9617` the provenance re-stamp), console
+rebuilt, free-edition mirror re-synced, full suite re-confirmed green (backend + frontend).
+**The zip needs rebuilding once more** to pick up this fix — not yet done as of this entry.
 
 ## SESSION 2026-10-03 (4) — stopped comparing the repo to the deleted proposal doc
 
@@ -1588,7 +1599,7 @@ fresh evidence before resubmitting — see the session entry directly above this
 | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Where the project is** | **BUILT, VERIFIED TWICE (2026-10-01 and 2026-10-04), AND SWITCHED OFF AGAIN.** `docs/screenshots/` now holds fresh, live-captured evidence (24 stills, an 8-beat captioned video, the approval-confirmation preview) matching current code and current numbers. **Nothing is billing.** The TAs confirmed 2026-10-03 they'll bring the stack back up themselves if they need to — restoring it is still off this project's critical path |
 | **Submission**           | Zip uploaded 2026-10-01; flagged **Manual Review** — TAs review by hand, and **the AI grader's report goes to them, not to you**. So there is no feedback loop to iterate against. A **resubmission is planned**, still open — the gap between the submitted zip and `main` has grown further (now also missing all of 2026-10-03's doc work and all of this session's fresh evidence)     |
-| **`main`**               | 2026-10-04 doc updates (this session) on top of `6741fc2` + the 2026-10-03 README/RUNBOOK-link commit. Since the submitted zip: **#28** Run 2 record · **#29** Stop-is-UI-only · **#30** transcripts + billing check · **#31** I-129 · **#32** the stat-card fix · **#33** re-stamp · 2026-10-03's four doc commits (`b5d87fb`, `4de1241`, `0203120`, `6741fc2`) · the 2026-10-03 README fix · this session's evidence-refresh commit |
+| **`main`**               | `0fc9617` (the I-131 provenance re-stamp) on top of `a46c145` (the I-131 fix itself), `9f7699e` (evidence refresh), `6741fc2` + the 2026-10-03 README/RUNBOOK-link commit. Since the submitted zip: **#28** Run 2 record · **#29** Stop-is-UI-only · **#30** transcripts + billing check · **#31** I-129 · **#32** the stat-card fix · **#33** re-stamp · 2026-10-03's four doc commits (`b5d87fb`, `4de1241`, `0203120`, `6741fc2`) · the 2026-10-03 README fix · `9f7699e` · `a46c145` · `0fc9617` |
 | **Working tree**         | clean · **branches: `main` + `free-edition-deploy`** (frozen pre-fold snapshot, 2026-09-30, do not deploy from it)                                                                                                                                                                                                                                                |
 | **Tests**                | **646 backend passed / 24 skipped**, **156** vitest, ruff + typecheck clean — all re-confirmed live 2026-10-03. *The 53 `tests/pipelines/` Spark tests cannot run on this laptop (`Bad CPU type in executable`, x86-only `java`) — CI is the only place they execute*                                                                                             |
 | **Bound job resources**  | **31** (`ls resources/*.job.yml \| wc -l` — count it, never trust this number; it has drifted four times; re-confirmed 31 live 2026-10-03)                                                                                                                                                                                                                        |
@@ -1627,11 +1638,13 @@ fresh evidence before resubmitting — see the session entry directly above this
 #### What happens next
 
 1. **Rebuild the zip and resubmit.** The submitted one predates #28–#33, all of 2026-10-03's
-   doc work, the 2026-10-03 README fix, and this session's evidence refresh, so it lacks
-   `docs/TRANSCRIPTS.md`, the corrected README, the stat-card fix, the de-academicized docs,
-   the rewritten `docs/RUNBOOK.md`, current (not pre-I-130) screenshots, and
-   `walkthrough-dark-captioned.mp4` — and no longer has `docs/FleetGuard_Proposal.md` to
-   include (removed — see the 2026-10-03 session entry).
+   doc work, the 2026-10-03 README fix, this session's evidence refresh, and the I-131 fix, so
+   it lacks `docs/TRANSCRIPTS.md`, the corrected README, the stat-card fix, the de-academicized
+   docs, the rewritten `docs/RUNBOOK.md`, current (not pre-I-130) screenshots,
+   `walkthrough-dark-captioned.mp4`, and the launched-filter fix's console bundle — and no
+   longer has `docs/FleetGuard_Proposal.md` to include (removed — see the 2026-10-03 session
+   entry). **This was rebuilt once already mid-session, then I-131 landed after that build —
+   it needs one more rebuild to be current.**
    ```bash
    { git ls-files; find docs/screenshots -type f; } | sort -u > /tmp/m.txt
    zip -q -X fleetguard-submission.zip -@ < /tmp/m.txt
@@ -1688,7 +1701,7 @@ access).
 #### How to confirm you are where this note says
 
 ```bash
-git log --oneline -1                                              # expect this session's evidence-refresh commit or later
+git log --oneline -1                                              # expect 0fc9617 or later
 git status -sb                                                    # clean
 .venv/bin/python -m pytest --ignore=tests/pipelines               # 646 passed / 24 skipped
 ls resources/*.job.yml | wc -l                                    # 31 — count it, don't trust this line
