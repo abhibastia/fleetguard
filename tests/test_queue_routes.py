@@ -102,7 +102,7 @@ class TestGetQueue:
         no Databricks credential, so reaching the connection is not a slow path — it is an
         error."""
         monkeypatch.setattr(queue.snapshot, "is_snapshot", lambda: True)
-        monkeypatch.setattr(queue.snapshot, "queue", lambda limit: [])
+        monkeypatch.setattr(queue.snapshot, "queue", lambda limit, launched_only=False: [])
 
         def explode(*a, **k):
             raise AssertionError("connect() must not be called in snapshot mode")
@@ -147,6 +147,38 @@ class TestGetQueue:
         by_id = {r.campaign_id: r for r in result}
         assert by_id["ALREADY-LAUNCHED"].service_campaign_id == "SC-ALREADY-LAUNCHED-abc123"
         assert by_id["NOT-LAUNCHED"].service_campaign_id is None
+
+    def test_launched_only_filters_before_the_limit_via_having(self, monkeypatch):
+        """The whole point of `launched_only`: it must filter BEFORE `LIMIT`, not after — a
+        `WHERE`/client-side filter on an already-capped, ranked page is exactly the I-130-shaped
+        bug this closes (a launched campaign ranked outside the default top 50 was invisible
+        under any filter, found live 2026-10-04). `HAVING` is the only clause that can see
+        `MAX(sc.service_campaign_id)` (it's a post-aggregation value) and still run before
+        `ORDER BY`/`LIMIT`, so asserting its presence AND its position is the real assertion —
+        presence alone wouldn't catch a regression that moved the filter to the wrong clause."""
+        cur = FakeCursor({"fleetguard_vehicle_exposure": []})
+        install(monkeypatch, queue, cur)
+
+        get_queue(USER, depot_id=None, limit=50, launched_only=True)
+
+        sql = cur.sql_for("fleetguard_vehicle_exposure")
+        having = "HAVING MAX(sc.service_campaign_id) IS NOT NULL"
+        assert having in sql
+        assert sql.index(having) < sql.index("ORDER BY")
+        assert sql.index(having) < sql.index("LIMIT")
+
+    def test_launched_only_false_omits_the_having_clause(self, monkeypatch):
+        """`launched_only=False` explicitly, not relied on as a default — calling the handler
+        directly (as every test here does) bypasses FastAPI's dependency resolution, so an
+        unpassed `Query(False, ...)` parameter binds to the `Query` object itself (truthy),
+        not the resolved `False` a real request gets. Same reason every other test in this
+        file always passes `limit=` explicitly too."""
+        cur = FakeCursor({"fleetguard_vehicle_exposure": []})
+        install(monkeypatch, queue, cur)
+
+        get_queue(USER, depot_id=None, limit=50, launched_only=False)
+
+        assert "HAVING" not in cur.sql_for("fleetguard_vehicle_exposure")
 
     def test_queue_join_scopes_to_launched_status_only(self, monkeypatch):
         """A CANCELLED prior attempt must not read as launched — `campaign_id` is not unique
@@ -292,9 +324,13 @@ class TestQueueSummary:
     def test_it_has_no_limit(self, monkeypatch):
         """A totals query that paginates is not a totals query. This is the bug itself: the
         cards were counting a 50-row page."""
-        cur = FakeCursor({"fleetguard_vehicle_exposure": [
-            {"campaigns": 1, "vehicles_exposed": 1, "urgent_campaigns": 0}
-        ]})
+        cur = FakeCursor(
+            {
+                "fleetguard_vehicle_exposure": [
+                    {"campaigns": 1, "vehicles_exposed": 1, "urgent_campaigns": 0}
+                ]
+            }
+        )
         install(monkeypatch, queue, cur)
 
         get_queue_summary(USER, depot_id=None)
@@ -306,9 +342,13 @@ class TestQueueSummary:
     def test_depot_scope_still_applies_and_binds_as_a_parameter(self, monkeypatch):
         """Totals must respect depot containment exactly as the list does, or a scoped
         operator reads a fleet-wide number off a scoped page."""
-        cur = FakeCursor({"fleetguard_vehicle_exposure": [
-            {"campaigns": 2, "vehicles_exposed": 9, "urgent_campaigns": 1}
-        ]})
+        cur = FakeCursor(
+            {
+                "fleetguard_vehicle_exposure": [
+                    {"campaigns": 2, "vehicles_exposed": 9, "urgent_campaigns": 1}
+                ]
+            }
+        )
         install(monkeypatch, queue, cur)
 
         get_queue_summary(USER, depot_id="DEP-053")
@@ -321,15 +361,23 @@ class TestQueueSummary:
     def test_it_joins_the_same_three_tables_as_the_list(self, monkeypatch):
         """Totals describing a different population from the rows beneath them would be a
         subtler version of the same bug."""
-        cur = FakeCursor({"fleetguard_vehicle_exposure": [
-            {"campaigns": 1, "vehicles_exposed": 1, "urgent_campaigns": 0}
-        ]})
+        cur = FakeCursor(
+            {
+                "fleetguard_vehicle_exposure": [
+                    {"campaigns": 1, "vehicles_exposed": 1, "urgent_campaigns": 0}
+                ]
+            }
+        )
         install(monkeypatch, queue, cur)
 
         get_queue_summary(USER, depot_id=None)
 
         sql = cur.sql_for("fleetguard_vehicle_exposure")
-        for table in ("fleetguard_vehicle_exposure", "fleetguard_vehicle", "fleetguard_recall_campaign"):
+        for table in (
+            "fleetguard_vehicle_exposure",
+            "fleetguard_vehicle",
+            "fleetguard_recall_campaign",
+        ):
             assert table in sql
 
     def test_snapshot_mode_never_touches_the_database(self, monkeypatch):
@@ -346,4 +394,3 @@ class TestQueueSummary:
         monkeypatch.setattr(queue, "connect", explode)
 
         assert get_queue_summary(USER, depot_id=None).campaigns == 393
-

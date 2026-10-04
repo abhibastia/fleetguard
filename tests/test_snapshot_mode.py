@@ -128,3 +128,21 @@ def test_the_write_path_refuses_rather_than_faking_success(snapshot_client, monk
         },
     )
     assert resp.status_code == 501
+
+
+def test_snapshot_queue_launched_only_filters_before_the_limit(monkeypatch):
+    """Same bug, smaller page: the exporter's own `queue` list is already capped (`LIMIT 60`),
+    so `launched_only` has to filter before the `[:limit]` slice here too, or a launched row
+    outside the captured page's own priority ranking would be just as invisible as it was on
+    the live `/queue` route before this fix (found live 2026-10-04)."""
+    from fleetguard_api import snapshot
+
+    rows = [
+        {"campaign_id": "PARKIT", "service_campaign_id": None},
+        {"campaign_id": "LAUNCHED-BUT-LOW-PRIORITY", "service_campaign_id": "SC-123"},
+    ]
+    monkeypatch.setattr(snapshot, "load", lambda: {"queue": rows})
+
+    result = snapshot.queue(limit=1, launched_only=True)
+
+    assert [r["campaign_id"] for r in result] == ["LAUNCHED-BUT-LOW-PRIORITY"]

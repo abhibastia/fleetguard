@@ -390,7 +390,11 @@ export const api = {
   // /healthz sits outside /api on purpose — it must answer even when the API is unhappy.
   health: () =>
     fetch("/healthz", { credentials: "include" }).then((r) => r.json() as Promise<Health>),
-  queue: (limit = 50) => request<QueueItem[]>(`/queue?limit=${limit}`),
+  // `launchedOnly` filters server-side, before the `limit` cut — not the same as fetching the
+  // default page and filtering it client-side, which was the I-130-shaped bug this closes: a
+  // launched campaign ranked outside the top-`limit` was invisible under any client filter.
+  queue: (limit = 50, launchedOnly = false) =>
+    request<QueueItem[]>(`/queue?limit=${limit}&launched_only=${launchedOnly}`),
   // Totals for the stat cards. A separate call because `/queue` returns a bare array, and
   // because the cards must NOT be derived from it: that page is capped at `limit`, so counting
   // it reports the fetch limit as a total (I-130).

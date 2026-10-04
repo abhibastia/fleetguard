@@ -54,8 +54,14 @@ def captured_at() -> str | None:
     return load().get("captured_at")
 
 
-def queue(limit: int = 50) -> list[dict]:
-    return load()["queue"][:limit]
+def queue(limit: int = 50, launched_only: bool = False) -> list[dict]:
+    rows = load()["queue"]
+    if launched_only:
+        # Filter before slicing, matching routers/queue.py's `HAVING`-before-`LIMIT` fix —
+        # the snapshot's own cap (`LIMIT 60` in the exporter) would otherwise reproduce the
+        # same bug this parameter exists to close, just on a smaller, static page.
+        rows = [r for r in rows if r.get("service_campaign_id")]
+    return rows[:limit]
 
 
 def queue_summary() -> dict:
@@ -76,9 +82,8 @@ def queue_summary() -> dict:
     q = snap["queue"]
     return {
         "campaigns": len(q),
-        "vehicles_exposed": len({r["vin"] for r in q if r.get("vin")}) or sum(
-            r.get("vehicles_exposed", 0) for r in q
-        ),
+        "vehicles_exposed": len({r["vin"] for r in q if r.get("vin")})
+        or sum(r.get("vehicles_exposed", 0) for r in q),
         "urgent_campaigns": sum(1 for r in q if r.get("park_it") or r.get("do_not_drive")),
     }
 

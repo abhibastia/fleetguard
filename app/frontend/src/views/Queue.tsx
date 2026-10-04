@@ -25,7 +25,17 @@ type SortKey = "vehicles_exposed" | "depots_affected";
  * since the tags already carry more information than a re-sortable rank would.
  */
 export function Queue({ onOpen }: { onOpen: (id: string) => void }) {
-  const { data: items, error, gated } = useFetch(() => api.queue(), []);
+  const [launchFilter, setLaunchFilter] = useState<string>(LAUNCH_FILTER_ALL);
+  // Re-fetches when the Launched filter is toggled, rather than filtering one fetched page
+  // client-side — `/queue`'s default page is capped and ranked by priority, so a launched
+  // campaign that doesn't rank in the top `limit` was invisible under the old client-side
+  // filter no matter what. `launched_only` filters server-side, before that cap applies
+  // (I-130-shaped bug, found live 2026-10-04: 3 campaigns launched, only 2 ranked inside the
+  // default top 50).
+  const { data: items, error, gated } = useFetch(
+    () => api.queue(50, launchFilter === LAUNCH_FILTER_LAUNCHED),
+    [launchFilter],
+  );
   // Totals come from the server, NOT from `items` (I-130). `items` is one page — capped at the
   // API's default limit of 50 — so `items.length` was reporting the fetch limit as the campaign
   // count (50 against 393 live), and summing `vehicles_exposed` across it counted a VIN once
@@ -33,16 +43,16 @@ export function Queue({ onOpen }: { onOpen: (id: string) => void }) {
   // the table is still worth showing if only the cards are unavailable.
   const { data: totals } = useFetch(() => api.queueSummary(), []);
   const [severityFilter, setSeverityFilter] = useState<string>(SEVERITY_FILTER_ALL);
-  const [launchFilter, setLaunchFilter] = useState<string>(LAUNCH_FILTER_ALL);
 
   const filtered = useMemo(() => {
     return (items ?? []).filter((i) => {
       if (severityFilter === SEVERITY_FILTER_URGENT && !(i.park_it || i.do_not_drive)) {
         return false;
       }
+      // LAUNCHED is applied server-side now (see the `useFetch` call above) — `items` already
+      // is the launched-only set when this filter is active, so nothing to narrow here.
       // `service_campaign_id` is non-null exactly when a LAUNCHED service campaign already
       // exists for this recall — the same field the LAUNCHED tag in the table below reads.
-      if (launchFilter === LAUNCH_FILTER_LAUNCHED && !i.service_campaign_id) return false;
       if (launchFilter === LAUNCH_FILTER_NOT_LAUNCHED && i.service_campaign_id) return false;
       return true;
     });

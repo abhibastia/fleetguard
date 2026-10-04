@@ -79,7 +79,17 @@ describe("request() error handling — every call goes through this, so a bug he
     });
     await api.queue(25);
     const [url] = fetchMock.mock.calls[0];
-    expect(url).toBe("/api/queue?limit=25");
+    expect(url).toBe("/api/queue?limit=25&launched_only=false");
+  });
+
+  it("asks the server to filter launched-only, not just the fetched page", async () => {
+    const fetchMock = mockFetchOnce({
+      ok: true,
+      json: () => Promise.resolve([]),
+    });
+    await api.queue(50, true);
+    const [url] = fetchMock.mock.calls[0];
+    expect(url).toBe("/api/queue?limit=50&launched_only=true");
   });
 });
 

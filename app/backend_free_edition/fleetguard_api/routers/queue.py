@@ -75,6 +75,10 @@ def get_queue(
     principal: CurrentPrincipal,
     depot_id: str | None = Query(None, description="narrow to one depot"),
     limit: int = Query(50, ge=1, le=200),
+    launched_only: bool = Query(
+        False,
+        description="filter to campaigns with a LAUNCHED service campaign, before LIMIT applies",
+    ),
 ) -> list[QueueItem]:
     """Campaigns affecting the fleet, most urgent first.
 
@@ -82,12 +86,21 @@ def get_queue(
     outranks a label recall on 1,801, because the ranking encodes consequence rather than
     volume. `DO_NOT_DRIVE` covers only 211 of 15,211 campaigns (I-014), so it is a genuine
     discriminator rather than a always-true flag.
+
+    **`launched_only` filters before `LIMIT`, not after — that distinction is the whole point
+    of this parameter.** The frontend's own "Launched" dropdown used to filter the already-
+    fetched top-`limit` page client-side, so a launched campaign ranked outside that page (low
+    exposure, no Park It) was invisible under that filter no matter what, while the Launched
+    tab (`/service-campaigns`, which queries `fleetguard_service_campaign` directly, unranked)
+    correctly showed it. Same shape as I-130: a capped, ranked page silently standing in for a
+    complete one. Found live, 2026-10-04 — 3 campaigns are launched but only 2 rank inside the
+    default top-50.
     """
     # Snapshot mode short-circuits before any Lakebase call. The branch is here, at the top
     # of the handler, rather than hidden behind a store abstraction: one greppable line per
     # endpoint is easier to audit than a layer that could silently pick the wrong source.
     if snapshot.is_snapshot():
-        return [QueueItem(**r) for r in snapshot.queue(limit)]
+        return [QueueItem(**r) for r in snapshot.queue(limit, launched_only=launched_only)]
 
     scope = resolve_scope(principal, depot_id)
     # LEFT JOIN, not inner: a campaign with no launched service campaign is the common case,
@@ -95,6 +108,12 @@ def get_queue(
     # Scoped to status = 'LAUNCHED' to match the one partial unique index that actually
     # enforces "one active campaign per recall" (I-063) — a CANCELLED prior attempt must not
     # make this look launched.
+    #
+    # `HAVING`, not `WHERE` — `service_campaign_id` only exists post-aggregation (`MAX(...)`
+    # over the per-exposure-row join), so filtering on it has to happen after `GROUP BY` and,
+    # critically, still before `ORDER BY`/`LIMIT` — which is the fix: the campaign is excluded
+    # or kept before the page is cut, not after.
+    having_clause = "HAVING MAX(sc.service_campaign_id) IS NOT NULL" if launched_only else ""
     sql = f"""
         SELECT c.campaign_id,
                c.component,
@@ -111,6 +130,7 @@ def get_queue(
                ON sc.campaign_id = c.campaign_id AND sc.status = 'LAUNCHED'
         {scope.where()}
         GROUP BY c.campaign_id, c.component, c.park_it, c.do_not_drive, c.consequence
+        {having_clause}
         ORDER BY c.park_it DESC, c.do_not_drive DESC, vehicles_exposed DESC
         LIMIT %(limit)s
     """
