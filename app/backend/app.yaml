@@ -70,7 +70,7 @@ env:
   # `readyz.py` falls back to `DATABRICKS_BUNDLE_GIT_COMMIT` then to the string `unset`; Apps
   # does not inject the former, which is why the fallback was never reached.
   - name: FLEETGUARD_GIT_SHA
-    value: f27a68b9abf3175777470696c06cfe5347a03dc9
+    value: a46c145e090770f2904919f5c891f63822d0aac3
   # The Home page's "Analytics dashboard" link. Previously a literal in Home.tsx — broke Free
   # Edition, whose dashboard lives on a different host/workspace/id entirely, because the
   # built JS bundle is shared byte-for-byte between targets (scripts/sync_free_edition_app.sh).
