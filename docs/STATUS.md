@@ -74,6 +74,15 @@ index restore. Two commits pushed (`a46c145` content, `0fc9617` the provenance r
 rebuilt, free-edition mirror re-synced, full suite re-confirmed green (backend + frontend).
 **The zip needs rebuilding once more** to pick up this fix — not yet done as of this entry.
 
+**Final cleanup pass, same session:** added the GitHub repo link to README (`a84f7d4`);
+removed `docs/feedback-final-proposal-fleetguard.pdf` from the repo entirely — private TA
+feedback on the *proposal*, not meant for public GitHub (`2948527`); and excluded `CLAUDE.md`
++ `.claude/` from the zip-build command — present in every prior zip only as a side effect of
+`git ls-files`, not a deliberate choice, and not written for a human reviewer. **Zip rebuilt
+and current as of this entry** — contains the I-131 fix, the README link, and excludes both
+the PDF (gone from the repo) and `CLAUDE.md`/`.claude/` (zip-only exclusion, still tracked in
+git). See *What happens next* below for the exact command.
+
 ## SESSION 2026-10-03 (4) — stopped comparing the repo to the deleted proposal doc
 
 **No live resource touched.** The 2026-10-03 removal of `docs/FleetGuard_Proposal.md` patched
@@ -1637,18 +1646,22 @@ fresh evidence before resubmitting — see the session entry directly above this
 
 #### What happens next
 
-1. **Rebuild the zip and resubmit.** The submitted one predates #28–#33, all of 2026-10-03's
-   doc work, the 2026-10-03 README fix, this session's evidence refresh, and the I-131 fix, so
-   it lacks `docs/TRANSCRIPTS.md`, the corrected README, the stat-card fix, the de-academicized
-   docs, the rewritten `docs/RUNBOOK.md`, current (not pre-I-130) screenshots,
-   `walkthrough-dark-captioned.mp4`, and the launched-filter fix's console bundle — and no
-   longer has `docs/FleetGuard_Proposal.md` to include (removed — see the 2026-10-03 session
-   entry). **This was rebuilt once already mid-session, then I-131 landed after that build —
-   it needs one more rebuild to be current.**
+1. **Rebuild the zip before resubmitting, if `main` has moved since the last rebuild.** The
+   command now **excludes `CLAUDE.md` and `.claude/`** — present in the originally-submitted
+   zip (and every local rebuild through 2026-10-04 before this one) purely as a side effect of
+   `git ls-files` meaning "everything tracked," not a deliberate choice. Dense internal
+   narration written for a coding agent's cold start, not for a human reviewer, so cut on
+   request once that was noticed. `docs/feedback-final-proposal-fleetguard.pdf` was removed
+   from the repo entirely the same session (not a zip-only exclusion) — private TA feedback,
+   no reason to be on public GitHub at all.
    ```bash
-   { git ls-files; find docs/screenshots -type f; } | sort -u > /tmp/m.txt
+   { git ls-files; find docs/screenshots -type f; } | grep -v -E "^(CLAUDE\.md|\.claude/)" | sort -u > /tmp/m.txt
    zip -q -X fleetguard-submission.zip -@ < /tmp/m.txt
    ```
+   **`.github/workflows/ci.yml` IS included** — `.github/` is a dot-prefixed directory, which
+   many file browsers and some archive viewers hide by default. Check with
+   `unzip -l fleetguard-submission.zip | grep github` rather than trusting a GUI's hidden-file
+   setting.
    **`fleetguard-submission.zip` is gitignored** — build it, never commit it (it was committed
    once by an unscoped `git add -A` and amended out).
 2. ~~Decide whether to bring the stack up for the TAs.~~ **RESOLVED 2026-10-03 — the TAs will
