@@ -1,5 +1,7 @@
 # FleetGuard
 
+**Repo:** [github.com/abhibastia/fleetguard](https://github.com/abhibastia/fleetguard)
+
 Vehicle defect early-warning and recall-response platform for commercial fleets, built on
 Databricks (Lakeflow, Lakebase, Unity Catalog, Model Serving, AI Search) against NHTSA's
 public defect corpus.
