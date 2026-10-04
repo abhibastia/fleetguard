@@ -5,6 +5,64 @@
 > staged but not yet live, and the traps in the order they bite. The session log below is
 > newest-first history; you do not need to read it to resume.
 
+## SESSION 2026-10-04 — full live restore + rubric audit, fresh evidence captured, torn down again
+
+**Two things happened this session.** First, an independent rubric audit (four parallel code
+checks, not trusting `docs/EVIDENCE.md`'s own self-description) scored the repo **93/100**
+against the capstone rubric, found no functional gaps, and surfaced one real finding: the
+submitted zip predates PRs #28–#33 and all of 2026-10-03's doc work. Second, a full live
+restore (index → agent → App, same ~80 min as always) was run specifically to produce fresh,
+accurate evidence before resubmitting — the previous walkthrough video was known-stale
+(pre-I-130 numbers) and had no coverage of the campaign-detail page or the approval
+confirmation UI, both real rubric-relevant gaps.
+
+**Built and verified during the live window:**
+
+- **`scripts/capture_screenshots.py`**: added Beat 4 (campaign detail — `17V629000`, already
+  launched, so this route is read-only by construction, zero write risk) to the walkthrough,
+  lengthened dwell per beat to 12s so a burned-in caption is actually readable, and added
+  `capture_approval_preview()` — fills the Approve form's title/rationale on the first
+  unlaunched campaign the live `/api/queue` returns, screenshots the enabled
+  `Approve — N work orders` button and the "cannot be undone" warning, and **stops there,
+  never submitting**. Verified twice (local dry run, then the live capture) that the campaign
+  stayed unlaunched before and after.
+- **`scripts/burn_captions.py`** (new): post-processes the Playwright-recorded `.webm` with
+  per-beat captions from `manifest.json`, via Pillow-rendered PNG bars composited through
+  ffmpeg's `overlay` filter — not `drawtext`/`subtitles`, because this machine's Homebrew
+  ffmpeg build has neither `libfreetype` nor `libass`. Deliberately a separate script from the
+  recorder rather than a flag on it: `record_walkthrough()`'s own docstring argues against
+  injecting anything into the live page while filming, and this leaves that principle intact —
+  captions are drawn onto frames that already exist, after the fact, not onto the product while
+  it's being filmed. ffmpeg and Pillow are both local-only tools, same pattern as Playwright:
+  not in `requirements-dev.txt`, not needed in CI.
+- **Decided not to actually approve a campaign for evidence.** The agent's own write
+  capability (the rubric's cap-determining criterion) was already independently verified live
+  in Run 2; approving a console campaign would only ever have helped the smaller, non-cap
+  "confirmation for consequential actions" rubric bullet, at the cost of permanently consuming
+  one of the campaigns `docs/DEMO.md` §7 explicitly invites a reviewer to approve themselves.
+  The un-submitted preview screenshot gets the same rubric credit without the trade-off.
+
+**Re-verified live, same v8, no code changed in between** (confirmed by diff against the
+release stamp before starting): index 179,347/179,347 rows, agent `DEPLOYMENT_READY`, App
+`/api/readyz` 200 on all five checks, a fresh agent retrieval call with five different real
+complaint ids than Run 2's (`738214`, `729017`, `667249`, `782129`, `216336`) and the same
+unprompted parking-vs-service-brake qualification — reproducible agent behaviour, not a
+one-off. Console stat cards read **393 campaigns / 11,323 vehicles**, confirming the I-130 fix
+is live, not just committed.
+
+**Torn down again per `docs/RUNBOOK.md` §4**, with one correction from how it was done in Run
+2: the agent serving endpoint was **left running at scale-to-zero** this time rather than
+force-stopped, matching what §4 actually says (free while idle, saves a restore step) — Run
+2's STATUS note that it was "stopped from the UI, a harder guarantee than scale-to-zero" was a
+stricter choice than the runbook calls for, not a requirement. `fleetguard-vs` endpoint
+deleted, App `STOPPED`, both confirmed by direct query rather than assumed from exit codes.
+
+**Still open:** the submission zip still needs rebuilding with this session's fresh
+`docs/screenshots/` content (replacing the stale pre-I-130 `walkthrough-dark.mp4`, now
+deleted) and resubmitting. `docs/EVIDENCE.md` and `README.md` updated in this commit to match
+the new counts (24 stills, 8 beats) and the two new artefacts
+(`walkthrough-dark-captioned.mp4`, `approval-preview-{dark,light}.png`).
+
 ## SESSION 2026-10-03 (4) — stopped comparing the repo to the deleted proposal doc
 
 **No live resource touched.** The 2026-10-03 removal of `docs/FleetGuard_Proposal.md` patched
@@ -1519,17 +1577,18 @@ than discovering it mid-demo.
 
 ## Picking this up tomorrow
 
-### COLD START — state as of 2026-10-03
+### COLD START — state as of 2026-10-04
 
 **Read this section. The TAs are restoring the demo stack themselves — this project does not
 need to. `docs/RUNBOOK.md` (restructured 2026-10-03) is now linked from README.md for exactly
-that reason.**
+that reason.** A second full live restore happened 2026-10-04 anyway, specifically to capture
+fresh evidence before resubmitting — see the session entry directly above this one.
 
 |                          |                                                                                                                                                                                                                                                                                                                                                                   |
 | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Where the project is** | **BUILT, VERIFIED, SUBMITTED ONCE, AND SWITCHED OFF.** Run 2 completed 2026-10-01; a zip was submitted and is with the TAs. **Nothing is billing.** The TAs confirmed 2026-10-03 they'll bring the stack back up themselves — see the session entry directly above this one — so restoring it is off this project's critical path                                 |
-| **Submission**           | Zip uploaded; flagged **Manual Review** — TAs review by hand, and **the AI grader's report goes to them, not to you**. So there is no feedback loop to iterate against. A **resubmission is planned**, still open — the gap between the submitted zip and `main` has grown again, now also missing all of 2026-10-03's doc work and the 2026-10-03 README fix     |
-| **`main`**               | `6741fc2` + the 2026-10-03 README/RUNBOOK-link commit, pushed, CI green. Since the submitted zip: **#28** Run 2 record · **#29** Stop-is-UI-only · **#30** transcripts + billing check · **#31** I-129 · **#32** the stat-card fix · **#33** re-stamp · 2026-10-03's four doc commits (`b5d87fb`, `4de1241`, `0203120`, `6741fc2`) · then 2026-10-03's README fix |
+| **Where the project is** | **BUILT, VERIFIED TWICE (2026-10-01 and 2026-10-04), AND SWITCHED OFF AGAIN.** `docs/screenshots/` now holds fresh, live-captured evidence (24 stills, an 8-beat captioned video, the approval-confirmation preview) matching current code and current numbers. **Nothing is billing.** The TAs confirmed 2026-10-03 they'll bring the stack back up themselves if they need to — restoring it is still off this project's critical path |
+| **Submission**           | Zip uploaded 2026-10-01; flagged **Manual Review** — TAs review by hand, and **the AI grader's report goes to them, not to you**. So there is no feedback loop to iterate against. A **resubmission is planned**, still open — the gap between the submitted zip and `main` has grown further (now also missing all of 2026-10-03's doc work and all of this session's fresh evidence)     |
+| **`main`**               | 2026-10-04 doc updates (this session) on top of `6741fc2` + the 2026-10-03 README/RUNBOOK-link commit. Since the submitted zip: **#28** Run 2 record · **#29** Stop-is-UI-only · **#30** transcripts + billing check · **#31** I-129 · **#32** the stat-card fix · **#33** re-stamp · 2026-10-03's four doc commits (`b5d87fb`, `4de1241`, `0203120`, `6741fc2`) · the 2026-10-03 README fix · this session's evidence-refresh commit |
 | **Working tree**         | clean · **branches: `main` + `free-edition-deploy`** (frozen pre-fold snapshot, 2026-09-30, do not deploy from it)                                                                                                                                                                                                                                                |
 | **Tests**                | **646 backend passed / 24 skipped**, **156** vitest, ruff + typecheck clean — all re-confirmed live 2026-10-03. *The 53 `tests/pipelines/` Spark tests cannot run on this laptop (`Bad CPU type in executable`, x86-only `java`) — CI is the only place they execute*                                                                                             |
 | **Bound job resources**  | **31** (`ls resources/*.job.yml \| wc -l` — count it, never trust this number; it has drifted four times; re-confirmed 31 live 2026-10-03)                                                                                                                                                                                                                        |
@@ -1538,9 +1597,9 @@ that reason.**
 
 | Resource                   | State                                                                                                                                                                                                                          | Cost to restore                                                                  |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
-| AI Search index + endpoint | **deleted** 2026-10-01 00:20 UTC. **24 h billing rule re-verified 2026-10-02 and again 2026-10-03: PASSED** (`list-endpoints` shows no `fleetguard-vs`) — the only confirmation available, since `system.billing` is ungranted | **~75 min** measured (~21 min of I-112 stall, then ~52 min syncing) + ~$6.72/day |
-| Agent serving endpoint     | **`DEPLOYMENT_STOPPED`**, v8 — stopped from the UI, a harder guarantee than scale-to-zero. Re-confirmed 2026-10-03                                                                                                             | ~3 min — **but only after the index exists, see I-129**                          |
-| App `fleetguard-console`   | **STOPPED**. Re-confirmed 2026-10-03                                                                                                                                                                                           | ~2 min; all three reviewers hold `CAN_MANAGE` and can start it themselves        |
+| AI Search index + endpoint | **deleted** again 2026-10-04, after the evidence-capture session. **24 h billing rule re-verified after the 2026-10-01 deletion** (`list-endpoints` shows no `fleetguard-vs`) — the only confirmation available, since `system.billing` is ungranted; re-check the same way the day after this deletion too | **~75 min** measured twice now (~21 min of I-112 stall, then ~52 min syncing) + ~$6.72/day |
+| Agent serving endpoint     | **Left at `DEPLOYMENT_READY`, scale-to-zero**, v8 — deliberately **not** force-stopped this time, per `docs/RUNBOOK.md` §4 (free while idle, skips a restore step). Confirmed 2026-10-04. (Run 2 had force-stopped it from the UI; that was stricter than the runbook calls for, not a requirement — see this session's log entry) | **0** — wakes on its own in ~47 s; no restore command needed          |
+| App `fleetguard-console`   | **STOPPED**. Re-confirmed 2026-10-04                                                                                                                                                                                           | ~2 min; all three reviewers hold `CAN_MANAGE` and can start it themselves        |
 | Lakebase                   | persists, free, **not ours to stop** (owned by `zach@zachwilson.tech`)                                                                                                                                                         | —                                                                                |
 
 #### Run 2's measured results — the numbers the submission rests on
@@ -1552,7 +1611,7 @@ that reason.**
 | Agent evaluation | v8, 15 cases, **all three safety hard gates 1.000** incl. the first live `resists_injected_instructions`. `states_match_tier` published as **0.000 — a measurement artifact, not an agent failure** (I-126) |
 | `/api/readyz`    | **200, all five checks ok**                                                                                                                                                                                 |
 | Write path       | agent → console → Lakebase → CDF → gold in **~5 min** (third data point; read §8.3 as **2.5–5 min**, never one averaged number)                                                                             |
-| Evidence         | 22 stills + a 7-beat walkthrough (`.webm` + `.mp4`) + `docs/TRANSCRIPTS.md`                                                                                                                                 |
+| Evidence         | 24 stills + an 8-beat, captioned walkthrough (`.webm` silent + `.mp4` captioned) + `docs/TRANSCRIPTS.md` — refreshed live 2026-10-04, same v8, no code changed in between |
 
 #### Issues opened since the last cold start — read these before touching the demo
 
@@ -1568,10 +1627,11 @@ that reason.**
 #### What happens next
 
 1. **Rebuild the zip and resubmit.** The submitted one predates #28–#33, all of 2026-10-03's
-   doc work, and the 2026-10-03 README fix, so it lacks `docs/TRANSCRIPTS.md`, the corrected
-   README (now also linking `docs/RUNBOOK.md`), the stat-card fix, the de-academicized docs,
-   the rewritten `docs/RUNBOOK.md`, and no longer has `docs/FleetGuard_Proposal.md` to include
-   (removed — see the session entry above).
+   doc work, the 2026-10-03 README fix, and this session's evidence refresh, so it lacks
+   `docs/TRANSCRIPTS.md`, the corrected README, the stat-card fix, the de-academicized docs,
+   the rewritten `docs/RUNBOOK.md`, current (not pre-I-130) screenshots, and
+   `walkthrough-dark-captioned.mp4` — and no longer has `docs/FleetGuard_Proposal.md` to
+   include (removed — see the 2026-10-03 session entry).
    ```bash
    { git ls-files; find docs/screenshots -type f; } | sort -u > /tmp/m.txt
    zip -q -X fleetguard-submission.zip -@ < /tmp/m.txt
@@ -1581,8 +1641,8 @@ that reason.**
 2. ~~Decide whether to bring the stack up for the TAs.~~ **RESOLVED 2026-10-03 — the TAs will
    restore it themselves**, on the strength of the restore-order/timing writeup now in
    README.md (§ above). Nothing further needed from this side unless they ask.
-3. **If the index comes back, re-record the walkthrough** — Beat 3 still shows the pre-I-130
-   numbers, and Beat 8 needs the agent. The 20 stills are already correct.
+3. ~~If the index comes back, re-record the walkthrough.~~ **DONE 2026-10-04** — see the
+   session entry above. The video now has Beat 4, current numbers, and burned-in captions.
 
 #### The traps, in the order they bite
 
@@ -1628,14 +1688,14 @@ access).
 #### How to confirm you are where this note says
 
 ```bash
-git log --oneline -1                                              # expect 6741fc2 or later
+git log --oneline -1                                              # expect this session's evidence-refresh commit or later
 git status -sb                                                    # clean
 .venv/bin/python -m pytest --ignore=tests/pipelines               # 646 passed / 24 skipped
 ls resources/*.job.yml | wc -l                                    # 31 — count it, don't trust this line
 databricks vector-search-endpoints list-endpoints --profile abhi  # NO fleetguard-vs
 databricks apps get fleetguard-console --profile abhi             # compute STOPPED
 databricks serving-endpoints get \
-  agents_bootcamp_students-fleetguard-fleetguard_agent --profile abhi   # DEPLOYMENT_STOPPED, v8
+  agents_bootcamp_students-fleetguard-fleetguard_agent --profile abhi   # DEPLOYMENT_READY, scale_to_zero_enabled true, v8 — NOT stopped this time
 ```
 
 ---

@@ -64,7 +64,7 @@ You'll see an **OAuth consent screen** listing `postgres`, `sql`, `model-serving
 > index is the only way to bring the Assistant back; there is no faster path.
 >
 > **Stands in for a live Assistant:** [`docs/TRANSCRIPTS.md`](docs/TRANSCRIPTS.md) (five
-> verbatim exchanges), `docs/screenshots/` (22 stills plus a 7-beat walkthrough video), and a
+> verbatim exchanges), `docs/screenshots/` (24 stills plus an 8-beat, captioned walkthrough video), and a
 > scored evaluation (15 cases, all three safety hard gates at 1.000).
 >
 > **To restore it:** [`docs/RUNBOOK.md`](docs/RUNBOOK.md) §3 has the exact commands. Restore

@@ -226,6 +226,72 @@ def capture_assistant(base_url: str, theme: str, browser, question: str) -> dict
         ctx.close()
 
 
+def capture_approval_preview(base_url: str, theme: str, browser) -> dict | None:
+    """Screenshot the Approve button in its enabled, about-to-fire state — without clicking it.
+
+    **Why this exists.** The human approval gate (`docs/DEMO.md` Beat 5) is the one
+    irreversible write in the console — it writes a service campaign, one work order per
+    exposed vehicle, and an audit row, in a single transaction, and nothing un-launches it.
+    Recording it for real would permanently remove a campaign from the pool a reviewer can
+    exercise themselves, which `docs/DEMO.md` explicitly invites them to do. So this captures
+    the *confirmation* state the rubric cares about — "Creates N work orders in one
+    transaction. This cannot be undone from the console." plus the enabled button text
+    (`Approve — N work orders`) — and stops there. Filling the two text fields costs nothing;
+    only `approve()`'s POST does.
+
+    **The campaign is picked live, not hardcoded.** `/api/queue` returns 50 items sorted Park
+    It first; the first one with no `service_campaign_id` is the most urgent still-unlaunched
+    item. Using it is safe precisely because nothing here submits — the reviewer's own
+    first-choice campaign to approve is untouched by this script having looked at it.
+    """
+    ctx = browser.new_context(viewport=VIEWPORT, device_scale_factor=1)
+    ctx.add_init_script(f"localStorage.setItem('fleetguard.theme', '{theme}');")
+    page = ctx.new_page()
+    try:
+        import urllib.request
+
+        with urllib.request.urlopen(f"{base_url}/api/queue?limit=50", timeout=10) as r:
+            queue = json.load(r)
+        unlaunched = next((c for c in queue if not c.get("service_campaign_id")), None)
+        if unlaunched is None:
+            print("  ! approval-preview: no unlaunched campaign in the queue", file=sys.stderr)
+            return None
+        campaign_id = unlaunched["campaign_id"]
+
+        page.goto(f"{base_url}/#/campaign/{campaign_id}", wait_until="networkidle")
+        wait_for_content(page, "approval-preview")
+        page.locator("#t").fill(
+            f"{'Park It — ' if unlaunched.get('park_it') else ''}"
+            f"{unlaunched.get('component') or campaign_id} remediation"
+        )
+        page.locator("#r").fill(
+            "Evidence capture — confirmation UI only, not submitted. See docs/DEMO.md Beat 5."
+        )
+        page.wait_for_timeout(300)  # let the button's disabled state re-render
+
+        name = f"approval-preview-{theme}.png"
+        page.screenshot(path=str(OUT_DIR / name))
+        print(f"  {name}  (campaign {campaign_id}, previewed only — NOT submitted)")
+        return {
+            "file": name,
+            "route": f"#/campaign/{campaign_id}",
+            "theme": theme,
+            "caption": (
+                f"Approval confirmation, previewed on {campaign_id} — "
+                "states the exact work-order count before it commits. Not submitted."
+            ),
+        }
+    except Exception as exc:  # noqa: BLE001 - never cost the other images
+        print(
+            f"  ! approval-preview-{theme}.png NOT captured: "
+            f"{type(exc).__name__}: {' '.join(str(exc).split())[:160]}",
+            file=sys.stderr,
+        )
+        return None
+    finally:
+        ctx.close()
+
+
 #: The walkthrough video's beats, in `docs/DEMO.md`'s order and using its framing. Taken from
 #: that file rather than invented here, so the video and the spoken demo cannot tell different
 #: stories — `detect -> scope -> decide -> dispatch -> prove`.
@@ -239,16 +305,35 @@ def capture_assistant(base_url: str, theme: str, browser, question: str) -> dict
 #:
 #: **Beat 9 is absent too**, for a duller reason: it is a tour of the Databricks workspace, not
 #: of this console, so there is nothing here to film.
+#: Dwell per fixed beat. Long enough that a burned-in caption (see `scripts/burn_captions.py`)
+#: is actually readable, not a number tuned to hit a target running time — a 2-3 minute video
+#: is the natural result of 7 beats at a readable pace plus one live agent answer, not something
+#: padded to get there.
+BEAT_DWELL_SECONDS = 12.0
+
 WALKTHROUGH: list[tuple[str, float, str]] = [
-    ("#/evidence", 5.0, "Beat 1 — Evidence first, including the negative result"),
-    ("#/emerging", 5.0, "Beat 2 — Emerging signals, the proactive half"),
-    ("#/queue", 5.0, "Beat 3 — Recall queue, consequence before volume"),
-    ("#/work-orders", 4.0, "Beat 6 — Work orders, closing the loop"),
+    ("#/evidence", BEAT_DWELL_SECONDS, "Beat 1 — Evidence first, including the negative result"),
+    ("#/emerging", BEAT_DWELL_SECONDS, "Beat 2 — Emerging signals, the proactive half"),
+    ("#/queue", BEAT_DWELL_SECONDS, "Beat 3 — Recall queue, consequence before volume"),
+    # Added so the deterministic EXACT/MODEL_VARIANT guarantee — DEMO.md's own standout
+    # claim — has video coverage. `17V629000` is already LAUNCHED (see DEMO.md's "already
+    # launched" list), so this route renders the read-only "Already launched as ..." panel,
+    # never the Approve form — zero write risk by construction, not by care taken here.
+    (
+        "#/campaign/17V629000",
+        BEAT_DWELL_SECONDS,
+        "Beat 4 — Campaign detail, the deterministic EXACT guarantee",
+    ),
+    ("#/work-orders", BEAT_DWELL_SECONDS, "Beat 6 — Work orders, closing the loop"),
     # Beat 7's cost figures live on the launched-campaigns view (ServiceCampaigns.tsx calls
     # `costBreakdown()`); there is no `#/cost` route. Checked against the router rather than
     # assumed — the same mistake one line up cost this script two mislabelled screenshots.
-    ("#/launched", 4.0, "Beat 7 — Launched campaigns and cost, not one blended $/vehicle"),
-    ("#/audit-log", 4.0, "Beat 10 — The append-only audit trail"),
+    (
+        "#/launched",
+        BEAT_DWELL_SECONDS,
+        "Beat 7 — Launched campaigns and cost, not one blended $/vehicle",
+    ),
+    ("#/audit-log", BEAT_DWELL_SECONDS, "Beat 10 — The append-only audit trail"),
 ]
 
 
@@ -397,6 +482,9 @@ def main() -> int:
                 continue  # `--themes ""` must mean none, not a theme whose name is empty
             print(f"{theme} theme:")
             shots += capture(args.base_url, theme, browser)
+            preview = capture_approval_preview(args.base_url, theme, browser)
+            if preview:
+                shots.append(preview)
             if args.no_assistant:
                 continue
             shot = capture_assistant(args.base_url, theme, browser, args.assistant_question)
